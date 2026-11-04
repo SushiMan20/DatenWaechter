@@ -6,6 +6,8 @@ Erweiterung auch PDFs (inkl. Scans), Word-Dateien und Bilder – ohne dass Daten
 Anfragen:
   {"action": "ping"}
   {"action": "check_text", "text": "..."}                         -> Inhalts-Check für eingefügten Text
+  {"action": "list_actions"}                                      -> KI-Aktionen fürs Rechtsklick-Menü
+  {"action": "run_action", "id": "umformulieren", "text": "..."}  -> KI-Aktion auf markiertem Text
   {"action": "scan_file", "name": "x.pdf", "data_b64": "...", "mapping": {...}}
 Antworten werden in Teile zerlegt ({"part": i, "of": n, "data": "..."}), weil Chrome vom Host
 höchstens 1 MB pro Nachricht annimmt; die Erweiterung setzt sie wieder zusammen.
@@ -21,7 +23,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from . import __version__, content_check, faces, ocr
+from . import __version__, actions, content_check, faces, llm, ocr
 from .analysis import analyze, anonymize
 from .anonymize import Anonymizer
 from .files import UnsupportedFile
@@ -59,6 +61,14 @@ def handle(msg: dict) -> dict:
                 "llm": content_check.llm_status()}
     if action == "check_text":
         return {"ok": True, "content": content_check.check(msg.get("text", "")).to_dict()}
+    if action == "list_actions":
+        return {"ok": True, "llm": content_check.llm_status(),
+                "actions": [{"id": a.id, "name": a.name, "mode": a.modus} for a in actions.load()]}
+    if action == "run_action":
+        try:
+            return actions.run(msg.get("id", ""), msg.get("text", "")).to_dict()
+        except llm.LlmError as e:
+            return {"ok": False, "error": str(e)}
     if action != "scan_file":
         return {"ok": False, "error": f"unbekannte Aktion {action!r}"}
 

@@ -119,6 +119,15 @@ class Ollama:
             return False
         return any(m == self.model or m.split(":")[0] == self.model for m in models)
 
+    extern = False           # läuft auf diesem Rechner
+    anonymize_first = False
+    host = "localhost"
+
+    def complete(self, messages: list[dict], temperature: float = 0.3) -> str:
+        """Freier Text (für KI-Aktionen wie „Umformulieren“)."""
+        body = {"model": self.model, "messages": messages, "stream": False, "options": {"temperature": temperature}}
+        return (_request(f"{self.url}/api/chat", body).get("message") or {}).get("content", "")
+
     def ask(self, text: str, image=None, name: str = "") -> Answer:
         body = {"model": self.model, "prompt": _prompt(text, name), "format": "json", "stream": False,
                 "options": {"temperature": 0}}
@@ -152,6 +161,27 @@ class OpenAICompatible:
             self.model = listed[0]
             self.label = f"openai:{self.model}@{self.s.host}"
         return bool(self.model)
+
+    @property
+    def extern(self) -> bool:
+        return self.s.extern
+
+    @property
+    def anonymize_first(self) -> bool:
+        return self.s.anonymize_first
+
+    @property
+    def host(self) -> str:
+        return self.s.host
+
+    def complete(self, messages: list[dict], temperature: float = 0.3) -> str:
+        """Freier Text (für KI-Aktionen wie „Umformulieren“)."""
+        body = {"model": self.model, "temperature": temperature, "messages": messages}
+        data = _request(f"{self.s.base_url}/chat/completions", body, self.s.token)
+        try:
+            return data["choices"][0]["message"]["content"] or ""
+        except (KeyError, IndexError, TypeError) as e:
+            raise LlmError("Unerwartetes Antwortformat") from e
 
     def ask(self, text: str, image=None, name: str = "") -> Answer:
         anonymized = False

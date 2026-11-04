@@ -57,5 +57,14 @@ document.querySelectorAll("[data-min]").forEach((b) => b.addEventListener("click
   render();
 }));
 chrome.storage.onChanged.addListener(render);
+async function renderActions() {
+  const r = await send({ type: "refreshMenus" });
+  const n = r?.actions?.length || 0;
+  $("actDot").className = n && $("aiDot").classList.contains("ok") ? "dot ok" : "dot";
+  $("actText").textContent = n
+    ? `${n} Aktionen per Rechtsklick: ${r.actions.slice(0, 3).map((a) => a.name).join(", ")} …`
+    : "Braucht lokalen Scanner und KI-Server";
+}
+
 render();
-renderHost();
+renderHost().then(renderActions);

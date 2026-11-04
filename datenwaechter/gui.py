@@ -21,7 +21,7 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from . import autostart, content_check, llm, ner, ocr, settings, winclip
+from . import actions, autostart, content_check, hotkey, llm, ner, ocr, settings, winclip
 from .analysis import analyze, anonymize as anonymize_report
 from .anonymize import Anonymizer
 from .detectors import HOCH, SEVERITY_LABEL, scan_text
@@ -119,10 +119,17 @@ class App:
         self._icons = {}
         self._hint_shown = False
         self._log: deque = deque(maxlen=4)
+        self._suspend = False      # während einer KI-Aktion die Zwischenablage nicht prüfen
+        self._ki_busy = False
+        self._ki_popup = None
+        self._ki_menu = None
+        self.bridge = hotkey.bridge()
+        self.hotkey = None
 
         self._build()
         self.tray = Tray(lambda name: self.results.put(("ui", name)), self.watch.get, self.stats.summary)
         self.root.protocol("WM_DELETE_WINDOW", self._close)
+        self._start_hotkey()
         self._refresh()
         self.root.after(POLL_MS, self._poll)
         threading.Thread(target=self._detect_llm, daemon=True).start()
@@ -241,6 +248,12 @@ class App:
         if not self.llm_ok:
             self.llm_box.state(["disabled"])
         ttk.Button(frm, text="KI-Server einrichten …", command=self._llm_settings).pack(anchor="w", padx=22, pady=(0, 6))
+        hk = (f"Tastenkürzel {self.hotkey.combo}: markierten Text in jedem Programm bearbeiten"
+              if self.hotkey and self.hotkey.active else
+              f"Tastenkürzel: {self.hotkey.error if self.hotkey else 'nur unter Windows'}")
+        ttk.Button(frm, text="KI-Aktionen (Umformulieren …) bearbeiten …", command=self._actions_editor).pack(
+            anchor="w", padx=22)
+        ttk.Label(frm, text=hk, foreground="#777").pack(anchor="w", padx=22, pady=(0, 6))
         ttk.Checkbutton(frm, text="Fenster immer im Vordergrund", variable=self.topmost,
                         command=lambda: self.root.attributes("-topmost", self.topmost.get())).pack(anchor="w", pady=2)
         auto = tk.BooleanVar(value=autostart.is_enabled())
@@ -257,7 +270,7 @@ class App:
     def _state(self) -> str:
         if self._alerts:
             return "warnung"
-        if self._busy:
+        if self._busy or self._ki_busy:
             return "pruefe"
         return "aktiv" if self.watch.get() else "pause"
 
@@ -324,6 +337,8 @@ class App:
             self._quit()
 
     def _quit(self) -> None:
+        if self.hotkey:
+            self.hotkey.stop()
         self.tray.stop()
         self.root.destroy()
 
@@ -337,6 +352,294 @@ class App:
         }
         if name in actions:
             actions[name]()
+
+    # ------------------------------------------------------------------ KI-Aktionen per Tastenkürzel
+    def _start_hotkey(self) -> None:
+        if self.hotkey:
+            self.hotkey.stop()
+            self.hotkey = None
+        if self.bridge is not None:
+            self.hotkey = hotkey.Hotkey(actions.load_hotkey(), lambda hwnd: self.results.put(("ki-hotkey", hwnd)))
+
+    def _pointer_note(self, text: str, ms: int = 3500):
+        """Kleiner Hinweis am Mauszeiger (gibt das Fenster zurück, damit es vorzeitig geschlossen werden kann)."""
+        x, y = self.root.winfo_pointerxy()
+        w = tk.Toplevel(self.root)
+        w.overrideredirect(True)
+        w.attributes("-topmost", True)
+        tk.Label(w, text=text, bg="#263238", fg="white", font=(FONT, 10), padx=12, pady=8).pack()
+        w.geometry(f"+{x + 16}+{y + 16}")
+        if ms:
+            w.after(ms, lambda: w.winfo_exists() and w.destroy())
+        return w
+
+    def _ki_start(self, hwnd) -> None:
+        """Tastenkürzel gedrückt: markierten Text aus dem aktiven Programm holen (im Hintergrund)."""
+        if self._suspend or self.bridge is None:
+            return
+        self._suspend = True
+        b = self.bridge
+        threading.Thread(target=lambda: self.results.put(("ki-captured", hwnd, *b.capture(hwnd))), daemon=True).start()
+
+    def _ki_end(self) -> None:
+        self._suspend = False
+        self._ki_busy = False
+        self._last_seq = winclip.sequence_number()   # eigene Zwischenablage-Änderungen nicht prüfen
+        self._last_text = self._tk_clipboard_text()
+        self._refresh()
+
+    def _ki_captured(self, hwnd, text: str, old) -> None:
+        if not text.strip():
+            self.bridge.restore(old)
+            self._ki_end()
+            self._pointer_note(f"Erst Text markieren, dann {actions.load_hotkey()} drücken")
+            return
+        menu = tk.Menu(self.root, tearoff=0, font=(FONT, 10))
+        chosen = {"done": False}
+
+        def pick(a):
+            chosen["done"] = True
+            self._ki_run(a, hwnd, text, old)
+        if not self.llm_ok:
+            menu.add_command(label="Kein KI-Server eingerichtet – jetzt einrichten …",
+                             command=lambda: (chosen.update(done=True), self.bridge.restore(old), self._ki_end(),
+                                              self._show(), self._llm_settings()))
+            menu.add_separator()
+        for a in actions.load():
+            hint = {"ersetzen": "", "einfuegen": "   (darunter einfügen)", "anzeigen": "   (anzeigen)"}[a.modus]
+            menu.add_command(label=a.name + hint, command=lambda a=a: pick(a),
+                             state="normal" if self.llm_ok else "disabled")
+        menu.add_separator()
+        menu.add_command(label="Aktionen bearbeiten …",
+                         command=lambda: (chosen.update(done=True), self.bridge.restore(old), self._ki_end(),
+                                          self._show(), self._actions_editor()))
+        self._ki_menu = menu
+
+        def closed_without_choice():
+            if chosen["done"]:
+                return
+            if menu.winfo_ismapped():
+                self.root.after(200, closed_without_choice)
+            else:
+                self.bridge.restore(old)
+                self._ki_end()
+        x, y = self.root.winfo_pointerxy()
+        try:
+            menu.tk_popup(x, y)
+        finally:
+            menu.grab_release()
+        self.root.after(300, closed_without_choice)
+
+    def _ki_run(self, aktion, hwnd, text: str, old) -> None:
+        self._ki_busy = True
+        self._refresh()
+        self._ki_popup = self._pointer_note(f"🛡 {aktion.name} … KI arbeitet", ms=0)
+
+        def work():
+            try:
+                self.results.put(("ki-result", hwnd, actions.run(aktion, text), None, old, text))
+            except llm.LlmError as e:
+                self.results.put(("ki-result", hwnd, None, str(e), old, text))
+        threading.Thread(target=work, daemon=True).start()
+
+    def _ki_result(self, hwnd, erg, error, old, text: str) -> None:
+        if self._ki_popup is not None and self._ki_popup.winfo_exists():
+            self._ki_popup.destroy()
+        if erg is None:
+            self.bridge.restore(old)
+            self._ki_end()
+            self._status(f"KI-Aktion fehlgeschlagen: {error}", FARBEN["warnung"])
+            self._pointer_note(f"KI-Aktion fehlgeschlagen:\n{error}", ms=6000)
+            return
+        note = f" – an {erg.sent_to} gesendet{', vorher anonymisiert' if erg.anonymized else ''}" if erg.sent_to else ""
+        if erg.aktion.modus == "anzeigen":
+            self._ki_busy = False
+            self._refresh()
+            self._ki_show(hwnd, erg, old, note)
+            return
+        out = erg.text if erg.aktion.modus == "ersetzen" else f"{text}\n\n{erg.text}"
+        b = self.bridge
+        threading.Thread(target=lambda: (b.deliver(hwnd, out, old),
+                                         self.results.put(("ki-done", f"✔ {erg.aktion.name}{note}"))), daemon=True).start()
+
+    def _ki_done(self, message: str) -> None:
+        self._ki_end()
+        self._status(message, FARBEN["aktiv"])
+
+    def _ki_show(self, hwnd, erg, old, note: str) -> None:
+        """Ergebnis anzeigen (Modus „nur anzeigen“) – mit Kopieren und Einsetzen."""
+        t = self.t
+        win = tk.Toplevel(self.root, bg=t["card"])
+        win.title(f"Datenwächter – {erg.aktion.name}")
+        win.attributes("-topmost", True)
+        x, y = self.root.winfo_pointerxy()
+        win.geometry(f"480x320+{max(0, x - 240)}+{max(0, y - 40)}")
+        tk.Label(win, text=f"🛡 {erg.aktion.name}", bg=FARBEN["aktiv"], fg="white", font=(FONT, 11, "bold"),
+                 anchor="w", padx=12, pady=6).pack(fill="x")
+        box = tk.Text(win, wrap="word", bg=t["card"], fg=t["text"], relief="flat", font=(FONT, 10), padx=12, pady=8)
+        box.insert("1.0", erg.text)
+        box.pack(fill="both", expand=True)
+        if note:
+            tk.Label(win, text=note.strip(" –"), bg=t["card"], fg=t["muted"], font=(FONT, 8)).pack(anchor="w", padx=12)
+        btns = tk.Frame(win, bg=t["card"])
+        btns.pack(fill="x", padx=12, pady=8)
+        state = {"kept": False}
+
+        def copy():
+            state["kept"] = True
+            self._set_clipboard_text(box.get("1.0", "end-1c"))
+            win.destroy()
+
+        def insert():
+            state["kept"] = True
+            txt = box.get("1.0", "end-1c")   # inkl. eigener Änderungen im Ergebnisfenster
+            win.destroy()
+            b = self.bridge
+            threading.Thread(target=lambda: (b.deliver(hwnd, txt, old),
+                                             self.results.put(("ki-done", f"✔ {erg.aktion.name} eingesetzt"))),
+                             daemon=True).start()
+
+        def closed(e):
+            if e.widget is win and not state["kept"]:
+                self.bridge.restore(old)
+                self._ki_end()
+        win.bind("<Destroy>", closed)
+        self._button(btns, "Kopieren", copy).pack(side="left")
+        self._button(btns, "Markierung ersetzen", insert).pack(side="left", padx=6)
+        self._button(btns, "Schließen", win.destroy).pack(side="right")
+        self._ki_result_window = win
+
+    def _actions_editor(self) -> None:
+        """Eigene KI-Aktionen anlegen: Name, Anweisung an die KI, was mit dem Ergebnis passiert."""
+        liste = actions.load()
+        win = tk.Toplevel(self.root)
+        win.title("Datenwächter – KI-Aktionen")
+        win.geometry("700x430")
+        frm = ttk.Frame(win, padding=12)
+        frm.pack(fill="both", expand=True)
+        frm.columnconfigure(1, weight=1)
+        frm.rowconfigure(0, weight=1)
+
+        lb = tk.Listbox(frm, width=26, exportselection=False, font=(FONT, 10))
+        lb.grid(row=0, column=0, rowspan=2, sticky="ns")
+        right = ttk.Frame(frm, padding=(12, 0, 0, 0))
+        right.grid(row=0, column=1, sticky="nsew")
+        right.columnconfigure(0, weight=1)
+        name = tk.StringVar()
+        modus = tk.StringVar()
+        ttk.Label(right, text="Name im Menü").grid(row=0, column=0, sticky="w")
+        ttk.Entry(right, textvariable=name).grid(row=1, column=0, sticky="ew")
+        ttk.Label(right, text="Anweisung an die KI").grid(row=2, column=0, sticky="w", pady=(8, 0))
+        anweisung = tk.Text(right, height=6, wrap="word", font=(FONT, 10))
+        anweisung.grid(row=3, column=0, sticky="nsew")
+        right.rowconfigure(3, weight=1)
+        ttk.Label(right, text="Ergebnis").grid(row=4, column=0, sticky="w", pady=(8, 0))
+        ttk.Combobox(right, textvariable=modus, values=list(actions.MODI.values()), state="readonly").grid(
+            row=5, column=0, sticky="w")
+        sel = {"i": None}
+
+        def refresh_list():
+            lb.delete(0, "end")
+            for a in liste:
+                lb.insert("end", a.name)
+
+        def commit():
+            i = sel["i"]
+            if i is None or i >= len(liste):
+                return
+            m = next((k for k, v in actions.MODI.items() if v == modus.get()), "ersetzen")
+            liste[i] = actions.Aktion(name.get().strip() or liste[i].name, anweisung.get("1.0", "end-1c").strip()
+                                      or liste[i].anweisung, m)
+            lb.delete(i)
+            lb.insert(i, liste[i].name)
+
+        def select(i):
+            commit()
+            sel["i"] = i
+            lb.selection_clear(0, "end")
+            if i is None:
+                return
+            lb.selection_set(i)
+            a = liste[i]
+            name.set(a.name)
+            anweisung.delete("1.0", "end")
+            anweisung.insert("1.0", a.anweisung)
+            modus.set(actions.MODI[a.modus])
+
+        lb.bind("<<ListboxSelect>>", lambda e: lb.curselection() and select(lb.curselection()[0]))
+
+        def live_name(*_):
+            i = sel["i"]
+            if i is not None and i < lb.size() and name.get().strip():
+                lb.delete(i)
+                lb.insert(i, name.get().strip())
+                lb.selection_set(i)
+        name.trace_add("write", live_name)
+
+        def neu():
+            commit()
+            liste.append(actions.Aktion("Neue Aktion", "Beschreibe hier, was die KI mit dem markierten Text tun soll."))
+            refresh_list()
+            sel["i"] = None
+            select(len(liste) - 1)
+
+        def loeschen():
+            i = sel["i"]
+            if i is not None and liste:
+                sel["i"] = None
+                del liste[i]
+                refresh_list()
+                select(min(i, len(liste) - 1) if liste else None)
+
+        def move(d):
+            commit()
+            i = sel["i"]
+            if i is None or not 0 <= i + d < len(liste):
+                return
+            liste[i], liste[i + d] = liste[i + d], liste[i]
+            refresh_list()
+            sel["i"] = None
+            select(i + d)
+
+        def standard():
+            liste[:] = list(actions.STANDARD)
+            sel["i"] = None
+            refresh_list()
+            select(0)
+
+        side = ttk.Frame(frm)
+        side.grid(row=2, column=0, sticky="w", pady=(6, 0))
+        for text, cmd in (("Neu", neu), ("Löschen", loeschen), ("↑", lambda: move(-1)), ("↓", lambda: move(1))):
+            ttk.Button(side, text=text, width=7 if len(text) > 1 else 3, command=cmd).pack(side="left", padx=(0, 4))
+
+        bottom = ttk.Frame(frm)
+        bottom.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(12, 0))
+        ttk.Label(bottom, text="Tastenkürzel (Windows):").pack(side="left")
+        combo = tk.StringVar(value=actions.load_hotkey())
+        ttk.Entry(bottom, textvariable=combo, width=22).pack(side="left", padx=6)
+        status = ttk.Label(frm, text="Im Browser: Text markieren → Rechtsklick → „Datenwächter KI“.", foreground="#777")
+        status.grid(row=4, column=0, columnspan=2, sticky="w", pady=(6, 0))
+
+        def speichern():
+            commit()
+            try:
+                hotkey.parse(combo.get())
+            except ValueError as e:
+                status.configure(text=f"Tastenkürzel: {e}", foreground="#c62828")
+                return
+            actions.save(liste)
+            actions.save_hotkey(combo.get().strip())
+            self._start_hotkey()
+            err = self.hotkey.error if self.hotkey else None
+            status.configure(text=f"Gespeichert. {err or ''}".strip(), foreground="#c62828" if err else "#2e7d32")
+
+        ttk.Button(bottom, text="Standard wiederherstellen", command=standard).pack(side="right")
+        ttk.Button(bottom, text="Speichern", command=speichern).pack(side="right", padx=6)
+        refresh_list()
+        select(0 if liste else None)
+        win.widgets = {"list": lb, "name": name, "anweisung": anweisung, "modus": modus, "neu": neu,
+                       "loeschen": loeschen, "speichern": speichern, "combo": combo, "status": status, "liste": liste}
+        self._actions_win = win
 
     def _detect_llm(self) -> None:
         llm._cache.clear()
@@ -374,7 +677,7 @@ class App:
     def _poll(self) -> None:
         try:
             self._drain_results()
-            if self.watch.get() and not self._busy:
+            if self.watch.get() and not self._busy and not self._suspend:
                 self._check_clipboard()
         finally:
             self.root.after(POLL_MS, self._poll)
@@ -463,6 +766,10 @@ class App:
             item = self.results.get()
             if item[0] == "ui":
                 self._ui(item[1])
+                continue
+            if item[0].startswith("ki-"):
+                {"ki-hotkey": self._ki_start, "ki-captured": self._ki_captured, "ki-result": self._ki_result,
+                 "ki-done": self._ki_done}[item[0]](*item[1:])
                 continue
             if item[0] == "llm":
                 self.llm_ok = bool(item[1])

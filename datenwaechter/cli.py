@@ -84,6 +84,49 @@ def _ki_server(args) -> int:
     return 0
 
 
+def _aktion(args) -> int:
+    from . import actions, llm
+    text = args.text if args.text is not None else sys.stdin.read()
+    try:
+        r = actions.run(args.name, text)
+    except llm.LlmError as e:
+        print(f"Fehler: {e}", file=sys.stderr)
+        return 1
+    print(r.text)
+    if r.sent_to:
+        print(f"(an {r.sent_to} gesendet{', vorher anonymisiert' if r.anonymized else ''})", file=sys.stderr)
+    return 0
+
+
+def _aktionen(args) -> int:
+    from . import actions
+    liste = actions.load()
+    if args.zuruecksetzen:
+        liste = list(actions.STANDARD)
+        actions.save(liste)
+    if args.loeschen:
+        a = actions.find(args.loeschen, liste)
+        if not a:
+            print(f"Aktion „{args.loeschen}“ nicht gefunden", file=sys.stderr)
+            return 1
+        liste.remove(a)
+        actions.save(liste)
+    if args.neu:
+        if not args.anweisung:
+            print("Bitte mit --anweisung angeben, was die KI tun soll", file=sys.stderr)
+            return 1
+        alt = actions.find(args.neu, liste)
+        neu = actions.Aktion(args.neu, args.anweisung, args.modus)
+        if alt:
+            liste[liste.index(alt)] = neu
+        else:
+            liste.append(neu)
+        actions.save(liste)
+    for a in liste:
+        print(f"  {a.name:30} [{actions.MODI[a.modus]}]  {a.anweisung}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="datenwaechter", description="Sensible Daten vor dem KI-Upload finden.")
     p.add_argument("--ki", action="store_true", help="zusätzlich lokales KI-Modell (GLiNER) für Namen nutzen")
@@ -111,6 +154,19 @@ def main(argv: list[str] | None = None) -> int:
     k.add_argument("--anonymisieren", choices=["ja", "nein", "auto"], help="Text vor dem Senden anonymisieren")
     k.add_argument("--testen", action="store_true", help="Verbindung mit einer kleinen Testanfrage prüfen")
     k.set_defaults(func=_ki_server)
+
+    ak = sub.add_parser("aktion", help="KI-Aktion auf Text anwenden, z. B.: datenwaechter aktion Umformulieren --text \"…\"")
+    ak.add_argument("name", help="Name der Aktion (siehe: datenwaechter aktionen)")
+    ak.add_argument("--text", help="Text (ohne: von der Eingabe lesen)")
+    ak.set_defaults(func=_aktion)
+
+    al = sub.add_parser("aktionen", help="KI-Aktionen anzeigen, anlegen oder löschen")
+    al.add_argument("--neu", metavar="NAME", help="Aktion anlegen oder ändern")
+    al.add_argument("--anweisung", help="was die KI mit dem Text tun soll")
+    al.add_argument("--modus", choices=["ersetzen", "einfuegen", "anzeigen"], default="ersetzen")
+    al.add_argument("--loeschen", metavar="NAME")
+    al.add_argument("--zuruecksetzen", action="store_true", help="Standard-Aktionen wiederherstellen")
+    al.set_defaults(func=_aktionen)
 
     g = sub.add_parser("gui", help="Wächter-Fenster starten")
     g.add_argument("--minimiert", action="store_true", help="nur als Symbol im Infobereich starten (für Autostart)")

@@ -2,6 +2,7 @@
 // 1. Verbindung zum lokalen Python-Scanner (Native Messaging, Antworten in Teilen à max. 1 MB)
 // 2. Zustand (aktiv / pausiert) samt Symbol in der Browserleiste
 // 3. Tageszähler (geprüft / gewarnt / anonymisiert) – nur Zahlen, keine Inhalte
+// 4. KI-Aktionen im Rechtsklick-Menü (ki_aktionen.js)
 const HOST = "de.datenwaechter.host";
 let pingCache = null; // { time, reply }
 
@@ -80,8 +81,8 @@ async function countStat(key, n = 1) {
 }
 
 chrome.alarms.onAlarm.addListener((a) => { if (a.name === "weiter") setActive(true); });
-chrome.runtime.onInstalled.addListener(updateIcon);
-chrome.runtime.onStartup.addListener(updateIcon);
+chrome.runtime.onInstalled.addListener(() => { updateIcon(); buildMenus(); });
+chrome.runtime.onStartup.addListener(() => { updateIcon(); buildMenus(); });
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg?.type === "ping") ping(msg.fresh).then(sendResponse);
@@ -89,6 +90,9 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   else if (msg?.type === "setActive") setActive(msg.aktiv, msg.minutes).then(() => sendResponse({ ok: true }));
   else if (msg?.type === "stat") countStat(msg.key, msg.n).then(() => sendResponse({ ok: true }));
   else if (msg?.type === "state") getState().then(sendResponse);
+  else if (msg?.type === "refreshMenus") buildMenus().then(() => sendResponse({ actions: menuItems }));
   else return false;
   return true; // Antwort kommt asynchron
 });
+
+importScripts("ki_aktionen.js");

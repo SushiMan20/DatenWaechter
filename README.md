@@ -85,6 +85,32 @@ Beides lässt sich umstellen. Im Warndialog steht dann z. B. *„Bewertet von KI
 
 ![Bewertung durch eigenen KI-Server](docs/browser-ki-server.png)
 
+## KI-Aktionen: „Formuliere das um“ & eigene Aktionen per Rechtsklick
+
+Markierten Text mit deinem KI-Server bearbeiten: umformulieren, kürzen, freundlicher oder professioneller
+formulieren, Rechtschreibung korrigieren, übersetzen, zusammenfassen, eine Antwort entwerfen oder **eigene Aktionen**.
+
+- **Im Browser, auf jeder Webseite:** Text markieren, **Rechtsklick** und dann **„Datenwächter KI“** wählen. Das Ergebnis ersetzt die Markierung im Eingabefeld oder wird darunter eingefügt. Auf normalem Seitentext erscheint es in einem Fenster zum Kopieren. Ist nichts markiert, wird das ganze Eingabefeld genommen. Strg+Z macht die Änderung rückgängig.
+- **In jedem Windows-Programm** (Outlook, Word, Teams, Desktop-Apps): Text markieren und **Strg+Alt+Leertaste** drücken. Das Menü erscheint am Mauszeiger, das Ergebnis wird an Stelle der Markierung eingesetzt. Ein eigener Eintrag im Rechtsklick-Menü fremder Programme ist unter Windows technisch nicht möglich. Das Tastenkürzel lässt sich ändern.
+- **Datenschutz:** Ist dein KI-Server extern, ersetzt der Datenwächter Namen, IBAN usw. vor dem Senden durch Platzhalter und setzt die echten Werte in der Antwort wieder ein. Der Anbieter sieht die echten Daten nie.
+
+| Browser: ersetzt / angezeigt | Windows: Menü am Mauszeiger |
+|---|---|
+| ![KI-Aktionen im Browser](docs/ki-aktionen-browser.png) | ![KI-Aktionen in Windows](docs/ki-aktionen-windows.png) |
+
+**Eigene Aktionen** legst du im Fenster unter *Einstellungen → KI-Aktionen bearbeiten* an. Jede Aktion hat einen
+Namen, eine Anweisung an die KI und eine Einstellung, was mit dem Ergebnis passiert: *Markierung ersetzen*,
+*darunter einfügen* oder *nur anzeigen*. Browser-Menü und Tastenkürzel nutzen dieselbe Liste.
+
+![Aktionen bearbeiten](docs/ki-aktionen-editor.png)
+
+Per Kommandozeile:
+```
+datenwaechter aktionen                                         # Liste anzeigen
+datenwaechter aktionen --neu "Als Tweet" --anweisung "Mach daraus einen Tweet (max. 280 Zeichen)" --modus anzeigen
+datenwaechter aktion Umformulieren --text "hallo herr becker anbei die unterlagen"
+```
+
 ## Die zwei Bausteine
 
 ### 1. Browser-Erweiterung (Chrome / Edge / Brave) für claude.ai, chatgpt.com, Gemini, Copilot …
@@ -160,6 +186,7 @@ pip install -e ".[dev]"
 pytest                               # Regeln, Inhalts-Check (simuliertes Ollama + OpenAI-Server), OCR, Schwärzen, Gesichter, Oberfläche
 node --test tests/detectors.test.js  # Browser-Regeln (gleiche Testfälle wie Python)
 node tests/e2e_extension.js          # Erweiterung in echtem Chromium: Upload-Wege, Scanner, KI-Server, Leisten-Fenster, Pause
+node tests/e2e_ki_aktionen.js        # KI-Aktionen im Rechtsklick-Menü (ersetzen, einfügen, anzeigen)
 SITE=chatgpt.com node tests/e2e_extension.js   # dasselbe unter der Adresse von ChatGPT
 ```
 
