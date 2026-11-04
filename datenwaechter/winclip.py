@@ -56,6 +56,32 @@ def get_text() -> str | None:
         wc.CloseClipboard()
 
 
+def get_image():
+    """Bild in der Zwischenablage (z. B. Screenshot mit Win+Umschalt+S) als PIL-Bild, sonst None."""
+    if not AVAILABLE:
+        return None
+    try:
+        from PIL import Image, ImageGrab
+        data = ImageGrab.grabclipboard()
+    except Exception:  # noqa: BLE001 – Zwischenablage gerade gesperrt o. Ä.
+        return None
+    return data if isinstance(data, Image.Image) else None
+
+
+def set_image(img) -> None:
+    """Legt ein Bild als Bitmap in die Zwischenablage (Strg+V fügt es überall ein)."""
+    if not AVAILABLE or not _open():
+        return
+    import io
+    buf = io.BytesIO()
+    img.convert("RGB").save(buf, "BMP")
+    try:
+        wc.EmptyClipboard()
+        wc.SetClipboardData(win32con.CF_DIB, buf.getvalue()[14:])  # ohne BMP-Dateikopf = DIB
+    finally:
+        wc.CloseClipboard()
+
+
 def set_text(text: str) -> None:
     if not AVAILABLE or not _open():
         return

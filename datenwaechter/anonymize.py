@@ -51,5 +51,16 @@ class Anonymizer:
     def mapping(self) -> dict[str, str]:
         return dict(self._by_placeholder)
 
+    def load(self, mapping: dict[str, str]) -> None:
+        """Übernimmt eine bestehende Zuordnung (z. B. aus der Browser-Erweiterung), damit Platzhalter eindeutig bleiben."""
+        for ph, orig in mapping.items():
+            m = re.fullmatch(r"\[([A-Z_]+)_(\d+)\]", ph)
+            if not m:
+                continue
+            kind, n = m.group(1), int(m.group(2))
+            self._by_value[(kind, orig.strip())] = ph
+            self._by_placeholder[ph] = orig
+            self._counter[kind] = max(self._counter.get(kind, 0), n)
+
     def clear(self) -> None:
         self.__init__()

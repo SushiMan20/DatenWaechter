@@ -142,9 +142,58 @@
       for (const [ph, orig] of this.byPlaceholder) out = out.split(ph).join(orig);
       return out;
     }
+    exportMapping() { return Object.fromEntries(this.byPlaceholder); }
+    importMapping(mapping) {
+      for (const [ph, orig] of Object.entries(mapping || {})) {
+        const m = /^\[([A-Z_]+)_(\d+)\]$/.exec(ph);
+        if (!m) continue;
+        this.byValue.set(m[1] + "\u0000" + orig.trim(), ph);
+        this.byPlaceholder.set(ph, orig);
+        this.counter[m[1]] = Math.max(this.counter[m[1]] || 0, Number(m[2]));
+      }
+    }
   }
 
-  const api = { scan, Anonymizer, ibanValid, luhnValid, steuerIdValid, HOCH, MITTEL, NIEDRIG };
+  // ---------------------------------------------------------------- Inhalts-Check per Stichwort (wie content_check.py)
+  const CAT_DATA = typeof module !== "undefined" && module.exports
+    ? require("../datenwaechter/kategorien.json") : root.DWKategorien || {};
+  const W = "[\\p{L}\\p{N}_]";
+  const CATS = Object.entries(CAT_DATA).filter(([k]) => !k.startsWith("_")).map(([, c]) => ({
+    name: c.name, stufe: c.stufe,
+    terms: c.begriffe.map((raw) => {
+      const strong = raw.startsWith("!");
+      let word = raw.replace(/^!/, "");
+      const prefix = word.endsWith("*");
+      word = word.replace(/\*$/, "");
+      const esc = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/ /g, "\\s+");
+      return { strong, re: new RegExp(`(?<!${W})${esc}${prefix ? W + "*" : `(?!${W})`}`, "iu") };
+    }),
+  }));
+
+  function contentCheck(text) {
+    const categories = [], hints = [];
+    let severity = 0;
+    for (const cat of CATS) {
+      const hits = [];
+      let strongHit = false;
+      for (const t of cat.terms) {
+        const m = t.re.exec(text);
+        if (m) { hits.push(m[0]); strongHit = strongHit || t.strong; }
+      }
+      if (strongHit || hits.length >= 2) {
+        categories.push(cat.name);
+        hints.push(...hits.slice(0, 3));
+        severity = Math.max(severity, cat.stufe);
+      }
+    }
+    const join = (a) => (a.length === 1 ? a[0] : a.slice(0, -1).join(", ") + " und " + a[a.length - 1]);
+    const warning = categories.length
+      ? `Du lädst gerade ${join(categories)} hoch (Hinweise: ${hints.slice(0, 5).map((h) => `„${h}“`).join(", ")}).`
+      : null;
+    return { categories, hints, severity, warning, description: null, backend: "stichworte" };
+  }
+
+  const api = { scan, contentCheck, Anonymizer, ibanValid, luhnValid, steuerIdValid, HOCH, MITTEL, NIEDRIG };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.DWDetect = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

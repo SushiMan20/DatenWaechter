@@ -1,20 +1,28 @@
-// Datenwächter – fängt Einfügen (Strg+V), Drag & Drop und Datei-Auswahl auf KI-Chat-Seiten ab,
-// prüft den Inhalt lokal und fragt bei Funden nach, BEVOR die Seite die Daten bekommt.
+// Datenwächter – fängt in KI-Chats alle Upload-Wege ab: Einfügen (Strg+V), Drag & Drop, „Datei hinzufügen“
+// (Büroklammer, auch versteckte Eingabefelder und showOpenFilePicker). Der Inhalt wird lokal geprüft,
+// BEVOR die Seite ihn bekommt. Bei Funden: Warnung mit Liste + Inhalts-Check („Du lädst gerade … hoch“).
 (() => {
   "use strict";
   const DW = globalThis.DWDetect;
   const anon = new DW.Anonymizer();          // gleiche Werte -> gleiche Platzhalter, solange der Tab offen ist
   const own = new WeakSet();                  // von uns erneut ausgelöste Ereignisse nicht nochmal prüfen
   const TEXT_EXT = /\.(txt|md|csv|tsv|json|xml|ya?ml|ini|cfg|conf|env|log|html?|py|js|ts|java|cs|go|rb|php|sql|sh|ps1|bat|toml|properties|eml)$/i;
-  const HOST_EXT = /\.(pdf|docx)$/i;
+  const HOST_ONLY = /\.(pdf|docx|png|jpe?g|webp|bmp|gif|tiff?)$/i;
   const MAX_TEXT = 5 * 1024 * 1024;
   const MAX_HOST = 25 * 1024 * 1024;
-  const COLORS = { 3: "#c62828", 2: "#ef6c00", 1: "#757575" };
+  const MIN_CONTENT_CHECK = 80;              // kürzere Texte nicht auf Themen prüfen (zu viele Fehlalarme)
+  const MIN_LLM_CHECK = 300;                 // ab dieser Länge fragt die Erweiterung zusätzlich das Sprachmodell
+  const COLORS = { 3: "#c62828", 2: "#ef6c00", 1: "#757575", 0: "#1565c0" };
+  const STUFE = { 3: "hoch", 2: "mittel", 1: "niedrig" };
 
   window.addEventListener("paste", onPaste, true);
   window.addEventListener("drop", onDrop, true);
   window.addEventListener("change", onFileInput, true);
   window.addEventListener("copy", onCopy, true);
+  window.addEventListener("message", onPageMessage);
+
+  const host = (request) => chrome.runtime.sendMessage({ type: "host", request }).catch((e) => ({ ok: false, error: String(e) }));
+  const hostStatus = () => chrome.runtime.sendMessage({ type: "ping" }).catch(() => ({ ok: false }));
 
   function block(e) {
     e.preventDefault();
@@ -29,6 +37,35 @@
       el?.focus?.();
       if (range) { sel.removeAllRanges(); sel.addRange(range); }
     };
+  }
+
+  // ------------------------------------------------------------------ Text prüfen (Einfügen / Ziehen)
+  async function checkText(text) {
+    const findings = DW.scan(text);
+    let content = text.length >= MIN_CONTENT_CHECK ? DW.contentCheck(text) : null;
+    if (text.length >= MIN_LLM_CHECK) {
+      const status = await hostStatus();
+      if (status?.ok && status.llm) {
+        toast("Lokale KI prüft den Inhalt …");
+        const reply = await host({ action: "check_text", text });
+        if (reply?.ok) content = reply.content;
+      }
+    }
+    return { findings, content: content?.warning ? content : null };
+  }
+
+  async function askAboutText(text, verb) {
+    const { findings, content } = await checkText(text);
+    if (!findings.length && !content) return { choice: "pass" };
+    const choice = await showDialog({
+      title: findings.length ? `Du ${verb} ${findings.length} sensible Angabe(n) ein` : "Bitte kurz prüfen, was du einfügst",
+      content: content ? [content] : [],
+      rows: findings.map((f) => ({ ...f, where: "Text" })),
+      actions: findings.length
+        ? [["anon", "✔ Anonymisiert einfügen", true], ["orig", "Original einfügen"], ["cancel", "Abbrechen"]]
+        : [["cancel", "Abbrechen", true], ["orig", "Trotzdem einfügen"]],
+    });
+    return { choice, findings };
   }
 
   // ------------------------------------------------------------------ Einfügen
@@ -48,23 +85,16 @@
     }
     const text = dt.getData("text/plain");
     if (!text) return;
-    const findings = DW.scan(text);
-    if (!findings.length) return;
+    // Regeln + Stichwörter sind synchron: nur blockieren, wenn es etwas zu fragen gibt (oder die KI gefragt wird)
+    const quick = DW.scan(text).length || (text.length >= MIN_CONTENT_CHECK && DW.contentCheck(text).warning);
+    if (!quick && text.length < MIN_LLM_CHECK) return;
     block(e);
     const html = dt.getData("text/html"); // nur während des Ereignisses lesbar
     const restoreCaret = saveCaret();
-    showDialog({
-      title: `Du fügst ${findings.length} sensible Angabe(n) ein`,
-      rows: findings.map((f) => ({ ...f, where: "Text" })),
-      actions: [
-        ["anon", "✔ Anonymisiert einfügen", true],
-        ["orig", "Original einfügen"],
-        ["cancel", "Abbrechen"],
-      ],
-    }).then((choice) => {
+    askAboutText(text, "fügst").then(({ choice, findings }) => {
       restoreCaret();
       if (choice === "anon") firePaste(target, { text: anon.anonymize(text, findings) });
-      else if (choice === "orig") firePaste(target, { text, html });
+      else if (choice === "orig" || choice === "pass") firePaste(target, { text, html });
     });
   }
 
@@ -95,14 +125,11 @@
 
     if (!files.length) {
       const text = dt.getData("text/plain");
-      const findings = text ? DW.scan(text) : [];
-      if (!findings.length) return;
+      if (!text) return;
+      const quick = DW.scan(text).length || (text.length >= MIN_CONTENT_CHECK && DW.contentCheck(text).warning);
+      if (!quick && text.length < MIN_LLM_CHECK) return;
       block(e);
-      showDialog({
-        title: `Der gezogene Text enthält ${findings.length} sensible Angabe(n)`,
-        rows: findings.map((f) => ({ ...f, where: "Text" })),
-        actions: [["anon", "✔ Anonymisiert ablegen", true], ["orig", "Original ablegen"], ["cancel", "Abbrechen"]],
-      }).then((choice) => {
+      askAboutText(text, "ziehst").then(({ choice, findings }) => {
         if (choice === "cancel") return leave();
         const d = new DataTransfer();
         d.setData("text/plain", choice === "anon" ? anon.anonymize(text, findings) : text);
@@ -110,7 +137,6 @@
       });
       return;
     }
-
     block(e);
     checkFiles(files).then((result) => {
       if (!result) return leave();
@@ -120,7 +146,7 @@
     });
   }
 
-  // ------------------------------------------------------------------ Büroklammer / Datei-Auswahl
+  // ------------------------------------------------------------------ „Datei hinzufügen“ / Büroklammer
   function onFileInput(e) {
     const input = e.target;
     if (own.has(e) || !(input instanceof HTMLInputElement) || input.type !== "file" || !input.files?.length) return;
@@ -134,6 +160,13 @@
       own.add(ev);
       input.dispatchEvent(ev);
     });
+  }
+
+  // showOpenFilePicker-Weg (page_hook.js schickt die Dateien hierher)
+  function onPageMessage(e) {
+    if (e.source !== window || e.data?.__datenwaechter !== "check") return;
+    const { id, files } = e.data;
+    checkFiles(files).then((result) => window.postMessage({ __datenwaechter: "result", id, files: result }, "*"));
   }
 
   // ------------------------------------------------------------------ KI-Antwort kopieren -> Platzhalter zurück
@@ -150,65 +183,76 @@
   // ------------------------------------------------------------------ Dateien prüfen
   async function checkFiles(files) {
     toast(`Datenwächter prüft ${files.length} Datei(en) …`);
-    const reports = await Promise.all(files.map(scanFile));
-    const rows = [];
-    for (const r of reports) {
-      for (const f of r.findings) rows.push({ ...f, where: r.file.name });
-      if (r.note) rows.push({ severity: 2, severityLabel: "?", label: r.note, display: "nicht geprüft", where: r.file.name });
-    }
-    if (!rows.length) {
-      toast("✔ Keine sensiblen Daten gefunden");
+    const status = await hostStatus();
+    const reports = [];
+    for (const f of files) reports.push(await scanFile(f, !!status?.ok)); // nacheinander: Platzhalter bleiben eindeutig
+    const rows = reports.flatMap((r) => r.rows.map((row) => ({ ...row, where: r.file.name })));
+    const content = reports.map((r) => r.content).filter((c) => c?.warning);
+    const notes = reports.flatMap((r) => r.notes.map((n) => `${r.file.name}: ${n}`));
+    const info = reports.flatMap((r) => r.info);
+
+    if (!rows.length && !content.length && !notes.length) {
+      toast("✔ Keine sensiblen Daten gefunden" + (info.length ? " (Bildmotiv nicht bewertet)" : ""));
       return files;
     }
-    const withFindings = reports.filter((r) => r.findings.length);
-    const actions = [];
-    if (withFindings.length) actions.push(["anon", "✔ Anonymisierte Fassung hochladen", true]);
-    actions.push(["orig", "Original hochladen"], ["cancel", "Abbrechen"]);
+    const canAnon = reports.some((r) => r.output);
+    const actions = canAnon
+      ? [["anon", "✔ Anonymisierte Fassung hochladen", true], ["orig", "Original hochladen"], ["cancel", "Abbrechen"]]
+      : [["cancel", "Abbrechen", true], ["orig", "Trotzdem hochladen"]];
     const choice = await showDialog({
-      title: withFindings.length
-        ? `${rows.filter((r) => r.kind).length} sensible Angabe(n) in ${withFindings.length} Datei(en)`
-        : "Datei(en) konnten nicht geprüft werden",
-      rows,
+      title: rows.length ? `${rows.length} sensible Angabe(n) in ${reports.filter((r) => r.rows.length).length} Datei(en)`
+        : content.length ? "Bitte kurz prüfen, was du hochlädst" : "Datei(en) konnten nicht vollständig geprüft werden",
+      content, rows, notes: [...notes, ...info],
       actions,
-      hint: withFindings.some((r) => r.newName?.endsWith(".txt") && !r.file.name.endsWith(".txt"))
-        ? "Bei PDF/Word wird der anonymisierte Text als .txt hochgeladen (Layout geht verloren)." : "",
+      hint: canAnon ? "Bilder und PDFs werden geschwärzt (Kasten mit Platzhalter), Gesichter verpixelt." : "",
     });
     if (choice === "cancel") return null;
     if (choice === "orig") return files;
     const out = [];
     for (const r of reports) {
-      if (!r.findings.length) out.push(r.file);
-      else if (r.anonymized != null) out.push(new File([r.anonymized], r.newName, { type: "text/plain" }));
+      if (r.output) out.push(r.output);
+      else if (!r.rows.length) out.push(r.file);
       // Funde, aber keine anonymisierte Fassung möglich -> Datei weglassen
     }
     return out;
   }
 
-  async function scanFile(file) {
-    const base = { file, findings: [] };
-    if (TEXT_EXT.test(file.name) || file.type.startsWith("text/") || file.type === "application/json") {
-      if (file.size > MAX_TEXT) return { ...base, note: "Zu groß für die Prüfung im Browser" };
+  async function scanFile(file, hostOk) {
+    const base = { file, rows: [], notes: [], info: [], content: null, output: null };
+    const isText = TEXT_EXT.test(file.name) || file.type.startsWith("text/") || file.type === "application/json";
+    const viaHost = hostOk && file.size <= MAX_HOST && (isText || HOST_ONLY.test(file.name) || file.type.startsWith("image/"));
+
+    if (viaHost) {
+      const reply = await host({ action: "scan_file", name: file.name, data_b64: await toBase64(file), mapping: anon.exportMapping() });
+      if (reply?.ok) {
+        if (reply.mapping) anon.importMapping(reply.mapping);
+        const output = reply.output
+          ? new File([Uint8Array.from(atob(reply.output.b64), (c) => c.charCodeAt(0))], reply.output.name, { type: reply.output.mime })
+          : null;
+        return {
+          ...base, output, notes: reply.notes || [], info: reply.info || [],
+          rows: reply.rows.map((r) => ({ ...r, severityLabel: STUFE[r.severity] })),
+          content: reply.content?.warning ? reply.content : null,
+        };
+      }
+      if (!isText) return { ...base, notes: [`Prüfung fehlgeschlagen: ${reply?.error || "unbekannter Fehler"}`] };
+    }
+    if (isText) {
+      if (file.size > MAX_TEXT) return { ...base, notes: ["Zu groß für die Prüfung im Browser"] };
       const text = await file.text();
       const findings = DW.scan(text);
+      const content = DW.contentCheck(text);
       const dot = file.name.lastIndexOf(".");
-      const newName = dot > 0 ? `${file.name.slice(0, dot)}_anonymisiert${file.name.slice(dot)}` : `${file.name}_anonymisiert.txt`;
-      return { ...base, findings, anonymized: findings.length ? anon.anonymize(text, findings) : null, newName };
+      const name = dot > 0 ? `${file.name.slice(0, dot)}_anonymisiert${file.name.slice(dot)}` : `${file.name}_anonymisiert.txt`;
+      return {
+        ...base, rows: findings, content: content.warning ? content : null,
+        output: findings.length ? new File([anon.anonymize(text, findings)], name, { type: "text/plain" }) : null,
+      };
     }
-    if (HOST_EXT.test(file.name)) {
-      if (file.size > MAX_HOST) return { ...base, note: "Zu groß für die Prüfung" };
-      let reply;
-      try {
-        reply = await chrome.runtime.sendMessage({ type: "scanFile", name: file.name, b64: await toBase64(file) });
-      } catch (err) {
-        reply = { ok: false, error: String(err) };
-      }
-      if (!reply?.ok) {
-        return { ...base, note: reply?.noHost ? "Lokaler Scanner (Python) nicht installiert – PDF/Word nicht prüfbar" : `Prüfung fehlgeschlagen: ${reply?.error}` };
-      }
-      const findings = reply.findings.map((f) => ({ ...f, severityLabel: { 3: "hoch", 2: "mittel", 1: "niedrig" }[f.severity] }));
-      return { ...base, findings, anonymized: reply.anonymized, newName: reply.name, note: reply.error };
+    if (HOST_ONLY.test(file.name) || file.type.startsWith("image/")) {
+      return { ...base, notes: ["Lokaler Scanner nicht installiert – Bilder, PDF und Word können nicht geprüft werden"] };
     }
-    return base; // Bilder usw. werden (noch) nicht geprüft
+    return base; // z. B. Audio, Video, ZIP: (noch) nicht prüfbar
   }
 
   function toBase64(file) {
@@ -225,33 +269,36 @@
     :host { all: initial; }
     .bg { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 2147483647; display: flex;
           align-items: center; justify-content: center; font: 14px/1.4 system-ui, "Segoe UI", sans-serif; }
-    .card { background: #fff; color: #222; width: min(680px, 94vw); max-height: 86vh; border-radius: 12px;
+    .card { background: #fff; color: #222; width: min(700px, 94vw); max-height: 88vh; border-radius: 12px;
             overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 10px 40px rgba(0,0,0,.35); }
     .head { color: #fff; padding: 14px 18px; font-weight: 600; font-size: 16px; }
+    .content { margin: 12px 18px 0; padding: 10px 12px; border-radius: 8px; background: #fff3e0; color: #5d4037; }
+    .content b { display: block; margin-bottom: 2px; }
+    .content small { color: #8d6e63; }
     .sub { padding: 10px 18px 0; color: #555; }
     .list { overflow: auto; padding: 8px 18px; }
     table { width: 100%; border-collapse: collapse; }
     td { padding: 6px 4px; border-bottom: 1px solid #eee; vertical-align: top; word-break: break-all; }
     td.sev { font-weight: 600; white-space: nowrap; word-break: normal; }
     td.where { color: #777; font-size: 12px; }
+    .notes { padding: 0 18px; color: #777; font-size: 12px; }
     .btns { display: flex; gap: 8px; flex-wrap: wrap; padding: 12px 18px 16px; }
     button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid #ccc; background: #f5f5f5; cursor: pointer; }
     button.main { background: #2e7d32; border-color: #2e7d32; color: #fff; }
     .toast { position: fixed; right: 18px; bottom: 18px; z-index: 2147483647; background: #263238; color: #fff;
              padding: 10px 14px; border-radius: 8px; font: 13px system-ui, "Segoe UI", sans-serif; }
     @media (prefers-color-scheme: dark) {
-      .card { background: #1e1e1e; color: #eee; } td { border-color: #333; } .sub { color: #aaa; }
+      .card { background: #1e1e1e; color: #eee; } td { border-color: #333; } .sub, .notes { color: #aaa; }
+      .content { background: #3e2723; color: #ffe0b2; } .content small { color: #bcaaa4; }
       button { background: #2a2a2a; color: #eee; border-color: #444; }
     }`;
 
   function mount() {
-    const host = document.createElement("datenwaechter-ui");
-    const root = host.attachShadow({ mode: "closed" });
-    const style = document.createElement("style");
-    style.textContent = CSS;
-    root.append(style);
-    document.documentElement.append(host);
-    return { host, root };
+    const h = document.createElement("datenwaechter-ui");
+    const root = h.attachShadow({ mode: "closed" });
+    root.append(el("style", { textContent: CSS }));
+    document.documentElement.append(h);
+    return { host: h, root };
   }
 
   function el(tag, props = {}, ...children) {
@@ -261,34 +308,43 @@
     return n;
   }
 
-  function showDialog({ title, rows, actions, hint }) {
+  function showDialog({ title, rows = [], content = [], notes = [], actions, hint }) {
     return new Promise((resolve) => {
       document.querySelectorAll("datenwaechter-toast").forEach((n) => n.remove());
-      const { host, root } = mount();
-      const worst = Math.max(...rows.map((r) => r.severity || 1));
-      const done = (choice) => { host.remove(); document.removeEventListener("keydown", onKey, true); resolve(choice); };
+      const { host: h, root } = mount();
+      const worst = Math.max(0, ...rows.map((r) => r.severity || 1), ...content.map((c) => c.severity || 0));
+      const done = (choice) => { h.remove(); document.removeEventListener("keydown", onKey, true); resolve(choice); };
       const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); done("cancel"); } };
       document.addEventListener("keydown", onKey, true);
 
-      const table = el("table");
-      for (const r of rows) {
-        table.append(el("tr", {},
-          el("td", { className: "sev", textContent: r.severityLabel, style: `color:${COLORS[r.severity] || "#777"}` }),
-          el("td", { textContent: r.label + (r.source === "ki" ? " (KI)" : "") }),
-          el("td", { textContent: r.display }),
-          el("td", { className: "where", textContent: r.where || "" })));
+      const card = el("div", { className: "card" },
+        el("div", { className: "head", textContent: `⚠ Achtung: ${title}`, style: `background:${COLORS[worst] || COLORS[2]}` }));
+      for (const c of content) {
+        const box = el("div", { className: "content" }, el("b", { textContent: "🧠 " + c.warning + " Willst du das wirklich?" }));
+        if (c.description) box.append(el("div", { textContent: c.description }));
+        box.append(el("small", { textContent: c.backend?.startsWith("ollama") ? `Bewertet von lokaler KI (${c.backend.slice(7)})` : "Erkannt an Stichwörtern" }));
+        card.append(box);
       }
+      if (rows.length) {
+        card.append(el("div", { className: "sub", textContent: "Diese Daten würden an den KI-Anbieter übertragen. " + (hint || "") }));
+        const table = el("table");
+        for (const r of rows) {
+          table.append(el("tr", {},
+            el("td", { className: "sev", textContent: r.severityLabel || STUFE[r.severity] || "", style: `color:${COLORS[r.severity] || "#777"}` }),
+            el("td", { textContent: r.label }),
+            el("td", { textContent: r.display }),
+            el("td", { className: "where", textContent: r.where || "" })));
+        }
+        card.append(el("div", { className: "list" }, table));
+      }
+      if (notes.length) card.append(el("div", { className: "notes" }, ...notes.map((n) => el("div", { textContent: "ℹ " + n }))));
       const btns = el("div", { className: "btns" });
       for (const [id, label, main] of actions) {
         const b = el("button", { textContent: label, className: main ? "main" : "" });
         b.addEventListener("click", () => done(id));
         btns.append(b);
       }
-      const card = el("div", { className: "card" },
-        el("div", { className: "head", textContent: `⚠ Achtung: ${title}`, style: `background:${COLORS[worst]}` }),
-        el("div", { className: "sub", textContent: "Diese Daten würden an den KI-Anbieter übertragen. " + (hint || "") }),
-        el("div", { className: "list" }, table),
-        btns);
+      card.append(btns);
       const bg = el("div", { className: "bg" }, card);
       bg.addEventListener("click", (e) => { if (e.target === bg) done("cancel"); });
       root.append(bg);
@@ -300,10 +356,10 @@
   function toast(text) {
     document.querySelectorAll("datenwaechter-toast").forEach((n) => n.remove());
     clearTimeout(toastTimer);
-    const host = document.createElement("datenwaechter-toast");
-    const root = host.attachShadow({ mode: "closed" });
+    const h = document.createElement("datenwaechter-toast");
+    const root = h.attachShadow({ mode: "closed" });
     root.append(el("style", { textContent: CSS }), el("div", { className: "toast", textContent: text }));
-    document.documentElement.append(host);
-    toastTimer = setTimeout(() => host.remove(), 2500);
+    document.documentElement.append(h);
+    toastTimer = setTimeout(() => h.remove(), 2500);
   }
 })();

@@ -1,10 +1,14 @@
 """Brücke zwischen Browser-Erweiterung und Python-Scanner (Chrome/Edge „Native Messaging“).
 
-Der Browser startet dieses Programm lokal und spricht über stdin/stdout mit ihm.
-Damit kann die Erweiterung auch PDFs und Word-Dateien prüfen – ohne dass Daten den PC verlassen.
+Der Browser startet dieses Programm lokal und spricht über stdin/stdout mit ihm. Damit prüft die
+Erweiterung auch PDFs (inkl. Scans), Word-Dateien und Bilder – ohne dass Daten den PC verlassen.
 
-Nachricht:  {"action": "scan_file", "name": "x.pdf", "data_b64": "..."}  oder  {"action": "ping"}
-Antwort:    {"ok": true, "findings": [...], "anonymized": "...", "name": "x_anonymisiert.txt"}
+Anfragen:
+  {"action": "ping"}
+  {"action": "check_text", "text": "..."}                         -> Inhalts-Check für eingefügten Text
+  {"action": "scan_file", "name": "x.pdf", "data_b64": "...", "mapping": {...}}
+Antworten werden in Teile zerlegt ({"part": i, "of": n, "data": "..."}), weil Chrome vom Host
+höchstens 1 MB pro Nachricht annimmt; die Erweiterung setzt sie wieder zusammen.
 """
 
 from __future__ import annotations
@@ -17,10 +21,14 @@ import sys
 import tempfile
 from pathlib import Path
 
+from . import __version__, content_check, faces, ocr
+from .analysis import analyze, anonymize
 from .anonymize import Anonymizer
-from .files import UnsupportedFile, scan_file
+from .files import UnsupportedFile
 
-MAX_REPLY = 900_000  # Chrome erlaubt max. 1 MB vom Host zur Erweiterung
+CHUNK = 200_000  # Zeichen pro Teilnachricht (max. 800 KB UTF-8)
+MIME = {".pdf": "application/pdf", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+        ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"}
 
 
 def _read() -> dict | None:
@@ -37,35 +45,39 @@ def _write(msg: dict) -> None:
     sys.stdout.buffer.flush()
 
 
+def send(reply: dict) -> None:
+    s = json.dumps(reply, ensure_ascii=False)
+    parts = [s[i:i + CHUNK] for i in range(0, len(s), CHUNK)] or [""]
+    for i, part in enumerate(parts):
+        _write({"part": i, "of": len(parts), "data": part})
+
+
 def handle(msg: dict) -> dict:
     action = msg.get("action")
     if action == "ping":
-        return {"ok": True, "version": "0.1.0"}
+        return {"ok": True, "version": __version__, "ocr": ocr.backend(), "faces": faces.available(),
+                "llm": content_check.OLLAMA_MODEL if content_check.ollama_available() else None}
+    if action == "check_text":
+        return {"ok": True, "content": content_check.check(msg.get("text", "")).to_dict()}
     if action != "scan_file":
         return {"ok": False, "error": f"unbekannte Aktion {action!r}"}
 
     name = Path(msg.get("name") or "datei").name
-    use_ki = bool(msg.get("ki"))
+    anon = Anonymizer()
+    anon.load(msg.get("mapping") or {})
     with tempfile.TemporaryDirectory(prefix="datenwaechter_") as tmp:
         path = Path(tmp) / name
         path.write_bytes(base64.b64decode(msg["data_b64"]))
         try:
-            text, findings = scan_file(path, use_ki=use_ki)
+            report = analyze(path, use_ki=bool(msg.get("ki")))
         except UnsupportedFile as e:
             return {"ok": False, "error": str(e)}
-    anonymized = Anonymizer().anonymize(text, findings) if findings else None
-    reply = {
-        "ok": True,
-        "findings": [
-            {"kind": f.kind, "label": f.label, "display": f.masked(), "severity": f.severity, "source": f.source}
-            for f in findings
-        ],
-        "anonymized": anonymized,
-        "name": f"{Path(name).stem}_anonymisiert.txt",
-    }
-    if anonymized and len(anonymized.encode("utf-8")) > MAX_REPLY:
-        reply["anonymized"] = None
-        reply["error"] = "Datei zu groß für die automatische Anonymisierung – bitte mit dem Datenwächter-Fenster."
+        reply = {"ok": True, **report.to_dict()}
+        if report.can_anonymize:
+            out = anonymize(report, anon, Path(tmp) / "aus")
+            reply["output"] = {"name": out.name, "mime": MIME.get(out.suffix.lower(), "text/plain"),
+                               "b64": base64.b64encode(out.read_bytes()).decode()}
+            reply["mapping"] = anon.mapping
     return reply
 
 
@@ -79,6 +91,6 @@ def main() -> None:
         if msg is None:
             break
         try:
-            _write(handle(msg))
+            send(handle(msg))
         except Exception as e:  # noqa: BLE001 – Fehler an die Erweiterung melden statt abzustürzen
-            _write({"ok": False, "error": str(e)})
+            send({"ok": False, "error": str(e)})

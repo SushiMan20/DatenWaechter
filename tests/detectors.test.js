@@ -38,3 +38,18 @@ test("anonymisieren und zurück", () => {
   assert.strictEqual(anon.split("[PERSON_1]").length - 1, 2);
   assert.strictEqual(a.restore("[PERSON_1] / [IBAN_1]"), "Müller / DE89 3704 0044 0532 0130 00");
 });
+
+test("Inhalts-Check wie in Python", () => {
+  const v = DW.contentCheck("Arztbrief: Diagnose Depression. Kopie an meinen Ehemann wegen Sorgerecht.");
+  assert.ok(v.categories.includes("Gesundheitsdaten") && v.categories.includes("Familienunterlagen"));
+  assert.strictEqual(v.severity, 3);
+  for (const t of ["Kannst du diese Python-Funktion optimieren? Sie sortiert eine Liste von Zahlen.",
+    "Fehlerdiagnose im Build-Prozess: Version 3.1 schlägt bei den Unit-Tests fehl.",
+    "Wie mache ich ein Rezept für Apfelkuchen ohne Zucker?"]) assert.strictEqual(DW.contentCheck(t).warning, null, t);
+});
+
+test("übernimmt Platzhalter-Zuordnung", () => {
+  const a = new DW.Anonymizer();
+  a.importMapping({ "[PERSON_2]": "Müller", kaputt: "x" });
+  assert.strictEqual(a.anonymize("Frau Müller und Frau Schmidt"), "Frau [PERSON_2] und Frau [PERSON_3]");
+});

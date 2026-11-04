@@ -1,5 +1,6 @@
-// Ende-zu-Ende-Test der Browser-Erweiterung mit echtem Chromium.
-// Aufruf:  node tests/e2e_extension.js   (braucht Playwright und Python mit datenwaechter + reportlab)
+// Ende-zu-Ende-Test der Browser-Erweiterung mit echtem Chromium und echtem Python-Scanner.
+// Aufruf:  node tests/e2e_extension.js
+// Braucht: Playwright, Python mit datenwaechter + pypdfium2 + pytesseract (Tesseract mit „deu“) + OpenCV 4 + reportlab.
 // Eine Testseite wird unter https://claude.ai/ ausgeliefert, damit die Erweiterung dort aktiv wird.
 const { chromium } = require("playwright");
 const assert = require("node:assert");
@@ -13,35 +14,50 @@ const EXT = path.join(REPO, "extension");
 const PY = process.env.PYTHON || "python3";
 
 const PAGE = `<!doctype html><meta charset=utf-8><title>Test</title>
-<div id=editor contenteditable style="height:80px;border:1px solid">.</div>
-<div id=zone style="height:80px;border:1px dashed">Drop</div>
+<div id=editor contenteditable style="height:60px;border:1px solid">.</div>
+<div id=zone style="height:60px;border:1px dashed">Drop</div>
 <input id=file type=file multiple>
+<button id=add>Datei hinzufügen</button>
 <script>
   window.log = [];
-  editor.addEventListener("paste", e => { e.preventDefault(); log.push({paste: e.clipboardData.getData("text/plain"),
-    files: [...e.clipboardData.files].map(f => f.name)}); });
+  const read = (f) => new Promise(r => { const fr = new FileReader(); fr.onload = () => r(String(fr.result).split(",")[1]); fr.readAsDataURL(f); });
+  const record = async (how, files) => log.push({ how, names: files.map(f => f.name), b64: files.length ? await read(files[0]) : "" });
+  editor.addEventListener("paste", e => { e.preventDefault(); log.push({ how: "paste", text: e.clipboardData.getData("text/plain") }); });
   zone.addEventListener("dragover", e => e.preventDefault());
-  zone.addEventListener("drop", async e => { e.preventDefault();
-    const fs = [...e.dataTransfer.files]; log.push({drop: fs.map(f => f.name), text: fs.length ? await fs[0].text() : ""}); });
-  file.addEventListener("change", async () => { const fs = [...file.files];
-    log.push({input: fs.map(f => f.name), text: fs.length ? await fs[0].text() : ""}); });
+  zone.addEventListener("drop", e => { e.preventDefault(); record("drop", [...e.dataTransfer.files]); });
+  file.addEventListener("change", () => record("input", [...file.files]));
+  // typischer „Datei hinzufügen“-Knopf: unsichtbares Eingabefeld, das nie ins Dokument eingefügt wird
+  add.addEventListener("click", () => { const i = document.createElement("input"); i.type = "file";
+    i.addEventListener("change", () => record("hidden-input", [...i.files])); i.click(); });
 </script>`;
 
-function makePdf(dir) {
-  const out = path.join(dir, "Vertrag.pdf");
-  execFileSync(PY, ["-c", `
+function py(code) {
+  return execFileSync(PY, ["-c", code], { cwd: REPO, encoding: "utf8" });
+}
+
+function makeFixtures(dir) {
+  py(`
 from reportlab.pdfgen import canvas
-c = canvas.Canvas(${JSON.stringify(out)})
+c = canvas.Canvas(${JSON.stringify(path.join(dir, "Vertrag.pdf"))})
+c.setFont("Helvetica", 14)
 c.drawString(72, 750, "Vertrag mit Herrn Klaus Becker, IBAN DE89 3704 0044 0532 0130 00")
-c.drawString(72, 730, "E-Mail: klaus.becker@example.de")
-c.save()`]);
-  return out;
+c.drawString(72, 725, "E-Mail: klaus.becker@example.de")
+c.save()
+from PIL import Image, ImageDraw, ImageFont
+f = ImageFont.truetype("DejaVuSans.ttf", 22)
+img = Image.new("RGB", (900, 220), "white"); d = ImageDraw.Draw(img)
+d.text((30, 30), "Überweisung an Frau Anna Müller", font=f, fill="black")
+d.text((30, 80), "IBAN: DE89 3704 0044 0532 0130 00", font=f, fill="black")
+d.text((30, 130), "Betreff: Unterhalt für unsere Tochter", font=f, fill="black")
+img.save(${JSON.stringify(path.join(dir, "Screenshot.png"))})`);
 }
 
 (async () => {
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), "dw-e2e-"));
+  makeFixtures(userData);
   const ctx = await chromium.launchPersistentContext(userData, {
-    headless: true, channel: "chromium", viewport: { width: 760, height: 460 }, args: [`--disable-extensions-except=${EXT}`, `--load-extension=${EXT}`],
+    headless: true, channel: "chromium", viewport: { width: 780, height: 560 },
+    args: [`--disable-extensions-except=${EXT}`, `--load-extension=${EXT}`],
   });
   let [sw] = ctx.serviceWorkers();
   if (!sw) sw = await ctx.waitForEvent("serviceworker");
@@ -61,55 +77,101 @@ c.save()`]);
   const page = await ctx.newPage();
   await page.goto("https://claude.ai/new");
   const log = () => page.evaluate(() => window.log);
-  const dialogOpen = () => page.evaluate(() => !!document.querySelector("datenwaechter-ui"));
-  const waitDialog = () => page.waitForFunction(() => !!document.querySelector("datenwaechter-ui"));
+  const waitLog = (n) => page.waitForFunction((n) => window.log.length === n, n, { timeout: 60_000 });
+  const waitDialog = () => page.waitForFunction(() => !!document.querySelector("datenwaechter-ui"), null, { timeout: 60_000 });
+  const shotDir = process.env.SHOT_DIR;
+  const shot = async (name) => shotDir && page.screenshot({ path: path.join(shotDir, name) });
+  const paste = (text) => page.evaluate((text) => { editor.focus(); const d = new DataTransfer(); d.setData("text/plain", text);
+    editor.dispatchEvent(new ClipboardEvent("paste", { clipboardData: d, bubbles: true, cancelable: true })); }, text);
+  const drop = (name, type) => page.evaluate(([b64, name, type]) => {
+    const bin = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)); const d = new DataTransfer();
+    d.items.add(new File([bin], name, { type }));
+    zone.dispatchEvent(new DragEvent("drop", { dataTransfer: d, bubbles: true, cancelable: true }));
+  }, [fs.readFileSync(path.join(userData, name)).toString("base64"), name, type]);
+  const ocrB64 = (b64, ext) => {
+    const f = path.join(userData, "check" + ext);
+    fs.writeFileSync(f, Buffer.from(b64, "base64"));
+    return py(`
+import sys; sys.path.insert(0, ".")
+from datenwaechter.files import load
+print(load(${JSON.stringify(f)}).text)`);
+  };
+  let n = 0;
+  const step = (msg) => console.log(`  ✔ ${++n}. ${msg}`);
 
   // 1) Harmloser Text geht ohne Rückfrage durch
-  await page.evaluate(() => { const d = new DataTransfer(); d.setData("text/plain", "Hallo Welt");
-    editor.dispatchEvent(new ClipboardEvent("paste", { clipboardData: d, bubbles: true, cancelable: true })); });
-  assert.deepStrictEqual((await log())[0], { paste: "Hallo Welt", files: [] });
-  assert.strictEqual(await dialogOpen(), false);
+  await paste("Hallo Welt");
+  assert.deepStrictEqual((await log())[0], { how: "paste", text: "Hallo Welt" });
+  step("harmloser Text wird ohne Rückfrage eingefügt");
 
   // 2) Sensibler Text -> Warnung -> Enter = „Anonymisiert einfügen“
-  await page.evaluate(() => { editor.focus(); const d = new DataTransfer();
-    d.setData("text/plain", "Bitte an Frau Müller, IBAN DE89 3704 0044 0532 0130 00");
-    editor.dispatchEvent(new ClipboardEvent("paste", { clipboardData: d, bubbles: true, cancelable: true })); });
+  await paste("Bitte an Frau Müller, IBAN DE89 3704 0044 0532 0130 00");
   await waitDialog();
   assert.strictEqual((await log()).length, 1, "Seite darf den Text vor der Entscheidung nicht sehen");
   await page.keyboard.press("Enter");
-  await page.waitForFunction(() => window.log.length === 2);
-  assert.strictEqual((await log())[1].paste, "Bitte an Frau [PERSON_1], IBAN [IBAN_1]");
+  await waitLog(2);
+  assert.strictEqual((await log())[1].text, "Bitte an Frau [PERSON_1], IBAN [IBAN_1]");
+  step("persönliche Daten im Text -> anonymisiert eingefügt");
 
-  // 3) Textdatei per Drag & Drop -> anonymisierte Kopie
-  await page.evaluate(() => { const d = new DataTransfer();
-    d.items.add(new File(["Kontakt: klaus.becker@example.de, Tel. 030 12345678"], "kunden.csv", { type: "text/csv" }));
-    zone.dispatchEvent(new DragEvent("drop", { dataTransfer: d, bubbles: true, cancelable: true })); });
+  // 3) Text ohne Personendaten, aber mit Familienthema -> Inhalts-Warnung -> Enter = „Abbrechen“
+  await paste("Hallo, kannst du mir helfen? Es geht um das Sorgerecht für unsere Tochter nach der Trennung, das Jugendamt hat geschrieben.");
   await waitDialog();
+  await shot("browser-inhalt.png");
   await page.keyboard.press("Enter");
-  await page.waitForFunction(() => window.log.length === 3);
-  assert.deepStrictEqual((await log())[2], { drop: ["kunden_anonymisiert.csv"], text: "Kontakt: [EMAIL_1], Tel. [TELEFON_1]" });
+  await page.waitForTimeout(300);
+  assert.strictEqual((await log()).length, 2, "abgebrochener Text darf nicht ankommen");
+  step("Familienthema erkannt (Inhalts-Check) -> abgebrochen");
 
-  // 4) PDF über die Büroklammer -> lokaler Python-Scanner -> Abbrechen (Tab, Tab, Enter)
-  const pdf = makePdf(userData);
-  await page.setInputFiles("#file", pdf);
+  // 4) Text-PDF per Büroklammer -> Abbrechen (Tab, Tab, Enter)
+  await page.setInputFiles("#file", path.join(userData, "Vertrag.pdf"));
   await waitDialog();
   await page.keyboard.press("Tab"); await page.keyboard.press("Tab"); await page.keyboard.press("Enter");
   await page.waitForTimeout(300);
-  assert.strictEqual((await log()).length, 3, "abgebrochene Datei darf nicht ankommen");
+  assert.strictEqual((await log()).length, 2, "abgebrochene Datei darf nicht ankommen");
+  step("PDF über „Datei hinzufügen“ -> Warnung -> abgebrochen");
 
-  // 5) gleiches PDF per Drop -> anonymisiert -> kommt als .txt an
-  const b64 = fs.readFileSync(pdf).toString("base64");
-  await page.evaluate((b64) => { const bin = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)); const d = new DataTransfer();
-    d.items.add(new File([bin], "Vertrag.pdf", { type: "application/pdf" }));
-    zone.dispatchEvent(new DragEvent("drop", { dataTransfer: d, bubbles: true, cancelable: true })); }, b64);
+  // 5) Gleiches PDF per Drag & Drop -> geschwärztes PDF kommt an, Name und IBAN nicht mehr enthalten
+  await drop("Vertrag.pdf", "application/pdf");
   await waitDialog();
-  if (process.env.SHOT_DIR) await page.screenshot({ path: path.join(process.env.SHOT_DIR, "browser-warnung.png") });
+  await shot("browser-warnung.png");
   await page.keyboard.press("Enter");
-  await page.waitForFunction(() => window.log.length === 4);
-  const last = (await log())[3];
-  assert.deepStrictEqual(last.drop, ["Vertrag_anonymisiert.txt"]);
-  assert.ok(last.text.includes("[PERSON_1]") && last.text.includes("[IBAN_1]") && !last.text.includes("Becker"), last.text);
+  await waitLog(3);
+  let e = (await log())[2];
+  assert.deepStrictEqual(e.names, ["Vertrag_anonymisiert.pdf"]);
+  let text = ocrB64(e.b64, ".pdf");
+  assert.ok(!text.includes("Becker") && !text.includes("3704"), text);
+  assert.ok(text.includes("Vertrag mit"), "Rest des Dokuments muss lesbar bleiben: " + text);
+  step("PDF per Drag & Drop -> geschwärztes PDF (Layout bleibt)");
+
+  // 6) Screenshot (Bild mit Text) per Drag & Drop -> Texterkennung -> geschwärztes Bild
+  await drop("Screenshot.png", "image/png");
+  await waitDialog();
+  await page.keyboard.press("Enter");
+  await waitLog(4);
+  e = (await log())[3];
+  assert.deepStrictEqual(e.names, ["Screenshot_anonymisiert.png"]);
+  text = ocrB64(e.b64, ".png");
+  assert.ok(!text.includes("Müller") && !text.includes("3704"), text);
+  step("Bild mit Text -> OCR -> Funde geschwärzt");
+
+  // 7) Foto über versteckten „Datei hinzufügen“-Knopf -> Gesicht erkannt -> verpixelt
+  const chooser = page.waitForEvent("filechooser");
+  await page.click("#add");
+  await (await chooser).setFiles(path.join(REPO, "tests", "fixtures", "gesicht.jpg"));
+  await waitDialog();
+  await page.keyboard.press("Enter");
+  await waitLog(5);
+  e = (await log())[4];
+  assert.strictEqual(e.how, "hidden-input");
+  assert.deepStrictEqual(e.names, ["gesicht_anonymisiert.jpg"]);
+  const faces = py(`
+import base64, io, sys; sys.path.insert(0, ".")
+from PIL import Image
+from datenwaechter.faces import detect
+print(len(detect(Image.open(io.BytesIO(base64.b64decode(${JSON.stringify(e.b64)}))))))`).trim();
+  assert.strictEqual(faces, "0", "im anonymisierten Foto darf kein Gesicht mehr erkennbar sein");
+  step("Foto über versteckten „Datei hinzufügen“-Knopf -> Gesicht verpixelt");
 
   await ctx.close();
-  console.log("✔ Erweiterung: alle 5 Ende-zu-Ende-Prüfungen bestanden");
+  console.log(`✔ Erweiterung: alle ${n} Ende-zu-Ende-Prüfungen bestanden`);
 })().catch((e) => { console.error(e); process.exit(1); });
