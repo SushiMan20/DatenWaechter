@@ -27,6 +27,7 @@ from .anonymize import Anonymizer
 from .detectors import HOCH, SEVERITY_LABEL, scan_text
 from .faces import available as faces_available
 from .icons import FARBEN, shield
+from .palette import ActionPalette
 from .stats import Stats
 from .tray import Tray
 
@@ -122,7 +123,8 @@ class App:
         self._suspend = False      # während einer KI-Aktion die Zwischenablage nicht prüfen
         self._ki_busy = False
         self._ki_popup = None
-        self._ki_menu = None
+        self._ki_palette = None
+        self._llm_info = None
         self.bridge = hotkey.bridge()
         self.hotkey = None
 
@@ -394,41 +396,25 @@ class App:
             self._ki_end()
             self._pointer_note(f"Erst Text markieren, dann {actions.load_hotkey()} drücken")
             return
-        menu = tk.Menu(self.root, tearoff=0, font=(FONT, 10))
-        chosen = {"done": False}
 
-        def pick(a):
-            chosen["done"] = True
-            self._ki_run(a, hwnd, text, old)
-        if not self.llm_ok:
-            menu.add_command(label="Kein KI-Server eingerichtet – jetzt einrichten …",
-                             command=lambda: (chosen.update(done=True), self.bridge.restore(old), self._ki_end(),
-                                              self._show(), self._llm_settings()))
-            menu.add_separator()
-        for a in actions.load():
-            hint = {"ersetzen": "", "einfuegen": "   (darunter einfügen)", "anzeigen": "   (anzeigen)"}[a.modus]
-            menu.add_command(label=a.name + hint, command=lambda a=a: pick(a),
-                             state="normal" if self.llm_ok else "disabled")
-        menu.add_separator()
-        menu.add_command(label="Aktionen bearbeiten …",
-                         command=lambda: (chosen.update(done=True), self.bridge.restore(old), self._ki_end(),
-                                          self._show(), self._actions_editor()))
-        self._ki_menu = menu
+        def cancel():
+            self.bridge.restore(old)
+            self._ki_end()
 
-        def closed_without_choice():
-            if chosen["done"]:
-                return
-            if menu.winfo_ismapped():
-                self.root.after(200, closed_without_choice)
-            else:
-                self.bridge.restore(old)
-                self._ki_end()
-        x, y = self.root.winfo_pointerxy()
-        try:
-            menu.tk_popup(x, y)
-        finally:
-            menu.grab_release()
-        self.root.after(300, closed_without_choice)
+        def edit():
+            cancel()
+            self._show()
+            self._actions_editor()
+        label, extern = self._llm_info or (None, False)
+        server = None
+        if label and self.llm_ok:
+            anon = " anonymisiert" if extern and settings.load_llm().anonymize_first else ""
+            server = label.partition(":")[2].split("@")[0] + (f" · extern{anon}" if extern else " · lokal")
+        self._ki_palette = ActionPalette(
+            self.root, actions.load(), text, dark=self.t is THEMES["dunkel"], font=FONT, server=server,
+            on_choose=lambda a: self._ki_run(a, hwnd, text, old) if self.llm_ok else (cancel(), self._show(),
+                                                                                       self._llm_settings()),
+            on_cancel=cancel, on_edit=edit)
 
     def _ki_run(self, aktion, hwnd, text: str, old) -> None:
         self._ki_busy = True
@@ -467,23 +453,36 @@ class App:
         self._status(message, FARBEN["aktiv"])
 
     def _ki_show(self, hwnd, erg, old, note: str) -> None:
-        """Ergebnis anzeigen (Modus „nur anzeigen“) – mit Kopieren und Einsetzen."""
-        t = self.t
-        win = tk.Toplevel(self.root, bg=t["card"])
-        win.title(f"Datenwächter – {erg.aktion.name}")
+        """Ergebnis anzeigen (Modus „nur anzeigen“) – im Stil der Aktionsleiste, mit Kopieren und Einsetzen."""
+        from .palette import FARBEN as PF, _windows_polish
+        c = PF["dunkel" if self.t is THEMES["dunkel"] else "hell"]
+        win = tk.Toplevel(self.root, bg=c["border"])
+        win.overrideredirect(True)
         win.attributes("-topmost", True)
-        x, y = self.root.winfo_pointerxy()
-        win.geometry(f"480x320+{max(0, x - 240)}+{max(0, y - 40)}")
-        tk.Label(win, text=f"🛡 {erg.aktion.name}", bg=FARBEN["aktiv"], fg="white", font=(FONT, 11, "bold"),
-                 anchor="w", padx=12, pady=6).pack(fill="x")
-        box = tk.Text(win, wrap="word", bg=t["card"], fg=t["text"], relief="flat", font=(FONT, 10), padx=12, pady=8)
+        body = tk.Frame(win, bg=c["bg"])
+        body.pack(fill="both", expand=True, padx=1, pady=1)
+        head = tk.Frame(body, bg=c["bg"])
+        head.pack(fill="x", padx=14, pady=(12, 6))
+        tk.Label(head, text="✦", bg=c["bg"], fg=c["accent"], font=(FONT, 12, "bold")).pack(side="left")
+        tk.Label(head, text=erg.aktion.name, bg=c["bg"], fg=c["text"], font=(FONT, 11, "bold")).pack(side="left", padx=6)
+        close = tk.Label(head, text="✕", bg=c["bg"], fg=c["muted"], font=(FONT, 11), cursor="hand2")
+        close.pack(side="right")
+        box = tk.Text(body, wrap="word", bg=c["field"], fg=c["text"], relief="flat", font=(FONT, 10), padx=12,
+                      pady=10, height=9, highlightthickness=0, insertbackground=c["text"])
         box.insert("1.0", erg.text)
-        box.pack(fill="both", expand=True)
+        box.pack(fill="both", expand=True, padx=12)
         if note:
-            tk.Label(win, text=note.strip(" –"), bg=t["card"], fg=t["muted"], font=(FONT, 8)).pack(anchor="w", padx=12)
-        btns = tk.Frame(win, bg=t["card"])
-        btns.pack(fill="x", padx=12, pady=8)
+            tk.Label(body, text=note.strip(" –"), bg=c["bg"], fg=c["muted"], font=(FONT, 8)).pack(anchor="w", padx=14,
+                                                                                               pady=(6, 0))
+        btns = tk.Frame(body, bg=c["bg"])
+        btns.pack(fill="x", padx=12, pady=12)
         state = {"kept": False}
+
+        def button(text, cmd, main=False):
+            b = tk.Label(btns, text=text, bg=c["accent"] if main else c["hover"], fg="white" if main else c["text"],
+                         font=(FONT, 9, "bold" if main else "normal"), padx=12, pady=6, cursor="hand2")
+            b.bind("<Button-1>", lambda e: cmd())
+            return b
 
         def copy():
             state["kept"] = True
@@ -504,9 +503,18 @@ class App:
                 self.bridge.restore(old)
                 self._ki_end()
         win.bind("<Destroy>", closed)
-        self._button(btns, "Kopieren", copy).pack(side="left")
-        self._button(btns, "Markierung ersetzen", insert).pack(side="left", padx=6)
-        self._button(btns, "Schließen", win.destroy).pack(side="right")
+        win.bind("<Escape>", lambda e: win.destroy())
+        close.bind("<Button-1>", lambda e: win.destroy())
+        button("Kopieren", copy, main=True).pack(side="left")
+        button("Markierung ersetzen", insert).pack(side="left", padx=6)
+        win.update_idletasks()
+        x, y = self.root.winfo_pointerxy()
+        w, h = 460, win.winfo_reqheight()
+        x = max(8, min(x - w // 2, self.root.winfo_screenwidth() - w - 8))
+        y = max(8, min(y + 12, self.root.winfo_screenheight() - h - 8))
+        win.geometry(f"{w}x{h}+{x}+{y}")
+        _windows_polish(win)
+        win.focus_force()
         self._ki_result_window = win
 
     def _actions_editor(self) -> None:
@@ -617,7 +625,7 @@ class App:
         ttk.Label(bottom, text="Tastenkürzel (Windows):").pack(side="left")
         combo = tk.StringVar(value=actions.load_hotkey())
         ttk.Entry(bottom, textvariable=combo, width=22).pack(side="left", padx=6)
-        status = ttk.Label(frm, text="Im Browser: Text markieren → Rechtsklick → „Datenwächter KI“.", foreground="#777")
+        status = ttk.Label(frm, text="Im Browser: Text markieren → Rechtsklick → „Mit KI bearbeiten …“.", foreground="#777")
         status.grid(row=4, column=0, columnspan=2, sticky="w", pady=(6, 0))
 
         def speichern():
@@ -773,6 +781,7 @@ class App:
                 continue
             if item[0] == "llm":
                 self.llm_ok = bool(item[1])
+                self._llm_info = item[1]
                 if item[1]:
                     label, extern = item[1]
                     self.llm_text.set(f"Inhalts-Check mit KI ({label.partition(':')[2]})" + (" – extern" if extern else ""))

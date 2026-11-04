@@ -62,10 +62,16 @@ def handle(msg: dict) -> dict:
     if action == "check_text":
         return {"ok": True, "content": content_check.check(msg.get("text", "")).to_dict()}
     if action == "list_actions":
-        return {"ok": True, "llm": content_check.llm_status(),
+        b = llm.backend()
+        return {"ok": True, "llm": b.label if b else None, "extern": bool(b and b.extern),
+                "anonym": bool(b and b.anonymize_first),
                 "actions": [{"id": a.id, "name": a.name, "mode": a.modus} for a in actions.load()]}
     if action == "run_action":
         try:
+            if msg.get("custom"):   # eigene Anweisung aus der Aktionsleiste
+                mode = msg.get("mode") if msg.get("mode") in actions.MODI else "ersetzen"
+                aktion = actions.Aktion("Eigene Anweisung", str(msg["custom"])[:2000], mode)
+                return actions.run(aktion, msg.get("text", "")).to_dict()
             return actions.run(msg.get("id", ""), msg.get("text", "")).to_dict()
         except llm.LlmError as e:
             return {"ok": False, "error": str(e)}

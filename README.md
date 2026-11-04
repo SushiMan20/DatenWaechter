@@ -90,11 +90,16 @@ Beides lässt sich umstellen. Im Warndialog steht dann z. B. *„Bewertet von KI
 Markierten Text mit deinem KI-Server bearbeiten: umformulieren, kürzen, freundlicher oder professioneller
 formulieren, Rechtschreibung korrigieren, übersetzen, zusammenfassen, eine Antwort entwerfen oder **eigene Aktionen**.
 
-- **Im Browser, auf jeder Webseite:** Text markieren, **Rechtsklick** und dann **„Datenwächter KI“** wählen. Das Ergebnis ersetzt die Markierung im Eingabefeld oder wird darunter eingefügt. Auf normalem Seitentext erscheint es in einem Fenster zum Kopieren. Ist nichts markiert, wird das ganze Eingabefeld genommen. Strg+Z macht die Änderung rückgängig.
-- **In jedem Windows-Programm** (Outlook, Word, Teams, Desktop-Apps): Text markieren und **Strg+Alt+Leertaste** drücken. Das Menü erscheint am Mauszeiger, das Ergebnis wird an Stelle der Markierung eingesetzt. Ein eigener Eintrag im Rechtsklick-Menü fremder Programme ist unter Windows technisch nicht möglich. Das Tastenkürzel lässt sich ändern.
+- **Im Browser, auf jeder Webseite:** Text markieren, **Rechtsklick** und dann **„Mit KI bearbeiten …“** wählen. Die Aktionsleiste öffnet sich direkt an der Markierung. Das Ergebnis ersetzt die Markierung im Eingabefeld oder wird darunter eingefügt. Auf normalem Seitentext erscheint es in einer Karte zum Kopieren. Ist nichts markiert, wird das ganze Eingabefeld genommen. Strg+Z macht die Änderung rückgängig.
+- **In jedem Windows-Programm** (Outlook, Word, Teams, Desktop-Apps): Text markieren und **Strg+Alt+Leertaste** drücken. Dieselbe Aktionsleiste erscheint am Mauszeiger, das Ergebnis wird an Stelle der Markierung eingesetzt. Ein eigener Eintrag im Rechtsklick-Menü fremder Programme ist unter Windows technisch nicht möglich. Das Tastenkürzel lässt sich ändern.
 - **Datenschutz:** Ist dein KI-Server extern, ersetzt der Datenwächter Namen, IBAN usw. vor dem Senden durch Platzhalter und setzt die echten Werte in der Antwort wieder ein. Der Anbieter sieht die echten Daten nie.
 
-| Browser: ersetzt / angezeigt | Windows: Menü am Mauszeiger |
+**Die Aktionsleiste:** Sie zeigt eine Vorschau des markierten Texts, ein Suchfeld und die Aktionen mit Symbol. Ein Hinweis
+erscheint, wenn eine Aktion etwas anderes tut als ersetzen („zeigt an“, „fügt ein“). Bedienen lässt sie sich mit Maus
+oder ↑ ↓ Enter Esc. **Tippen filtert.** Passt nichts, führst du das Getippte direkt als **eigene Anweisung** aus,
+z. B. „in Reimform“ oder „als Liste für Kollegen“. Sie ist hell oder dunkel und hat unter Windows 11 runde Ecken und einen Schatten.
+
+| Browser (hell / dunkel, eigene Anweisung) | Windows (hell / dunkel, eigene Anweisung) |
 |---|---|
 | ![KI-Aktionen im Browser](docs/ki-aktionen-browser.png) | ![KI-Aktionen in Windows](docs/ki-aktionen-windows.png) |
 

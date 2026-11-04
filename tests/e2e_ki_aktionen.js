@@ -53,7 +53,7 @@ function startAi() {
 
   const userData = path.join(tmp, "profil");
   const ctx = await chromium.launchPersistentContext(userData, {
-    headless: true, channel: "chromium", viewport: { width: 640, height: 420 },
+    headless: true, channel: "chromium", viewport: { width: 760, height: 560 },
     args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`],
   });
   let [sw] = ctx.serviceWorkers();
@@ -78,10 +78,50 @@ function startAi() {
   const tabId = await sw.evaluate(async () => (await chrome.tabs.query({ url: "https://example.org/*" }))[0].id);
   const run = (id) => sw.evaluate(([id, tabId]) => runAction(id, tabId, 0), [id, tabId]);
 
-  // 1) Menü wird aus den Aktionen des lokalen Scanners gebaut
+  // 1) Aktionen kommen vom lokalen Scanner
   const names = await sw.evaluate(() => buildMenus().then(() => menuItems.map((a) => a.name)));
   assert.ok(names.includes("Umformulieren") && names.includes("Zusammenfassen"), names.join(", "));
-  step(`Rechtsklick-Menü mit ${names.length} Aktionen (${names.slice(0, 3).join(", ")} …)`);
+  assert.match(await sw.evaluate(() => menuInfo.server), /schreib-modell · lokal/);
+  step(`Rechtsklick „Mit KI bearbeiten …“ kennt ${names.length} Aktionen (${names.slice(0, 3).join(", ")} …)`);
+
+  // 1b) Aktionsleiste: öffnet an der Markierung, Tippen filtert, Enter führt aus
+  const palette = () => sw.evaluate((tabId) => openPalette(tabId, 0), tabId);
+  const paletteOpen = () => page.evaluate(() => !!document.querySelector("datenwaechter-ki"));
+  await page.evaluate(() => { ta.value = "hallo herr becker, anbei die unterlagen"; ta.focus(); ta.setSelectionRange(0, ta.value.length); });
+  assert.strictEqual(await palette(), true);
+  assert.ok(await paletteOpen());
+  await page.waitForTimeout(250);   // Einblend-Animation
+  if (shotDir) await page.screenshot({ path: path.join(shotDir, "ki-palette-browser-hell.png") });
+  await page.keyboard.type("kürz");
+  if (shotDir) await page.screenshot({ path: path.join(shotDir, "ki-palette-browser-filter.png") });
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(() => document.getElementById("ta").value.startsWith("Neu:"), null, { timeout: 20_000 });
+  assert.strictEqual(await page.inputValue("#ta"), "Neu: hallo herr becker, anbei die unterlagen");
+  assert.match(requests.at(-1).messages.at(-1).content, /Kürze den Text/);
+  step("Aktionsleiste: „kürz“ getippt + Enter → Kürzen ausgeführt, Text ersetzt");
+
+  // 1c) Eigene Anweisung direkt in der Leiste
+  await page.evaluate(() => { ta.value = "termin morgen 10 uhr"; ta.focus(); ta.setSelectionRange(0, ta.value.length); });
+  await palette();
+  await page.keyboard.type("in Reimform");
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.waitForTimeout(250);
+  if (shotDir) await page.screenshot({ path: path.join(shotDir, "ki-palette-browser-dunkel.png") });
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(() => document.getElementById("ta").value === "Neu: termin morgen 10 uhr", null, { timeout: 20_000 });
+  assert.match(requests.at(-1).messages.at(-1).content, /Anweisung: in Reimform/);
+  step("eigene Anweisung „in Reimform“ aus der Leiste ausgeführt");
+
+  // 1d) Esc schließt ohne Anfrage
+  const count = requests.length;
+  await page.evaluate(() => { ta.focus(); ta.setSelectionRange(0, 5); });
+  await palette();
+  await page.keyboard.press("Escape");
+  assert.ok(!(await paletteOpen()));
+  assert.strictEqual(requests.length, count);
+  await page.evaluate(() => { ta.value = "Hallo Herr Becker, anbei die Unterlagen. Grüße"; });
+  step("Esc schließt die Leiste, nichts gesendet");
 
   // 2) Textfeld: Teil markieren -> Umformulieren -> nur die Markierung wird ersetzt
   await page.evaluate(() => { ta.focus(); ta.setSelectionRange(0, 17); });
