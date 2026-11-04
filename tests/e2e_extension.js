@@ -2,7 +2,7 @@
 // Aufruf:  node tests/e2e_extension.js
 // Simuliert außerdem einen eigenen OpenAI-kompatiblen KI-Server (URL + Token) für den Inhalts-Check.
 // Braucht: Playwright, Python mit datenwaechter + pypdfium2 + pytesseract (Tesseract mit „deu“) + OpenCV 4 + reportlab.
-// Eine Testseite wird unter https://claude.ai/ ausgeliefert, damit die Erweiterung dort aktiv wird.
+// Eine Testseite wird unter https://claude.ai/ (oder SITE=chatgpt.com …) ausgeliefert, damit die Erweiterung dort aktiv wird.
 const { chromium } = require("playwright");
 const assert = require("node:assert");
 const fs = require("node:fs");
@@ -14,6 +14,7 @@ const http = require("node:http");
 const REPO = path.resolve(__dirname, "..");
 const EXT = path.join(REPO, "extension");
 const PY = process.env.PYTHON || "python3";
+const SITE = process.env.SITE || "claude.ai";   // z. B. SITE=chatgpt.com
 
 const PAGE = `<!doctype html><meta charset=utf-8><title>Test</title>
 <div id=editor contenteditable style="height:60px;border:1px solid">.</div>
@@ -101,9 +102,9 @@ function startAiServer() {
     allowed_origins: [`chrome-extension://${extId}/`],
   }));
 
-  await ctx.route("https://claude.ai/**", (r) => r.fulfill({ contentType: "text/html", body: PAGE }));
+  await ctx.route(`https://${SITE}/**`, (r) => r.fulfill({ contentType: "text/html", body: PAGE }));
   const page = await ctx.newPage();
-  await page.goto("https://claude.ai/new");
+  await page.goto(`https://${SITE}/`);
   const log = () => page.evaluate(() => window.log);
   const waitLog = (n) => page.waitForFunction((n) => window.log.length === n, n, { timeout: 60_000 });
   const waitDialog = () => page.waitForFunction(() => !!document.querySelector("datenwaechter-ui"), null, { timeout: 60_000 });
@@ -259,5 +260,5 @@ print(len(detect(Image.open(io.BytesIO(base64.b64decode(${JSON.stringify(e.b64)}
 
   await ctx.close();
   ai.close();
-  console.log(`✔ Erweiterung: alle ${n} Ende-zu-Ende-Prüfungen bestanden`);
+  console.log(`✔ Erweiterung auf ${SITE}: alle ${n} Ende-zu-Ende-Prüfungen bestanden`);
 })().catch((e) => { console.error(e); process.exit(1); });
