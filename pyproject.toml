@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "datenwaechter"
+version = "0.1.0"
+description = "Lokaler Scanner, der persönliche und geheime Daten vor dem Hochladen in KI-Chats erkennt und anonymisiert."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pypdf>=4.0",
+    "python-docx>=1.1",
+]
+
+[project.optional-dependencies]
+# Lokales KI-Modell für Namen, Adressen, Organisationen (läuft auf der CPU, ~600 MB).
+ki = ["gliner>=0.2.13"]
+# Windows: Dateien in der Zwischenablage (Strg+C im Explorer) erkennen und Drag & Drop ins Fenster.
+windows = ["pywin32>=306", "tkinterdnd2>=0.4"]
+dev = ["pytest>=8"]
+
+[project.scripts]
+datenwaechter = "datenwaechter.cli:main"
+
+[project.gui-scripts]
+datenwaechter-gui = "datenwaechter.gui:main"
+
+[tool.setuptools]
+packages = ["datenwaechter"]

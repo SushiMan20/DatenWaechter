@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Datenwächter",
+  "version": "0.1.0",
+  "description": "Prüft Texte und Dateien auf persönliche oder geheime Daten, bevor sie in einen KI-Chat gelangen – komplett lokal.",
+  "permissions": ["nativeMessaging", "storage"],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://claude.ai/*",
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*",
+        "https://gemini.google.com/*",
+        "https://copilot.microsoft.com/*",
+        "https://chat.mistral.ai/*",
+        "https://www.perplexity.ai/*"
+      ],
+      "js": ["detectors.js", "content.js"],
+      "run_at": "document_start",
+      "all_frames": false
+    }
+  ]
+}
