@@ -29,7 +29,7 @@ samt Platzhalter überdeckt, Gesichter werden verpixelt. Der Originaltext ist da
 | **Eingescanntes PDF** | Texterkennung (OCR) | geschwärztes PDF |
 | **Bilder / Screenshots** | Texterkennung (OCR) | geschwärztes Bild |
 | **Fotos von Personen** | Gesichtserkennung (OpenCV) | Gesichter verpixelt |
-| **Motiv eines Fotos** („Ausweis“, „Kind am Strand“) | lokales Bildmodell über Ollama (optional) | Warnung mit Beschreibung |
+| **Motiv eines Fotos** („Ausweis“, „Kind am Strand“) | KI-Server mit Bildverständnis (optional) | Warnung mit Beschreibung |
 
 **Sensible Daten:** IBAN, Kreditkarte, Steuer-ID (jeweils mit Prüfsumme), Sozialversicherungsnummer, API-Schlüssel
 (Anthropic, OpenAI, AWS, GitHub, Google, Slack, Stripe), private Schlüssel, Tokens, Passwörter, Datenbank-Zugänge,
@@ -37,8 +37,32 @@ Namen (nach Anrede, mit KI-Modell auch ohne), E-Mail, Telefon, Adressen, Geburts
 
 **Inhalts-Check:** Familie, Gesundheit, Finanzen, Recht, Personal/Arbeit, Ausweise, Firmeninterna und besonders
 geschützte Daten nach Art. 9 DSGVO (Religion, Politik, Gewerkschaft, Sexualität). Ohne weitere Installation arbeitet
-der Check mit Stichwörtern ([`kategorien.json`](datenwaechter/kategorien.json), leicht erweiterbar). Mit
-[Ollama](https://ollama.com) liest ein lokales Sprachmodell den Inhalt tatsächlich und bewertet auch Fotos.
+der Check mit Stichwörtern ([`kategorien.json`](datenwaechter/kategorien.json), leicht erweiterbar). Mit einem
+**KI-Server** (siehe unten) liest ein Sprachmodell den Inhalt tatsächlich und bewertet auch Fotos.
+
+## KI-Server für den Inhalts-Check: Ollama oder eigener OpenAI-kompatibler Server
+
+Du kannst jeden Server nutzen, der die OpenAI-Schnittstelle (`/v1/chat/completions`) spricht, mit eigener URL und eigenem Token.
+Beispiele: LM Studio, vLLM, LocalAI, llama.cpp-Server, Ollama im OpenAI-Modus, ein Firmen-Gateway, OpenRouter, Mistral oder OpenAI.
+
+| Im Fenster | Kommandozeile |
+|---|---|
+| ![KI-Server einstellen](docs/gui-ki-server.png) | `datenwaechter ki-server --url http://localhost:1234/v1 --modell qwen2.5-7b-instruct --testen`<br><br>Mit Token (`-` liest es von der Eingabe, damit es nicht im Verlauf landet):<br>`datenwaechter ki-server --url https://gateway.firma.de/v1 --token - --testen` |
+
+- **„Modelle laden“** holt die Liste vom Server, **„Verbindung testen“** schickt eine kleine Testanfrage.
+- **Ein Ort für alles:** Fenster, Kommandozeile und Browser-Erweiterung nutzen dieselbe Einstellung (`%APPDATA%\Datenwaechter\einstellungen.json`).
+- **Token:** Mit `keyring` (im Paket `[windows]` enthalten) liegt es in der Windows-Anmeldeinformationsverwaltung, sonst in der Einstellungsdatei.
+- **Firmen-Rollout:** Die Umgebungsvariablen `DATENWAECHTER_LLM_URL`, `DATENWAECHTER_LLM_TOKEN` und `DATENWAECHTER_LLM_MODELL` haben Vorrang.
+- **Server ohne JSON-Modus oder ohne Bildverständnis** funktionieren auch, der Datenwächter fragt dann automatisch ohne diese Funktionen nach.
+
+**Datenschutz bei externen Servern:** Liegt der Server außerhalb deines Rechners oder Netzes (z. B. `api.openai.com`),
+zeigt der Datenwächter eine Warnung. Er stellt außerdem automatisch Folgendes ein:
+- Der Text wird **vor dem Senden anonymisiert**: Aus Namen, IBAN usw. werden Platzhalter. Für die Frage „Was ist das für ein Inhalt?“ braucht die KI keine echten Daten.
+- **Bilder werden nicht mitgeschickt.**
+
+Beides lässt sich umstellen. Im Warndialog steht dann z. B. *„Bewertet von KI-Server (gpt-4o-mini@api.openai.com) – Inhalt wurde anonymisiert an api.openai.com gesendet“*.
+
+![Bewertung durch eigenen KI-Server](docs/browser-ki-server.png)
 
 ## Die zwei Bausteine
 
@@ -85,7 +109,8 @@ Das Fenster setzt deshalb an der **Zwischenablage** und an einer eigenen **Ablag
 | Zweck | Installation |
 |---|---|
 | Texterkennung ohne Windows-OCR | [Tesseract](https://github.com/UB-Mannheim/tesseract/wiki) mit Sprachpaket „Deutsch“, dann `pip install ".[tesseract]"` |
-| Inhalts-Check und Fotos mit echter KI | [Ollama](https://ollama.com) installieren, `ollama pull gemma3:4b` (~3 GB, versteht Text **und** Bilder). Wird automatisch erkannt. Anderes Modell: Umgebungsvariable `DATENWAECHTER_OLLAMA_MODELL` |
+| Inhalts-Check und Fotos mit lokaler KI ohne Einrichtung | [Ollama](https://ollama.com) installieren, `ollama pull gemma3:4b` (~3 GB, versteht Text **und** Bilder). Wird automatisch erkannt. Anderes Modell: Umgebungsvariable `DATENWAECHTER_OLLAMA_MODELL` |
+| Eigener KI-Server mit URL + Token | siehe Abschnitt „KI-Server“ oben |
 | Namen ohne Anrede | `pip install ".[ki]"` (GLiNER, ~600 MB, CPU) |
 
 ## Kommandozeile
@@ -97,7 +122,7 @@ datenwaechter anonymisieren Scan.pdf --zuordnung     # schreibt Scan_anonymisier
 
 ## Grenzen
 
-- Ohne Ollama bewertet der Datenwächter das *Motiv* eines Fotos nicht. Er findet dann nur Text im Bild und Gesichter.
+- Ohne KI-Server mit Bildverständnis bewertet der Datenwächter das *Motiv* eines Fotos nicht. Er findet dann nur Text im Bild und Gesichter.
 - Die Gesichtserkennung (OpenCV) findet vor allem frontale Gesichter. Bei Profilen, kleinen oder verdeckten Gesichtern kann sie etwas übersehen.
 - Handschrift erkennt die Texterkennung kaum.
 - Geschwärzte PDFs bestehen aus Seitenbildern, Text lässt sich darin nicht mehr markieren. Claude und ChatGPT lesen sie trotzdem.
@@ -110,9 +135,9 @@ datenwaechter anonymisieren Scan.pdf --zuordnung     # schreibt Scan_anonymisier
 
 ```
 pip install -e ".[dev]"
-pytest                               # Regeln, Inhalts-Check (inkl. simuliertem Ollama), OCR, Schwärzen, Gesichter
+pytest                               # Regeln, Inhalts-Check (simuliertes Ollama + OpenAI-Server), OCR, Schwärzen, Gesichter
 node --test tests/detectors.test.js  # Browser-Regeln (gleiche Testfälle wie Python)
-node tests/e2e_extension.js          # Erweiterung in echtem Chromium mit echtem Python-Scanner
+node tests/e2e_extension.js          # Erweiterung in echtem Chromium mit echtem Python-Scanner und simuliertem KI-Server
 ```
 
 Die Erkennungsregeln gibt es zweimal, in `datenwaechter/detectors.py` und `extension/detectors.js`. Die Tests

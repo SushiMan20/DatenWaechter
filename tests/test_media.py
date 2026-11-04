@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from datenwaechter import Anonymizer, content_check, faces, ocr
+from datenwaechter import Anonymizer, content_check, faces, llm, ocr
 from datenwaechter.analysis import analyze, anonymize
 from datenwaechter.files import load
 
@@ -86,15 +86,14 @@ def fake_ollama(monkeypatch):
 
     srv = HTTPServer(("127.0.0.1", 0), Handler)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
-    monkeypatch.setattr(content_check, "OLLAMA_URL", f"http://127.0.0.1:{srv.server_port}")
-    monkeypatch.setattr(content_check, "_status_cache", None)
+    monkeypatch.setattr(llm, "OLLAMA_URL", f"http://127.0.0.1:{srv.server_port}")
     yield calls
     srv.shutdown()
 
 
 def test_sprachmodell_ueber_ollama(fake_ollama):
     from PIL import Image
-    assert content_check.ollama_available()
+    assert content_check.llm_status() == "ollama:gemma3:4b"
     v = content_check.check("", image=Image.new("RGB", (64, 64), "white"), name="IMG_2041.jpg")
     assert v.backend == "ollama:gemma3:4b"
     assert v.warning == "Du lädst gerade ein Foto deines Kindes hoch."
@@ -105,8 +104,7 @@ def test_sprachmodell_ueber_ollama(fake_ollama):
 
 
 def test_ohne_ollama_nur_stichworte(monkeypatch):
-    monkeypatch.setattr(content_check, "OLLAMA_URL", "http://127.0.0.1:9")
-    monkeypatch.setattr(content_check, "_status_cache", None)
+    monkeypatch.setattr(llm, "OLLAMA_URL", "http://127.0.0.1:9")
     assert content_check.check("Sorgerecht für die Kinder").backend == "stichworte"
 
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "datenwaechter"
-version = "0.2.0"
+version = "0.3.0"
 description = "Lokaler Scanner, der persönliche und geheime Daten vor dem Hochladen in KI-Chats erkennt und anonymisiert."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -19,6 +19,7 @@ dependencies = [
 # Texterkennung in Bildern und Scans: Windows-eigene OCR (nichts weiter zu installieren) …
 windows = [
     "pywin32>=306; sys_platform == 'win32'",
+    "keyring>=24",  # Token des KI-Servers in der Windows-Anmeldeinformationsverwaltung
     "tkinterdnd2>=0.4",
     "winrt-runtime; sys_platform == 'win32'",
     "winrt-Windows.Foundation; sys_platform == 'win32'",

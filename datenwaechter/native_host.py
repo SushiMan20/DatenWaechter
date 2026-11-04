@@ -56,7 +56,7 @@ def handle(msg: dict) -> dict:
     action = msg.get("action")
     if action == "ping":
         return {"ok": True, "version": __version__, "ocr": ocr.backend(), "faces": faces.available(),
-                "llm": content_check.OLLAMA_MODEL if content_check.ollama_available() else None}
+                "llm": content_check.llm_status()}
     if action == "check_text":
         return {"ok": True, "content": content_check.check(msg.get("text", "")).to_dict()}
     if action != "scan_file":

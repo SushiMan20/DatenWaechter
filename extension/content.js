@@ -322,7 +322,7 @@
       for (const c of content) {
         const box = el("div", { className: "content" }, el("b", { textContent: "🧠 " + c.warning + " Willst du das wirklich?" }));
         if (c.description) box.append(el("div", { textContent: c.description }));
-        box.append(el("small", { textContent: c.backend?.startsWith("ollama") ? `Bewertet von lokaler KI (${c.backend.slice(7)})` : "Erkannt an Stichwörtern" }));
+        box.append(el("small", { textContent: c.source || "Erkannt an Stichwörtern" }));
         card.append(box);
       }
       if (rows.length) {

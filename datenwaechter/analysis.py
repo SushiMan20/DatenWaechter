@@ -63,8 +63,8 @@ def analyze(path: str | Path, use_ki: bool = False, use_llm: bool | str = "auto"
         image = doc.preview()
     verdict = content_check.check(doc.text, image=image, name=doc.path.name, use_llm=use_llm)
     info = []
-    if doc.kind == "image" and not verdict.backend.startswith("ollama"):
-        info.append("Motiv des Bildes nicht bewertet – dafür lokales Bildmodell über Ollama einrichten")
+    if doc.kind == "image" and not verdict.by_ai:
+        info.append("Motiv des Bildes nicht bewertet – dafür einen KI-Server mit Bildverständnis einrichten")
     return Report(doc, findings, found_faces, verdict, info)
 
 

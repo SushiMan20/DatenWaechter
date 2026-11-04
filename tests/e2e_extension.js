@@ -1,5 +1,6 @@
 // Ende-zu-Ende-Test der Browser-Erweiterung mit echtem Chromium und echtem Python-Scanner.
 // Aufruf:  node tests/e2e_extension.js
+// Simuliert außerdem einen eigenen OpenAI-kompatiblen KI-Server (URL + Token) für den Inhalts-Check.
 // Braucht: Playwright, Python mit datenwaechter + pypdfium2 + pytesseract (Tesseract mit „deu“) + OpenCV 4 + reportlab.
 // Eine Testseite wird unter https://claude.ai/ ausgeliefert, damit die Erweiterung dort aktiv wird.
 const { chromium } = require("playwright");
@@ -8,6 +9,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { execFileSync } = require("node:child_process");
+const http = require("node:http");
 
 const REPO = path.resolve(__dirname, "..");
 const EXT = path.join(REPO, "extension");
@@ -52,7 +54,28 @@ d.text((30, 130), "Betreff: Unterhalt für unsere Tochter", font=f, fill="black"
 img.save(${JSON.stringify(path.join(dir, "Screenshot.png"))})`);
 }
 
+// Simulierter OpenAI-kompatibler Server: prüft das Token, meldet „private Details“
+const TOKEN = "e2e-token-42";
+const aiRequests = [];
+function startAiServer() {
+  const srv = http.createServer((req, res) => {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      const send = (code, obj) => { res.writeHead(code, { "Content-Type": "application/json" }); res.end(JSON.stringify(obj)); };
+      if (req.headers.authorization !== `Bearer ${TOKEN}`) return send(401, { error: "invalid token" });
+      if (req.url === "/v1/models") return send(200, { data: [{ id: "test-modell" }] });
+      aiRequests.push(JSON.parse(body));
+      const answer = { kategorien: ["intim"], beschreibung: "Nachricht über ein anvertrautes Geheimnis der Nachbarin.",
+        warnung: "Du teilst gerade private Details über deine Nachbarin.", stufe: 2 };
+      send(200, { choices: [{ message: { role: "assistant", content: JSON.stringify(answer) } }] });
+    });
+  });
+  return new Promise((r) => srv.listen(0, "127.0.0.1", () => r(srv)));
+}
+
 (async () => {
+  const ai = await startAiServer();
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), "dw-e2e-"));
   makeFixtures(userData);
   const ctx = await chromium.launchPersistentContext(userData, {
@@ -67,7 +90,12 @@ img.save(${JSON.stringify(path.join(dir, "Screenshot.png"))})`);
   const hostDir = path.join(userData, "NativeMessagingHosts");
   fs.mkdirSync(hostDir, { recursive: true });
   const sh = path.join(userData, "host.sh");
-  fs.writeFileSync(sh, `#!/bin/sh\ncd ${JSON.stringify(REPO)}\nexec ${PY} -m datenwaechter native-host\n`, { mode: 0o755 });
+  fs.writeFileSync(sh, [
+    "#!/bin/sh", `cd ${JSON.stringify(REPO)}`,
+    `export DATENWAECHTER_EINSTELLUNGEN=${JSON.stringify(path.join(userData, "einstellungen.json"))}`,
+    `export DATENWAECHTER_LLM_URL=http://127.0.0.1:${ai.address().port}/v1`,
+    `export DATENWAECHTER_LLM_TOKEN=${TOKEN}`,
+    `exec ${PY} -m datenwaechter native-host`, ""].join("\n"), { mode: 0o755 });
   fs.writeFileSync(path.join(hostDir, "de.datenwaechter.host.json"), JSON.stringify({
     name: "de.datenwaechter.host", description: "test", path: sh, type: "stdio",
     allowed_origins: [`chrome-extension://${extId}/`],
@@ -122,6 +150,19 @@ print(load(${JSON.stringify(f)}).text)`);
   assert.strictEqual((await log()).length, 2, "abgebrochener Text darf nicht ankommen");
   step("Familienthema erkannt (Inhalts-Check) -> abgebrochen");
 
+  // 3b) Text ohne Stichwörter – nur der eigene KI-Server (URL + Token) erkennt, dass er privat ist
+  await paste("Kannst du mir helfen, eine Nachricht zu formulieren? Meine Nachbarin hat mir gestern im Treppenhaus anvertraut, " +
+    "dass sie seit Monaten heimlich Geld von ihrem Bruder leiht und niemand davon wissen darf. Ich will ihr schreiben, dass ich " +
+    "das für mich behalte, aber mir Sorgen mache. Bitte freundlich und kurz, ohne zu belehren, vielleicht mit einem Vorschlag " +
+    "für ein Treffen am Wochenende.");
+  await waitDialog();
+  await shot("browser-ki-server.png");
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(300);
+  assert.strictEqual((await log()).length, 2, "abgebrochener Text darf nicht ankommen");
+  assert.ok(aiRequests.length >= 1 && aiRequests[0].model === "test-modell", "KI-Server muss mit Token gefragt worden sein");
+  step("eigener KI-Server (URL + Token) erkennt private Details -> abgebrochen");
+
   // 4) Text-PDF per Büroklammer -> Abbrechen (Tab, Tab, Enter)
   await page.setInputFiles("#file", path.join(userData, "Vertrag.pdf"));
   await waitDialog();
@@ -173,5 +214,6 @@ print(len(detect(Image.open(io.BytesIO(base64.b64decode(${JSON.stringify(e.b64)}
   step("Foto über versteckten „Datei hinzufügen“-Knopf -> Gesicht verpixelt");
 
   await ctx.close();
+  ai.close();
   console.log(`✔ Erweiterung: alle ${n} Ende-zu-Ende-Prüfungen bestanden`);
 })().catch((e) => { console.error(e); process.exit(1); });

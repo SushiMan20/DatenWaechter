@@ -190,7 +190,7 @@
     const warning = categories.length
       ? `Du lädst gerade ${join(categories)} hoch (Hinweise: ${hints.slice(0, 5).map((h) => `„${h}“`).join(", ")}).`
       : null;
-    return { categories, hints, severity, warning, description: null, backend: "stichworte" };
+    return { categories, hints, severity, warning, description: null, backend: "stichworte", source: "Erkannt an Stichwörtern" };
   }
 
   const api = { scan, contentCheck, Anonymizer, ibanValid, luhnValid, steuerIdValid, HOCH, MITTEL, NIEDRIG };

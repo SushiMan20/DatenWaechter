@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Datenwächter",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Prüft Texte und Dateien auf persönliche oder geheime Daten, bevor sie in einen KI-Chat gelangen – komplett lokal.",
   "permissions": [
     "nativeMessaging",
