@@ -172,3 +172,9 @@ def test_anonymizer_uebernimmt_zuordnung():
     a = Anonymizer()
     a.load({"[PERSON_2]": "Müller", "kaputt": "x"})
     assert a.anonymize("Frau Müller und Frau Schmidt") == "Frau [PERSON_2] und Frau [PERSON_3]"
+
+
+def test_hinweise_ohne_doppelte_woerter():
+    v = content_check.keyword_check("Familiengericht Musterstadt – Sorgerecht")
+    assert len(v.hints) == len(set(v.hints)), v.hints
+    assert content_check.keyword_check("Die Familie Familie Familie").warning is None, "ein Wort mehrfach zählt nicht als zwei"

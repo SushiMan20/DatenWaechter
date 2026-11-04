@@ -53,3 +53,9 @@ test("übernimmt Platzhalter-Zuordnung", () => {
   a.importMapping({ "[PERSON_2]": "Müller", kaputt: "x" });
   assert.strictEqual(a.anonymize("Frau Müller und Frau Schmidt"), "Frau [PERSON_2] und Frau [PERSON_3]");
 });
+
+test("Hinweise ohne doppelte Wörter", () => {
+  const v = DW.contentCheck("Familiengericht Musterstadt – Sorgerecht");
+  assert.strictEqual(v.hints.length, new Set(v.hints).size, v.hints.join(","));
+  assert.strictEqual(DW.contentCheck("Die Familie Familie Familie").warning, null);
+});

@@ -180,9 +180,10 @@
         const m = t.re.exec(text);
         if (m) { hits.push(m[0]); strongHit = strongHit || t.strong; }
       }
-      if (strongHit || hits.length >= 2) {
+      const unique = [...new Set(hits)];   // gleiches Wort nur einmal (z. B. „Familie*“ und „Familiengericht*“)
+      if (strongHit || new Set(unique.map((h) => h.toLowerCase())).size >= 2) {
         categories.push(cat.name);
-        hints.push(...hits.slice(0, 3));
+        hints.push(...unique.slice(0, 3).filter((h) => !hints.includes(h)));
         severity = Math.max(severity, cat.stufe);
       }
     }

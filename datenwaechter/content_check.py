@@ -91,9 +91,10 @@ def keyword_check(text: str) -> Verdict:
             if m:
                 hit_words.append(m.group(0))
                 strong_hit |= strong
-        if strong_hit or len(hit_words) >= 2:
+        hit_words = list(dict.fromkeys(hit_words))   # gleiches Wort nur einmal (z. B. „Familie*“ und „Familiengericht*“)
+        if strong_hit or len(set(w.lower() for w in hit_words)) >= 2:
             cats.append(name)
-            hints.extend(hit_words[:3])
+            hints.extend(w for w in hit_words[:3] if w not in hints)
             sev = max(sev, stufe)
     v = Verdict(categories=cats, hints=hints, severity=sev)
     if cats:
