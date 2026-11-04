@@ -108,6 +108,13 @@ function startAiServer() {
   const waitLog = (n) => page.waitForFunction((n) => window.log.length === n, n, { timeout: 60_000 });
   const waitDialog = () => page.waitForFunction(() => !!document.querySelector("datenwaechter-ui"), null, { timeout: 60_000 });
   const shotDir = process.env.SHOT_DIR;
+  const waitBadge = async (text) => {   // Symbol folgt dem gespeicherten Zustand ein paar Millisekunden später
+    for (let i = 0; i < 50; i++) {
+      if ((await sw.evaluate(() => chrome.action.getBadgeText({}))) === text) return;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    assert.fail(`Symbol-Hinweis sollte „${text}“ sein`);
+  };
   const shot = async (name) => shotDir && page.screenshot({ path: path.join(shotDir, name) });
   const paste = (text) => page.evaluate((text) => { editor.focus(); const d = new DataTransfer(); d.setData("text/plain", text);
     editor.dispatchEvent(new ClipboardEvent("paste", { clipboardData: d, bubbles: true, cancelable: true })); }, text);
@@ -212,6 +219,43 @@ from datenwaechter.faces import detect
 print(len(detect(Image.open(io.BytesIO(base64.b64decode(${JSON.stringify(e.b64)}))))))`).trim();
   assert.strictEqual(faces, "0", "im anonymisierten Foto darf kein Gesicht mehr erkennbar sein");
   step("Foto über versteckten „Datei hinzufügen“-Knopf -> Gesicht verpixelt");
+
+  // 9) Symbol in der Browserleiste: Fenster zeigt Zähler + Scanner, Schalter pausiert den Schutz
+  const popup = await ctx.newPage();
+  await popup.setViewportSize({ width: 360, height: 470 });
+  await popup.goto(`chrome-extension://${extId}/popup.html`);
+  await popup.waitForFunction(() => document.getElementById("hostText").textContent.startsWith("Verbunden"), null, { timeout: 30_000 });
+  const num = (id) => popup.$eval("#" + id, (e) => Number(e.textContent));
+  assert.ok((await num("geprueft")) >= 6 && (await num("gewarnt")) >= 6 && (await num("anonymisiert")) >= 4,
+    `Zähler: ${await num("geprueft")}/${await num("gewarnt")}/${await num("anonymisiert")}`);
+  assert.match(await popup.textContent("#aiText"), /test-modell/);
+  if (shotDir) await popup.screenshot({ path: path.join(shotDir, "popup-aktiv.png") });
+  await popup.click("#switch");
+  await popup.waitForFunction(() => document.getElementById("title").textContent === "Schutz pausiert");
+  await waitBadge("AUS");
+  assert.ok(!(await popup.$eval("#switch", (e) => e.classList.contains("on"))), "Schalter muss aus sein");
+  await popup.emulateMedia({ colorScheme: "dark" });
+  await popup.bringToFront();
+  await popup.waitForTimeout(400); // Animation des Schalters abwarten
+  if (shotDir) await popup.screenshot({ path: path.join(shotDir, "popup-pause-dunkel.png") });
+  step("Leisten-Symbol: Zähler, Scanner-Status, Schalter (Symbol zeigt „AUS“)");
+
+  // 10) Pausiert: Einfügen geht ohne Prüfung durch; wieder an: Warnung kommt wieder
+  await page.bringToFront();
+  await page.waitForTimeout(300);
+  await paste("IBAN DE89 3704 0044 0532 0130 00");
+  await waitLog(6);
+  assert.strictEqual((await log())[5].text, "IBAN DE89 3704 0044 0532 0130 00");
+  await popup.bringToFront();
+  await popup.click("#switch");
+  await popup.waitForFunction(() => document.getElementById("title").textContent === "Schutz aktiv");
+  await waitBadge("");
+  await page.bringToFront();
+  await page.waitForTimeout(300);
+  await paste("IBAN DE89 3704 0044 0532 0130 00");
+  await waitDialog();
+  await page.keyboard.press("Escape");
+  step("pausiert = keine Prüfung, wieder an = Warnung");
 
   await ctx.close();
   ai.close();

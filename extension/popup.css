@@ -1,0 +1,37 @@
+:root {
+  --bg: #f3f4f6; --card: #fff; --text: #1f2937; --muted: #6b7280; --border: #e5e7eb;
+  --green: #2e7d32; --orange: #ef6c00; --red: #c62828; --off: #d1d5db; --ghost: #e5e7eb;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #18181b; --card: #27272a; --text: #f4f4f5; --muted: #a1a1aa; --border: #3f3f46; --off: #52525b; --ghost: #3f3f46; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; width: 330px; padding: 14px; background: var(--bg); color: var(--text);
+       font: 13px/1.4 system-ui, "Segoe UI", sans-serif; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; }
+header { display: flex; align-items: center; gap: 10px; padding: 12px; }
+.titles { flex: 1; min-width: 0; }
+#title { font-size: 17px; font-weight: 700; }
+.muted { color: var(--muted); }
+.small { font-size: 11.5px; }
+.right { text-align: right; margin-top: 3px; }
+.switch { width: 46px; height: 26px; border-radius: 13px; border: 0; background: var(--off); position: relative;
+          cursor: pointer; transition: background .15s; flex: none; }
+.switch span { position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff;
+               transition: left .15s; }
+.switch.on { background: var(--green); }
+.switch.on span { left: 23px; }
+.row { display: flex; gap: 8px; margin: 10px 0 0; }
+.ghost { flex: 1; font: inherit; padding: 7px; border-radius: 8px; border: 0; background: var(--ghost); color: var(--text); cursor: pointer; }
+.ghost:hover { filter: brightness(.95); }
+.tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+.tile { background: var(--card); border: 1px solid var(--border); border-radius: 10px; text-align: center; padding: 8px 4px; }
+.tile b { display: block; font-size: 22px; }
+.tile span { color: var(--muted); font-size: 11.5px; }
+.red { color: var(--red); } .green { color: var(--green); }
+.list { margin-top: 12px; padding: 4px 12px; }
+.item { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; }
+.item + .item { border-top: 1px solid var(--border); }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--off); margin-top: 4px; flex: none; }
+.dot.ok { background: var(--green); } .dot.warn { background: var(--orange); }
+footer { margin-top: 12px; }

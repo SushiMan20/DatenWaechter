@@ -1,14 +1,17 @@
-"""Das Wächter-Fenster (Windows).
+"""Das Datenwächter-Fenster (Windows) mit Symbol im Infobereich (Tray).
 
 - überwacht die Zwischenablage: Text, im Explorer kopierte Dateien und Bilder (Screenshots)
 - warnt mit einer Liste der Funde und dem Inhalts-Check („Du lädst gerade Familienunterlagen hoch“)
 - nimmt Dateien per Drag & Drop entgegen und erzeugt anonymisierte bzw. geschwärzte Kopien
 - übersetzt KI-Antworten mit Platzhaltern wieder zurück
+- Tray-Symbol: grün = aktiv, orange = pausiert, blau = prüft, rot = Warnung; Schließen = weiter im Hintergrund
 """
 
 from __future__ import annotations
 
+import datetime as dt
 import os
+from collections import deque
 import queue
 import subprocess
 import sys
@@ -18,11 +21,14 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from . import content_check, llm, ner, ocr, settings, winclip
+from . import autostart, content_check, llm, ner, ocr, settings, winclip
 from .analysis import analyze, anonymize as anonymize_report
 from .anonymize import Anonymizer
 from .detectors import HOCH, SEVERITY_LABEL, scan_text
 from .faces import available as faces_available
+from .icons import FARBEN, shield
+from .stats import Stats
+from .tray import Tray
 
 try:
     from tkinterdnd2 import DND_FILES, TkinterDnD
@@ -33,75 +39,304 @@ POLL_MS = 200
 MIN_CONTENT_CHECK = 400   # kopierte Texte erst ab dieser Länge auf Themen prüfen (sonst zu viele Hinweise)
 TEMP_DIR = Path(tempfile.gettempdir()) / "datenwaechter"
 COLORS = {HOCH: "#c62828", 2: "#ef6c00", 1: "#757575", 0: "#1565c0"}
+FONT = "Segoe UI" if sys.platform == "win32" else "DejaVu Sans"
+
+THEMES = {
+    "hell": {"bg": "#f3f4f6", "card": "#ffffff", "text": "#1f2937", "muted": "#6b7280", "border": "#d1d5db",
+             "drop": "#f9fafb", "drop_hover": "#e8f5e9", "button": "#e5e7eb", "button_hover": "#d1d5db"},
+    "dunkel": {"bg": "#18181b", "card": "#27272a", "text": "#f4f4f5", "muted": "#a1a1aa", "border": "#3f3f46",
+               "drop": "#202023", "drop_hover": "#1b2e1d", "button": "#3f3f46", "button_hover": "#52525b"},
+}
+STATUS_TEXT = {
+    "aktiv": ("Schutz aktiv", "Zwischenablage und Dateien werden geprüft"),
+    "pause": ("Schutz pausiert", "Klicke auf den Schalter, um ihn wieder einzuschalten"),
+    "pruefe": ("Prüfe …", "Einen Moment – Inhalt wird lokal untersucht"),
+    "warnung": ("Achtung", "Sensible Daten gefunden – bitte entscheiden"),
+}
+
+
+def _windows_dark() -> bool:
+    if os.environ.get("DATENWAECHTER_THEME") in ("dunkel", "hell"):
+        return os.environ["DATENWAECHTER_THEME"] == "dunkel"
+    if sys.platform != "win32":
+        return False
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                            r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize") as k:
+            return winreg.QueryValueEx(k, "AppsUseLightTheme")[0] == 0
+    except OSError:
+        return False
+
+
+class Switch(tk.Canvas):
+    """Ein/Aus-Schalter im Stil von Windows 11."""
+
+    def __init__(self, master, variable: tk.BooleanVar, command, bg: str, off: str):
+        super().__init__(master, width=56, height=30, bg=bg, highlightthickness=0, cursor="hand2")
+        self.var, self.command, self.off = variable, command, off
+        self.bind("<Button-1>", lambda e: (self.var.set(not self.var.get()), self.command()))
+        self.var.trace_add("write", lambda *_: self.draw())
+        self.draw()
+
+    def draw(self) -> None:
+        self.delete("all")
+        on = self.var.get()
+        color = FARBEN["aktiv"] if on else self.off
+        self.create_oval(2, 2, 30, 28, fill=color, outline=color)
+        self.create_oval(26, 2, 54, 28, fill=color, outline=color)
+        self.create_rectangle(16, 2, 40, 28, fill=color, outline=color)
+        x = 40 if on else 16
+        self.create_oval(x - 11, 4, x + 11, 26, fill="white", outline="white")
 
 
 class App:
-    def __init__(self) -> None:
+    def __init__(self, start_hidden: bool = False) -> None:
         self.root = TkinterDnD.Tk() if TkinterDnD else tk.Tk()
         self.root.title("Datenwächter")
-        self.root.geometry("440x380")
-        self.root.minsize(400, 340)
+        self.root.geometry("420x520")
+        self.root.minsize(380, 480)
+        self.t = THEMES["dunkel" if _windows_dark() else "hell"]
+        self.root.configure(bg=self.t["bg"])
 
         self.anon = Anonymizer()
+        self.stats = Stats()
         self.results: queue.Queue = queue.Queue()
         self.watch = tk.BooleanVar(value=True)
         self.safe = tk.BooleanVar(value=True)
         self.use_ki = tk.BooleanVar(value=False)
         self.use_llm = tk.BooleanVar(value=False)
-        self.topmost = tk.BooleanVar(value=True)
+        self.topmost = tk.BooleanVar(value=False)
+        self.llm_text = tk.StringVar(value="Inhalts-Check mit KI (Server wird gesucht …)")
+        self.llm_ok = False
+        self.llm_box = None
         self._last_seq = winclip.sequence_number()
         self._last_text = self._tk_clipboard_text()
         self._ignore_seq: int | None = None
         self._busy = False
+        self._alerts = 0
+        self._pause_job = None
+        self._icons = {}
+        self._hint_shown = False
+        self._log: deque = deque(maxlen=4)
 
         self._build()
-        self.root.attributes("-topmost", True)
+        self.tray = Tray(lambda name: self.results.put(("ui", name)), self.watch.get, self.stats.summary)
+        self.root.protocol("WM_DELETE_WINDOW", self._close)
+        self._refresh()
         self.root.after(POLL_MS, self._poll)
         threading.Thread(target=self._detect_llm, daemon=True).start()
+        if start_hidden and self.tray.available:
+            self.root.withdraw()
 
     # ------------------------------------------------------------------ Aufbau
+    def _img(self, state: str, size: int):
+        """Schild als Tk-Bild (PNG direkt an Tk – braucht kein PIL.ImageTk)."""
+        import base64
+        import io
+        key = (state, size)
+        if key not in self._icons:
+            buf = io.BytesIO()
+            shield(state, size).save(buf, "PNG")
+            self._icons[key] = tk.PhotoImage(data=base64.b64encode(buf.getvalue()).decode())
+        return self._icons[key]
+
+    def _button(self, master, text: str, command):
+        t = self.t
+        b = tk.Label(master, text=text, bg=t["button"], fg=t["text"], font=(FONT, 9), padx=10, pady=7, cursor="hand2")
+        b.bind("<Button-1>", lambda e: command())
+        b.bind("<Enter>", lambda e: b.configure(bg=t["button_hover"]))
+        b.bind("<Leave>", lambda e: b.configure(bg=t["button"]))
+        return b
+
     def _build(self) -> None:
-        pad = {"padx": 10, "pady": 4}
-        ttk.Label(self.root, text="🛡  Datenwächter", font=("Segoe UI", 14, "bold")).pack(anchor="w", **pad)
-        self.status = ttk.Label(self.root, text="Überwache Zwischenablage …", foreground="#2e7d32")
-        self.status.pack(anchor="w", padx=10)
+        t = self.t
+        self.root.iconphoto(True, self._img("aktiv", 64))
+        outer = tk.Frame(self.root, bg=t["bg"])
+        outer.pack(fill="both", expand=True, padx=16, pady=16)
 
-        drop = tk.Label(self.root, text="Datei hierher ziehen (PDF, Word, Bild, Text)\n– wird geprüft, bevor sie zur KI geht –",
-                        relief="groove", bd=2, height=4, bg="#f5f5f5", fg="#555")
-        drop.pack(fill="x", padx=10, pady=8)
+        # Statuskarte: großes Schild, Zustand, Schalter
+        card = tk.Frame(outer, bg=t["card"], highlightthickness=1, highlightbackground=t["border"])
+        card.pack(fill="x")
+        self.status_icon = tk.Label(card, bg=t["card"])
+        self.status_icon.pack(side="left", padx=(14, 10), pady=14)
+        texts = tk.Frame(card, bg=t["card"])
+        texts.pack(side="left", fill="x", expand=True)
+        self.status_title = tk.Label(texts, bg=t["card"], fg=t["text"], font=(FONT, 15, "bold"), anchor="w")
+        self.status_title.pack(fill="x")
+        self.status_sub = tk.Label(texts, bg=t["card"], fg=t["muted"], font=(FONT, 9), anchor="w", justify="left",
+                                   wraplength=220)
+        self.status_sub.pack(fill="x")
+        Switch(card, self.watch, self._toggle, t["card"], t["border"]).pack(side="right", padx=14)
+
+        # Ablagefläche
+        self.drop = tk.Frame(outer, bg=t["drop"], highlightthickness=2, highlightbackground=t["border"], cursor="hand2")
+        self.drop.pack(fill="x", pady=12)
+        l1 = tk.Label(self.drop, text="⬇", bg=t["drop"], fg=t["muted"], font=(FONT, 20))
+        l2 = tk.Label(self.drop, text="Datei hierher ziehen", bg=t["drop"], fg=t["text"], font=(FONT, 11, "bold"))
+        l3 = tk.Label(self.drop, text="PDF, Word, Bild, Text – oder klicken zum Auswählen", bg=t["drop"],
+                      fg=t["muted"], font=(FONT, 9))
+        for w in (l1, l2, l3):
+            w.pack(pady=(0, 0))
+        l1.pack_configure(pady=(10, 0))
+        l3.pack_configure(pady=(0, 12))
+        drop_widgets = (self.drop, l1, l2, l3)
+        for w in drop_widgets:
+            w.bind("<Button-1>", lambda e: self._pick_files())
+            w.bind("<Enter>", lambda e: [x.configure(bg=t["drop_hover"]) for x in drop_widgets])
+            w.bind("<Leave>", lambda e: [x.configure(bg=t["drop"]) for x in drop_widgets])
         if TkinterDnD:
-            drop.drop_target_register(DND_FILES)
-            drop.dnd_bind("<<Drop>>", lambda e: self._check_files(list(self.root.tk.splitlist(e.data)), "drop"))
-        else:
-            drop.configure(text="Datei prüfen … (klicken)\nDrag & Drop: pip install tkinterdnd2")
-        drop.bind("<Button-1>", lambda e: self._pick_files())
+            for w in drop_widgets:
+                w.drop_target_register(DND_FILES)
+                w.dnd_bind("<<Drop>>", lambda e: self._check_files(list(self.root.tk.splitlist(e.data)), "drop"))
 
-        opts = ttk.Frame(self.root)
-        opts.pack(fill="x", padx=10)
-        ttk.Checkbutton(opts, text="Zwischenablage überwachen", variable=self.watch).grid(row=0, column=0, sticky="w")
-        ttk.Checkbutton(opts, text="Sicherer Modus (sofort anonymisieren)", variable=self.safe).grid(
-            row=1, column=0, sticky="w")
-        ki = ttk.Checkbutton(opts, text="Namen ohne Anrede finden (lokales KI-Modell)", variable=self.use_ki)
-        ki.grid(row=2, column=0, sticky="w")
+        # Tageszähler
+        tiles = tk.Frame(outer, bg=t["bg"])
+        tiles.pack(fill="x")
+        self.counters = {}
+        for i, (key, label, color) in enumerate((("geprueft", "geprüft", t["text"]), ("gewarnt", "gewarnt", FARBEN["warnung"]),
+                                                 ("anonymisiert", "anonymisiert", FARBEN["aktiv"]))):
+            tile = tk.Frame(tiles, bg=t["card"], highlightthickness=1, highlightbackground=t["border"])
+            tile.grid(row=0, column=i, sticky="ew", padx=(0 if i == 0 else 6, 0))
+            tiles.columnconfigure(i, weight=1)
+            num = tk.Label(tile, text="0", bg=t["card"], fg=color, font=(FONT, 18, "bold"))
+            num.pack(pady=(8, 0))
+            tk.Label(tile, text=label, bg=t["card"], fg=t["muted"], font=(FONT, 9)).pack(pady=(0, 8))
+            self.counters[key] = num
+        tk.Label(outer, text="heute", bg=t["bg"], fg=t["muted"], font=(FONT, 8)).pack(anchor="e")
+
+        # Letzte Aktivität
+        tk.Label(outer, text="ZULETZT", bg=t["bg"], fg=t["muted"], font=(FONT, 8, "bold"), anchor="w").pack(
+            fill="x", pady=(6, 2))
+        self.log_labels = []
+        for i in range(self._log.maxlen):
+            lbl = tk.Label(outer, text="Noch nichts geprüft" if i == 0 else "", bg=t["bg"], fg=t["muted"],
+                           font=(FONT, 9), anchor="w", justify="left", wraplength=380)
+            lbl.pack(fill="x")
+            self.log_labels.append(lbl)
+
+        # Knöpfe
+        btns = tk.Frame(outer, bg=t["bg"])
+        btns.pack(side="bottom", fill="x", pady=(12, 0))
+        for i, (text, cmd) in enumerate((("↩ Zurückübersetzen", self._restore_clipboard),
+                                         ("Zuordnung", self._show_mapping), ("⚙ Einstellungen", self._settings_window))):
+            self._button(btns, text, cmd).grid(row=0, column=i, sticky="ew", padx=(0 if i == 0 else 6, 0))
+            btns.columnconfigure(i, weight=1)
+
+    def _settings_window(self) -> None:
+        win = tk.Toplevel(self.root)
+        win.title("Datenwächter – Einstellungen")
+        win.transient(self.root)
+        frm = ttk.Frame(win, padding=14)
+        frm.pack(fill="both", expand=True)
+        ttk.Checkbutton(frm, text="Sicherer Modus (Zwischenablage sofort anonymisieren)", variable=self.safe).pack(
+            anchor="w", pady=2)
+        ki = ttk.Checkbutton(frm, text="Namen ohne Anrede finden (lokales KI-Modell)", variable=self.use_ki)
+        ki.pack(anchor="w", pady=2)
         if not ner.available():
             ki.state(["disabled"])
             ki.configure(text="Namen ohne Anrede finden (pip install datenwaechter[ki])")
-        self.llm_box = ttk.Checkbutton(opts, text="Inhalts-Check mit KI (Server wird gesucht …)",
-                                       variable=self.use_llm)
-        self.llm_box.state(["disabled"])
-        self.llm_box.grid(row=3, column=0, sticky="w")
-        ttk.Checkbutton(opts, text="Immer im Vordergrund", variable=self.topmost,
-                        command=lambda: self.root.attributes("-topmost", self.topmost.get())).grid(
-            row=4, column=0, sticky="w")
-        caps = [f"Texterkennung: {ocr.backend() or 'fehlt'}", f"Gesichter: {'ja' if faces_available() else 'fehlt'}"]
-        ttk.Label(opts, text=" · ".join(caps), foreground="#777").grid(row=5, column=0, sticky="w", pady=(4, 0))
+        self.llm_box = ttk.Checkbutton(frm, textvariable=self.llm_text, variable=self.use_llm)
+        self.llm_box.pack(anchor="w", pady=2)
+        if not self.llm_ok:
+            self.llm_box.state(["disabled"])
+        ttk.Button(frm, text="KI-Server einrichten …", command=self._llm_settings).pack(anchor="w", padx=22, pady=(0, 6))
+        ttk.Checkbutton(frm, text="Fenster immer im Vordergrund", variable=self.topmost,
+                        command=lambda: self.root.attributes("-topmost", self.topmost.get())).pack(anchor="w", pady=2)
+        auto = tk.BooleanVar(value=autostart.is_enabled())
+        ttk.Checkbutton(frm, text="Mit Windows starten (im Infobereich)", variable=auto,
+                        command=lambda: autostart.set_enabled(auto.get())).pack(anchor="w", pady=2)
+        caps = [f"Texterkennung: {ocr.backend() or 'nicht installiert'}",
+                f"Gesichter: {'ja' if faces_available() else 'nicht installiert'}",
+                f"Tray-Symbol: {'ja' if self.tray.available else 'nicht verfügbar'}"]
+        ttk.Label(frm, text="\n".join(caps), foreground="#777").pack(anchor="w", pady=(10, 0))
+        ttk.Button(frm, text="Schließen", command=win.destroy).pack(anchor="e", pady=(10, 0))
+        win.bind("<Destroy>", lambda e: setattr(self, "llm_box", None) if e.widget is win else None)
 
-        btns = ttk.Frame(self.root)
-        btns.pack(fill="x", padx=10, pady=8)
-        ttk.Button(btns, text="KI-Antwort zurückübersetzen", command=self._restore_clipboard).pack(
-            side="left", expand=True, fill="x")
-        ttk.Button(btns, text="Zuordnung", command=self._show_mapping).pack(side="left", padx=(6, 0))
-        ttk.Button(btns, text="KI-Server …", command=self._llm_settings).pack(side="left", padx=(6, 0))
+    # ------------------------------------------------------------------ Zustand, Tray, Zähler
+    def _state(self) -> str:
+        if self._alerts:
+            return "warnung"
+        if self._busy:
+            return "pruefe"
+        return "aktiv" if self.watch.get() else "pause"
+
+    def _refresh(self) -> None:
+        state = self._state()
+        title, sub = STATUS_TEXT[state]
+        if state == "pause" and self._pause_job:
+            sub = "Pausiert für 15 Minuten – danach automatisch wieder aktiv"
+        self.status_icon.configure(image=self._img(state, 56))
+        self.status_title.configure(text=title, fg=FARBEN[state] if state != "aktiv" else self.t["text"])
+        self.status_sub.configure(text=sub)
+        for key, lbl in self.counters.items():
+            lbl.configure(text=str(self.stats.get(key)))
+        self.tray.set_state(state, f"Datenwächter – {title}\n{self.stats.summary()}")
+
+    def _status(self, text: str, color: str | None = None) -> None:
+        """Neuer Eintrag in „Zuletzt“ (neueste oben)."""
+        self._log.appendleft((f"{dt.datetime.now():%H:%M}  {text}", color or self.t["text"]))
+        for i, lbl in enumerate(self.log_labels):
+            if i < len(self._log):
+                txt, col = self._log[i]
+                lbl.configure(text=txt, fg=col if i == 0 else self.t["muted"])
+        self._refresh()
+
+    def _count(self, key: str, n: int = 1) -> None:
+        self.stats.inc(key, n)
+        self._refresh()
+
+    def _toggle(self) -> None:
+        if self._pause_job:
+            self.root.after_cancel(self._pause_job)
+            self._pause_job = None
+        if self.watch.get():  # nach der Pause nicht auf alte Zwischenablage reagieren
+            self._last_seq = winclip.sequence_number()
+            self._last_text = self._tk_clipboard_text()
+        self._status("Schutz eingeschaltet" if self.watch.get() else "Schutz ausgeschaltet")
+
+    def _pause(self, minutes: int = 15) -> None:
+        if self._pause_job:
+            self.root.after_cancel(self._pause_job)
+        self.watch.set(False)
+        self._pause_job = self.root.after(minutes * 60_000, self._resume)
+        self._status(f"Für {minutes} Minuten pausiert")
+
+    def _resume(self) -> None:
+        self._pause_job = None
+        self.watch.set(True)
+        self._toggle()
+        self.tray.notify("Datenwächter", "Schutz ist wieder aktiv.")
+
+    def _show(self) -> None:
+        self.root.deiconify()
+        self.root.lift()
+        self.root.focus_force()
+
+    def _close(self) -> None:
+        if self.tray.available:
+            self.root.withdraw()
+            if not self._hint_shown:
+                self._hint_shown = True
+                self.tray.notify("Datenwächter läuft weiter", "Der Schutz bleibt im Hintergrund aktiv. "
+                                                              "Das Symbol findest du im Infobereich.")
+        else:
+            self._quit()
+
+    def _quit(self) -> None:
+        self.tray.stop()
+        self.root.destroy()
+
+    def _ui(self, name: str) -> None:
+        """Befehle aus dem Tray-Menü (laufen hier im Fenster-Thread)."""
+        actions = {
+            "show": self._show, "pick": self._pick_files, "restore": self._restore_clipboard,
+            "settings": lambda: (self._show(), self._settings_window()), "pause15": self._pause, "quit": self._quit,
+            "toggle": lambda: (self.watch.set(not self.watch.get()), self._toggle()),
+            "autostart": lambda: (autostart.set_enabled(not autostart.is_enabled()), self._refresh()),
+        }
+        if name in actions:
+            actions[name]()
 
     def _detect_llm(self) -> None:
         llm._cache.clear()
@@ -172,6 +407,7 @@ class App:
 
     # ------------------------------------------------------------------ Prüfen
     def _check_text(self, text: str) -> None:
+        self._count("geprueft")
         findings = scan_text(text)  # Regeln sind schnell -> sofort reagieren
         if findings and self.safe.get():
             self._set_clipboard_text(self.anon.anonymize(text, findings))
@@ -197,7 +433,9 @@ class App:
         if hold:  # während der Prüfung nichts Einfügbares in der Zwischenablage lassen
             winclip.clear()
             self._mark_own_write()
-        self.status.configure(text=f"Prüfe {len(paths)} Datei(en) …", foreground="#ef6c00")
+        self._busy = True
+        self._count("geprueft", len(paths))
+        self._status(f"Prüfe {len(paths)} Datei(en) …")
 
         def job():
             reports, errors = [], []
@@ -223,19 +461,23 @@ class App:
     def _drain_results(self) -> None:
         while not self.results.empty():
             item = self.results.get()
+            if item[0] == "ui":
+                self._ui(item[1])
+                continue
             if item[0] == "llm":
+                self.llm_ok = bool(item[1])
                 if item[1]:
                     label, extern = item[1]
-                    self.llm_box.state(["!disabled"])
-                    self.llm_box.configure(text=f"Inhalts-Check mit KI ({label.partition(':')[2]})"
-                                                + (" – extern" if extern else ""))
+                    self.llm_text.set(f"Inhalts-Check mit KI ({label.partition(':')[2]})" + (" – extern" if extern else ""))
                     self.use_llm.set(True)
                 else:
-                    self.llm_box.state(["disabled"])
                     self.use_llm.set(False)
-                    self.llm_box.configure(text="Inhalts-Check mit KI (kein Server – „KI-Server …“ einrichten)")
+                    self.llm_text.set("Inhalts-Check mit KI (kein Server – unten einrichten)")
+                if self.llm_box is not None:
+                    self.llm_box.state(["!disabled"] if self.llm_ok else ["disabled"])
                 continue
             self._busy = False
+            self._refresh()
             if item[0] == "error":
                 self._ok(f"Fehler: {item[1]}")
             elif item[0] == "text":
@@ -262,25 +504,38 @@ class App:
             self._set_clipboard_files(paths)
 
     def _ok(self, note: str | None = None) -> None:
-        self.status.configure(text=note or "✔ Keine sensiblen Daten gefunden",
-                              foreground="#ef6c00" if note else "#2e7d32")
+        self._status(note or "✔ Keine sensiblen Daten gefunden", FARBEN["pause"] if note else FARBEN["aktiv"])
 
     # ------------------------------------------------------------------ Warnungen
     def _dialog(self, title: str, rows: list[tuple[str, dict]], verdicts=(), notes=()) -> tk.Toplevel:
         self.root.bell()
+        self._count("gewarnt")
+        self._alerts += 1
+        self._refresh()
+        if not self.root.winfo_viewable():
+            self.tray.notify("Datenwächter – Achtung", title)
         dlg = tk.Toplevel(self.root)
+
+        def closed(e):
+            if e.widget is dlg:
+                self._alerts = max(0, self._alerts - 1)
+                self._refresh()
+        dlg.bind("<Destroy>", closed)
         dlg.title("Datenwächter – Achtung")
+        dlg.configure(bg=self.t["bg"])
         dlg.attributes("-topmost", True)
         dlg.geometry("680x420" if rows else "680x220")
         worst = max([r["severity"] for _, r in rows] + [v.severity for v in verdicts] + [0])
-        tk.Label(dlg, text=f"⚠  {title}", bg=COLORS[worst], fg="white", font=("Segoe UI", 12, "bold"),
+        tk.Label(dlg, text=f"⚠  {title}", bg=COLORS[worst], fg="white", font=(FONT, 12, "bold"),
                  anchor="w", padx=10, pady=8).pack(fill="x")
         for v in verdicts:
             text = f"🧠 {v.warning} Willst du das wirklich?"
             if v.description:
                 text += f"\n{v.description}"
             text += "\n" + v.source_text()
-            tk.Label(dlg, text=text, bg="#fff3e0", fg="#5d4037", justify="left", anchor="w", wraplength=640,
+            dark = self.t is THEMES["dunkel"]
+            tk.Label(dlg, text=text, bg="#3e2723" if dark else "#fff3e0", fg="#ffe0b2" if dark else "#5d4037",
+                     font=(FONT, 10), justify="left", anchor="w", wraplength=640,
                      padx=10, pady=6).pack(fill="x", padx=10, pady=(8, 0))
         if rows:
             tree = ttk.Treeview(dlg, columns=("stufe", "art", "wert", "quelle"), show="headings", height=8)
@@ -294,7 +549,7 @@ class App:
                             tags=(str(r["severity"]),))
             tree.pack(fill="both", expand=True, padx=10, pady=8)
         for n in notes:
-            ttk.Label(dlg, text=f"ℹ {n}", foreground="#777").pack(anchor="w", padx=12)
+            tk.Label(dlg, text=f"ℹ {n}", bg=self.t["bg"], fg=self.t["muted"], font=(FONT, 9)).pack(anchor="w", padx=12)
         dlg.buttons = ttk.Frame(dlg)
         dlg.buttons.pack(fill="x", side="bottom", padx=10, pady=(4, 10))
         dlg.focus_force()
@@ -303,18 +558,20 @@ class App:
     def _warn_text(self, text: str, findings, verdict) -> None:
         verdicts = [verdict] if verdict and verdict.warning else []
         rows = [("Text", {"label": f.label, "display": f.masked(), "severity": f.severity}) for f in findings]
-        self.status.configure(text=f"⚠ {len(findings)} Fund(e) in kopiertem Text" if findings
-                              else "⚠ Sensibles Thema im kopierten Text", foreground="#c62828")
+        self._status(f"⚠ {len(findings)} Fund(e) in kopiertem Text" if findings
+                     else "⚠ Sensibles Thema im kopierten Text", "#c62828")
         dlg = self._dialog(f"Du hast {len(findings)} sensible Angabe(n) kopiert" if findings
                            else "Bitte kurz prüfen, was du kopiert hast", rows, verdicts)
         b = dlg.buttons
         if findings and self.safe.get():
+            self._count("anonymisiert")
             ttk.Label(b, text="Die Zwischenablage enthält bereits die anonymisierte Fassung.").pack(anchor="w")
             ttk.Button(b, text="✔ Anonymisiert lassen", command=dlg.destroy).pack(side="left")
         elif findings:
             def anonymize():
+                self._count("anonymisiert")
                 self._set_clipboard_text(self.anon.anonymize(text, findings))
-                self.status.configure(text="✔ Anonymisierte Fassung in der Zwischenablage", foreground="#2e7d32")
+                self._status("✔ Anonymisierte Fassung in der Zwischenablage", "#2e7d32")
                 dlg.destroy()
             ttk.Button(b, text="✔ Anonymisieren", command=anonymize).pack(side="left")
         else:
@@ -337,13 +594,14 @@ class App:
         verdicts = [r.verdict for r in reports if r.verdict.warning]
         notes = errors + [f"{shown(r)}: {n}" for r in reports for n in r.doc.notes + r.info]
         can_anon = any(r.can_anonymize for r in reports)
-        self.status.configure(text=f"⚠ {len(rows)} Fund(e) in {len(reports)} Datei(en)", foreground="#c62828")
+        self._status(f"⚠ {len(rows)} Fund(e) in {len(reports)} Datei(en)", "#c62828")
         title = (f"{len(rows)} sensible Angabe(n) gefunden" if rows else
                  "Bitte kurz prüfen, was du hochlädst" if verdicts else "Nicht vollständig prüfbar")
         dlg = self._dialog(title, rows, verdicts, notes)
         b = dlg.buttons
 
         def anonymize():
+            self._count("anonymisiert", sum(1 for r in reports if r.can_anonymize))
             TEMP_DIR.mkdir(exist_ok=True)
             out_dir = TEMP_DIR if origin.startswith("clipboard") else None
             outs = []
@@ -359,8 +617,7 @@ class App:
                 self._set_clipboard_files(outs)
             if origin == "drop" and outs and sys.platform == "win32":
                 subprocess.Popen(["explorer", "/select,", outs[0]])
-            self.status.configure(text="✔ Anonymisierte Fassung bereit – jetzt einfügen (Strg+V) oder hineinziehen",
-                                  foreground="#2e7d32")
+            self._status("✔ Anonymisierte Fassung bereit – jetzt einfügen (Strg+V) oder hineinziehen", "#2e7d32")
             dlg.destroy()
 
         def original():
@@ -497,7 +754,7 @@ class App:
         def save():
             p = settings.save_llm(current())
             llm._cache.clear()
-            self.llm_box.configure(text="Inhalts-Check mit KI (Server wird gesucht …)")
+            self.llm_text.set("Inhalts-Check mit KI (Server wird gesucht …)")
             threading.Thread(target=self._detect_llm, daemon=True).start()
             status.configure(text=f"Gespeichert in {p}", foreground="#2e7d32")
             win.after(700, win.destroy)
@@ -533,10 +790,12 @@ class App:
         self.root.mainloop()
 
 
-def main() -> None:
+def main(start_hidden: bool | None = None) -> None:
     if os.environ.get("DATENWAECHTER_NO_GUI"):
         return
-    App().run()
+    if start_hidden is None:
+        start_hidden = "--minimiert" in sys.argv
+    App(start_hidden=start_hidden).run()
 
 
 if __name__ == "__main__":

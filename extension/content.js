@@ -15,6 +15,15 @@
   const COLORS = { 3: "#c62828", 2: "#ef6c00", 1: "#757575", 0: "#1565c0" };
   const STUFE = { 3: "hoch", 2: "mittel", 1: "niedrig" };
 
+  // Ein/Aus aus dem Popup (Symbol in der Browserleiste)
+  let enabled = true;
+  const readState = () => chrome.storage.local.get({ aktiv: true, pauseBis: 0 })
+    .then((st) => { enabled = st.aktiv || (st.pauseBis > 0 && Date.now() >= st.pauseBis); })
+    .catch(() => {});
+  readState();
+  chrome.storage.onChanged.addListener(readState);
+  const stat = (key, n = 1) => chrome.runtime.sendMessage({ type: "stat", key, n }).catch(() => {});
+
   window.addEventListener("paste", onPaste, true);
   window.addEventListener("drop", onDrop, true);
   window.addEventListener("change", onFileInput, true);
@@ -70,7 +79,7 @@
 
   // ------------------------------------------------------------------ Einfügen
   function onPaste(e) {
-    if (own.has(e) || !e.clipboardData) return;
+    if (!enabled || own.has(e) || !e.clipboardData) return;
     const dt = e.clipboardData;
     const target = e.target;
     const files = [...dt.files];
@@ -85,6 +94,7 @@
     }
     const text = dt.getData("text/plain");
     if (!text) return;
+    stat("geprueft");
     // Regeln + Stichwörter sind synchron: nur blockieren, wenn es etwas zu fragen gibt (oder die KI gefragt wird)
     const quick = DW.scan(text).length || (text.length >= MIN_CONTENT_CHECK && DW.contentCheck(text).warning);
     if (!quick && text.length < MIN_LLM_CHECK) return;
@@ -93,7 +103,7 @@
     const restoreCaret = saveCaret();
     askAboutText(text, "fügst").then(({ choice, findings }) => {
       restoreCaret();
-      if (choice === "anon") firePaste(target, { text: anon.anonymize(text, findings) });
+      if (choice === "anon") { stat("anonymisiert"); firePaste(target, { text: anon.anonymize(text, findings) }); }
       else if (choice === "orig" || choice === "pass") firePaste(target, { text, html });
     });
   }
@@ -112,7 +122,7 @@
 
   // ------------------------------------------------------------------ Drag & Drop
   function onDrop(e) {
-    if (own.has(e) || !e.dataTransfer) return;
+    if (!enabled || own.has(e) || !e.dataTransfer) return;
     const dt = e.dataTransfer;
     const files = [...dt.files];
     const { target, clientX, clientY } = e;
@@ -126,12 +136,14 @@
     if (!files.length) {
       const text = dt.getData("text/plain");
       if (!text) return;
+      stat("geprueft");
       const quick = DW.scan(text).length || (text.length >= MIN_CONTENT_CHECK && DW.contentCheck(text).warning);
       if (!quick && text.length < MIN_LLM_CHECK) return;
       block(e);
       askAboutText(text, "ziehst").then(({ choice, findings }) => {
         if (choice === "cancel") return leave();
         const d = new DataTransfer();
+        if (choice === "anon") stat("anonymisiert");
         d.setData("text/plain", choice === "anon" ? anon.anonymize(text, findings) : text);
         fire(d);
       });
@@ -149,7 +161,7 @@
   // ------------------------------------------------------------------ „Datei hinzufügen“ / Büroklammer
   function onFileInput(e) {
     const input = e.target;
-    if (own.has(e) || !(input instanceof HTMLInputElement) || input.type !== "file" || !input.files?.length) return;
+    if (!enabled || own.has(e) || !(input instanceof HTMLInputElement) || input.type !== "file" || !input.files?.length) return;
     e.stopImmediatePropagation();
     checkFiles([...input.files]).then((result) => {
       if (!result) { input.value = ""; return; }
@@ -166,6 +178,7 @@
   function onPageMessage(e) {
     if (e.source !== window || e.data?.__datenwaechter !== "check") return;
     const { id, files } = e.data;
+    if (!enabled) { window.postMessage({ __datenwaechter: "result", id, files }, "*"); return; }
     checkFiles(files).then((result) => window.postMessage({ __datenwaechter: "result", id, files: result }, "*"));
   }
 
@@ -183,6 +196,7 @@
   // ------------------------------------------------------------------ Dateien prüfen
   async function checkFiles(files) {
     toast(`Datenwächter prüft ${files.length} Datei(en) …`);
+    stat("geprueft", files.length);
     const status = await hostStatus();
     const reports = [];
     for (const f of files) reports.push(await scanFile(f, !!status?.ok)); // nacheinander: Platzhalter bleiben eindeutig
@@ -208,6 +222,7 @@
     });
     if (choice === "cancel") return null;
     if (choice === "orig") return files;
+    stat("anonymisiert", reports.filter((r) => r.output).length);
     const out = [];
     for (const r of reports) {
       if (r.output) out.push(r.output);
@@ -309,6 +324,7 @@
   }
 
   function showDialog({ title, rows = [], content = [], notes = [], actions, hint }) {
+    stat("gewarnt");
     return new Promise((resolve) => {
       document.querySelectorAll("datenwaechter-toast").forEach((n) => n.remove());
       const { host: h, root } = mount();

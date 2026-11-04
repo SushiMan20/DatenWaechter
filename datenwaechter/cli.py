@@ -112,19 +112,21 @@ def main(argv: list[str] | None = None) -> int:
     k.add_argument("--testen", action="store_true", help="Verbindung mit einer kleinen Testanfrage prüfen")
     k.set_defaults(func=_ki_server)
 
-    sub.add_parser("gui", help="Wächter-Fenster starten").set_defaults(func=lambda a: _gui())
+    g = sub.add_parser("gui", help="Wächter-Fenster starten")
+    g.add_argument("--minimiert", action="store_true", help="nur als Symbol im Infobereich starten (für Autostart)")
+    g.set_defaults(func=lambda a: _gui(a.minimiert))
     sub.add_parser("native-host", help="(intern) Brücke für die Browser-Erweiterung").set_defaults(
         func=lambda a: _native())
 
     args = p.parse_args(argv)
     if not getattr(args, "func", None):
-        return _gui()
+        return _gui("--minimiert" in (argv or sys.argv[1:]))
     return args.func(args)
 
 
-def _gui() -> int:
+def _gui(start_hidden: bool = False) -> int:
     from .gui import main as gui_main
-    gui_main()
+    gui_main(start_hidden=start_hidden)
     return 0
 
 

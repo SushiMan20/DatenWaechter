@@ -14,6 +14,27 @@ Danach entscheidest du: **anonymisiert hochladen**, **Original hochladen** oder 
 |---|---|
 | ![Inhalts-Warnung](docs/browser-inhalt.png) | ![Fund-Warnung](docs/browser-warnung.png) |
 
+## Oberfläche: Tray-Symbol, Fenster und Browser-Leiste
+
+Ein **Schild im Infobereich** zeigt auf einen Blick den Zustand: grün = Schutz aktiv, blau = prüft gerade,
+rot = Warnung, orange = pausiert. Ein **Rechtsklick** öffnet das Menü mit diesen Punkten: Schutz an/aus,
+15 Minuten pausieren, Datei prüfen, KI-Antwort zurückübersetzen, Einstellungen, Mit Windows starten und Beenden.
+Kommt eine Warnung, während das Fenster geschlossen ist, erscheint eine Windows-Benachrichtigung.
+
+![Fenster und Tray-Symbole](docs/oberflaeche.png)
+
+- **Ein Schalter** schaltet den Schutz an und aus. Nach einer Pause schaltet er sich automatisch wieder ein.
+- Die **Ablagefläche** prüft Dateien, die du hineinziehst.
+- Die **Tageszähler** zeigen geprüft, gewarnt und anonymisiert. Gezählt werden nur Zahlen, keine Inhalte.
+- **„Zuletzt“** zeigt die letzten Ereignisse mit Uhrzeit.
+- **Schließen (X)** blendet nur das Fenster aus, der Schutz läuft im Infobereich weiter. Mit „Mit Windows starten“ läuft der Datenwächter ab der Anmeldung (`datenwaechter gui --minimiert`).
+- Das Fenster ist **hell oder dunkel**, passend zur Windows-Einstellung.
+
+**In der Browser-Leiste** zeigt das Datenwächter-Symbol denselben Zustand. Pausiert trägt es den Hinweis „AUS“.
+Ein Klick zeigt Schalter, Pause-Knöpfe, die Tageszähler und ob der lokale Scanner und der KI-Server verbunden sind.
+
+![Fenster der Browser-Erweiterung](docs/browser-popup.png)
+
 **Anonymisieren heißt bei PDFs und Bildern schwärzen.** Das Layout bleibt erhalten. Funde werden mit einem Kasten
 samt Platzhalter überdeckt, Gesichter werden verpixelt. Der Originaltext ist danach nicht mehr in der Datei enthalten.
 
@@ -88,8 +109,9 @@ Kopierst du später eine KI-Antwort mit Platzhaltern, setzt die Erweiterung die 
 ### 2. Lokaler Scanner + Windows-Fenster (auch für Claude Desktop, ChatGPT-App, Codex)
 
 ```
-pip install ".[windows,gesichter]"     # Windows-Texterkennung, Zwischenablage, Drag & Drop, Gesichter
-datenwaechter-gui                      # Fenster starten
+pip install ".[windows,gesichter]"     # Tray-Symbol, Windows-Texterkennung, Zwischenablage, Drag & Drop, Gesichter
+datenwaechter-gui                      # Fenster + Tray-Symbol starten
+datenwaechter gui --minimiert          # nur als Tray-Symbol starten
 ```
 
 Desktop-Apps lassen sich nicht sauber beim Hineinziehen abfangen. Das ginge nur per DLL-Injektion, und die wird von
@@ -102,7 +124,7 @@ Das Fenster setzt deshalb an der **Zwischenablage** und an einer eigenen **Ablag
 - **Datei ins Fenster ziehen:** Die geschwärzte Kopie erscheint im Explorer und kann direkt in die App weitergezogen werden.
 - **KI-Antwort zurückübersetzen:** Platzhalter werden wieder zu echten Namen.
 
-![Windows-Fenster](docs/gui-warnung.png)
+![Warnung im Fenster](docs/gui-warnung.png)
 
 ### Optionale Zusätze
 
@@ -135,9 +157,9 @@ datenwaechter anonymisieren Scan.pdf --zuordnung     # schreibt Scan_anonymisier
 
 ```
 pip install -e ".[dev]"
-pytest                               # Regeln, Inhalts-Check (simuliertes Ollama + OpenAI-Server), OCR, Schwärzen, Gesichter
+pytest                               # Regeln, Inhalts-Check (simuliertes Ollama + OpenAI-Server), OCR, Schwärzen, Gesichter, Oberfläche
 node --test tests/detectors.test.js  # Browser-Regeln (gleiche Testfälle wie Python)
-node tests/e2e_extension.js          # Erweiterung in echtem Chromium mit echtem Python-Scanner und simuliertem KI-Server
+node tests/e2e_extension.js          # Erweiterung in echtem Chromium: Upload-Wege, Scanner, KI-Server, Leisten-Fenster, Pause
 ```
 
 Die Erkennungsregeln gibt es zweimal, in `datenwaechter/detectors.py` und `extension/detectors.js`. Die Tests

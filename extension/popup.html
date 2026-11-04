@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Datenwächter</title>
+<link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header class="card">
+    <img id="shield" src="icons/aktiv-48.png" alt="" width="44" height="44">
+    <div class="titles">
+      <div id="title">Schutz aktiv</div>
+      <div id="sub" class="muted">…</div>
+    </div>
+    <button id="switch" class="switch on" role="switch" aria-checked="true" aria-label="Schutz ein/aus"><span></span></button>
+  </header>
+
+  <div id="pauseRow" class="row">
+    <button class="ghost" data-min="15">15 Min pausieren</button>
+    <button class="ghost" data-min="60">1 Std pausieren</button>
+  </div>
+
+  <section class="tiles">
+    <div class="tile"><b id="geprueft">0</b><span>geprüft</span></div>
+    <div class="tile"><b id="gewarnt" class="red">0</b><span>gewarnt</span></div>
+    <div class="tile"><b id="anonymisiert" class="green">0</b><span>anonymisiert</span></div>
+  </section>
+  <div class="muted small right">heute</div>
+
+  <section class="card list">
+    <div class="item"><span id="hostDot" class="dot"></span><div><b>Lokaler Scanner</b><div id="hostText" class="muted small">wird gesucht …</div></div></div>
+    <div class="item"><span id="aiDot" class="dot"></span><div><b>Inhalts-Check</b><div id="aiText" class="muted small">…</div></div></div>
+  </section>
+
+  <footer class="muted small">Aktiv auf claude.ai, chatgpt.com, Gemini, Copilot, Mistral, Perplexity. Alles wird lokal geprüft.</footer>
+  <script src="popup.js"></script>
+</body>
+</html>
