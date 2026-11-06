@@ -230,6 +230,7 @@ def exe_tests(dist: Path) -> None:
         pdf = TMP / "vertrag.pdf"
         cv = canvas.Canvas(str(pdf))
         cv.drawString(72, 750, "Arbeitsvertrag mit Herrn Klaus Becker, IBAN DE89 3704 0044 0532 0130 00")
+        cv.drawString(72, 730, "Probezeit: 6 Monate, Gehalt laut Anlage")
         cv.save()
         img = text_image(TMP / "screenshot.png", ["Transfer to IBAN DE89 3704 0044 0532 0130 00"])
         r = c("--kein-sprachmodell", "scan", str(txt), str(pdf), str(img), str(ROOT / "tests" / "fixtures" / "gesicht.jpg"))
