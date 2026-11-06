@@ -59,3 +59,18 @@ test("Hinweise ohne doppelte Wörter", () => {
   assert.strictEqual(v.hints.length, new Set(v.hints).size, v.hints.join(","));
   assert.strictEqual(DW.contentCheck("Die Familie Familie Familie").warning, null);
 });
+
+test("Straße ohne ganzen Satz davor", () => {
+  const faelle = [
+    ["wohnt in der Hauptstraße 12, 10115 Berlin", "Hauptstraße 12"],
+    ["Büro: Karl-Marx-Straße 5a", "Karl-Marx-Straße 5a"],
+    ["Abholung Bad Homburger Weg 3", "Bad Homburger Weg 3"],
+    ["Lieferung an Kölner Straße 17", "Kölner Straße 17"],
+    ["Nach der Trennung von meinem Ehemann Herrn Thomas Schneider wohnt Lena in der Hauptstraße 12", "Hauptstraße 12"],
+  ];
+  for (const [text, adresse] of faelle) {
+    const found = DW.scan(text);
+    assert.ok(found.some((f) => f.kind === "ADRESSE" && f.text === adresse), `${text} -> ${JSON.stringify(found.map((f) => f.text))}`);
+  }
+  assert.ok(DW.scan(faelle[4][0]).some((f) => f.kind === "PERSON" && f.text === "Thomas Schneider"), "Name darf nicht verschluckt werden");
+});

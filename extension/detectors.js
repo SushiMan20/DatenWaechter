@@ -74,7 +74,8 @@
     ["TELEFON", "Telefonnummer",
       /(?<![\w+/.])(?:\+\d{1,3}|00\d{1,3}|0)[ /.-]?\(?\d{2,5}\)?(?:[ /.-]?\d{2,}){1,4}(?!\w|\.\d)/g, MITTEL, { minDigits: 7, maxDigits: 15 }],
     ["ADRESSE", "Straße und Hausnummer",
-      new RegExp(`(?<![\\p{L}\\d])[${UC}][${LC}]+(?:[- ][${UC}]?[${LC}]+)*(?:straße|strasse|str\\.|weg|gasse|platz|allee|ring|damm|ufer|chaussee|pfad|steig)\\s+\\d{1,4}(?:\\s?[a-zA-Z])?(?![\\p{L}\\d])`, "gu"), MITTEL],
+      // „Hauptstraße 12“, „Karl-Marx-Straße 5“, „Bad Homburger Weg 3“ – aber nie ganze Sätze davor
+      new RegExp(`(?<![\\p{L}\\d])(?:[${UC}][${LC}]+(?:-[${UC}][${LC}]+)*(?:straße|strasse|str\\.|weg|gasse|platz|allee|ring|damm|ufer|chaussee|pfad|steig)|(?:(?:[${UC}][${LC}]+-){1,3}|(?:(?:Bad|Sankt|St\\.|Alte|Neue|Große|Kleine|Obere|Untere) )?[${UC}][${LC}]+er )(?:Straße|Strasse|Str\\.|Weg|Gasse|Platz|Allee|Ring|Damm|Ufer|Chaussee|Pfad|Steig))\\s+\\d{1,4}(?:\\s?[a-zA-Z])?(?![\\p{L}\\d])`, "gu"), MITTEL],
     ["ADRESSE", "PLZ und Ort",
       new RegExp(`(?<![\\d.,\\p{L}])\\d{5}\\s+(?!(?:Euro|EUR|Stück|Mal|Jahre|Tage|Mitarbeiter|Kunden|Nutzer)(?![\\p{L}]))[${UC}][${LC}]+(?:[ -](?:am|an der|im|ob der)?\\s?[${UC}][${LC}]+)?(?![\\p{L}])`, "gu"), MITTEL],
     ["PERSON", "Name (Anrede)",

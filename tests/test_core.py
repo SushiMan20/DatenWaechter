@@ -46,6 +46,19 @@ def test_findet_alles_im_beispiel():
     assert any(k == "API_SCHLUESSEL" and t.startswith("sk-ant-") for k, t in kinds(BEISPIEL))
 
 
+@pytest.mark.parametrize("text,adresse", [
+    ("wohnt in der Hauptstraße 12, 10115 Berlin", "Hauptstraße 12"),
+    ("Büro: Karl-Marx-Straße 5a", "Karl-Marx-Straße 5a"),
+    ("Abholung Bad Homburger Weg 3", "Bad Homburger Weg 3"),
+    ("Lieferung an Kölner Straße 17", "Kölner Straße 17"),
+    ("Nach der Trennung von meinem Ehemann Herrn Thomas Schneider wohnt Lena in der Hauptstraße 12", "Hauptstraße 12"),
+])
+def test_strasse_ohne_ganzen_satz(text, adresse):
+    found = [(f.kind, f.text) for f in scan_text(text)]
+    assert ("ADRESSE", adresse) in found, found
+    assert all(len(t) <= len(adresse) for k, t in found if k == "ADRESSE"), "nie mehr als die Adresse markieren"
+
+
 def test_ausweisnummer():
     assert [(f.kind, f.text) for f in scan_text("Ausweisnummer: L01X00T47")] == [("AUSWEIS", "L01X00T47")]
     assert scan_text("Ausweisnummer: unbekannt") == []

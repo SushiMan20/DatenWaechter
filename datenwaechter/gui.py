@@ -28,6 +28,7 @@ from .detectors import HOCH, SEVERITY_LABEL, scan_text
 from .faces import available as faces_available
 from .icons import FARBEN, shield
 from .palette import ActionPalette
+from .toast import TrayPopup
 from .stats import Stats
 from .tray import Tray
 
@@ -125,6 +126,7 @@ class App:
         self._ki_popup = None
         self._ki_palette = None
         self._llm_info = None
+        self._last_popup = None
         self.bridge = hotkey.bridge()
         self.hotkey = None
 
@@ -823,13 +825,12 @@ class App:
         self._status(note or "✔ Keine sensiblen Daten gefunden", FARBEN["pause"] if note else FARBEN["aktiv"])
 
     # ------------------------------------------------------------------ Warnungen
-    def _dialog(self, title: str, rows: list[tuple[str, dict]], verdicts=(), notes=()) -> tk.Toplevel:
-        self.root.bell()
-        self._count("gewarnt")
+    def _dialog(self, title: str, rows: list[tuple[str, dict]], verdicts=(), notes=(), count: bool = True) -> tk.Toplevel:
+        if count:
+            self.root.bell()
+            self._count("gewarnt")
         self._alerts += 1
         self._refresh()
-        if not self.root.winfo_viewable():
-            self.tray.notify("Datenwächter – Achtung", title)
         dlg = tk.Toplevel(self.root)
 
         def closed(e):
@@ -871,16 +872,81 @@ class App:
         dlg.focus_force()
         return dlg
 
+    # Kurzbezeichnungen für die Benachrichtigung
+    KURZ = {"PERSON": "Name", "IBAN": "IBAN", "KREDITKARTE": "Kreditkarte", "STEUER_ID": "Steuer-ID",
+            "SOZIALVERSICHERUNG": "SV-Nummer", "AUSWEIS": "Ausweisnummer", "GEBURTSDATUM": "Geburtsdatum",
+            "EMAIL": "E-Mail", "TELEFON": "Telefon", "ADRESSE": "Adresse", "IP_ADRESSE": "IP-Adresse",
+            "API_SCHLUESSEL": "API-Schlüssel", "PASSWORT": "Passwort", "PRIVATER_SCHLUESSEL": "privater Schlüssel",
+            "TOKEN": "Token", "ZUGANGSDATEN_URL": "Datenbank-Zugang", "GESICHT": "Gesicht"}
+
+    def _summary(self, kinds: list[str]) -> str:
+        names = list(dict.fromkeys(self.KURZ.get(k, k.title()) for k in kinds))
+        return " · ".join(names[:4]) + (f"  +{len(names) - 4}" if len(names) > 4 else "")
+
+    def _popup(self, **kw) -> TrayPopup:
+        """Benachrichtigung unten rechts; zählt als Warnung und färbt das Tray-Symbol, solange sie sichtbar ist."""
+        self.root.bell()
+        self._count("gewarnt")
+        self._alerts += 1
+        self._refresh()
+        pop = TrayPopup(self.root, dark=self.t is THEMES["dunkel"], font=FONT, **kw)
+
+        def gone(e):
+            if e.widget is pop:
+                self._alerts = max(0, self._alerts - 1)
+                self._refresh()
+        pop.bind("<Destroy>", gone)
+        self._last_popup = pop
+        return pop
+
     def _warn_text(self, text: str, findings, verdict) -> None:
+        """Kopierter Text mit sensiblen Daten -> Benachrichtigung unten rechts."""
         verdicts = [verdict] if verdict and verdict.warning else []
-        rows = [("Text", {"label": f.label, "display": f.masked(), "severity": f.severity}) for f in findings]
+        safe = bool(findings) and self.safe.get()
         self._status(f"⚠ {len(findings)} Fund(e) in kopiertem Text" if findings
                      else "⚠ Sensibles Thema im kopierten Text", "#c62828")
-        dlg = self._dialog(f"Du hast {len(findings)} sensible Angabe(n) kopiert" if findings
-                           else "Bitte kurz prüfen, was du kopiert hast", rows, verdicts)
-        b = dlg.buttons
-        if findings and self.safe.get():
+        if safe:
             self._count("anonymisiert")
+
+        def original():
+            self._set_clipboard_text(text)
+            self._status("Original in die Zwischenablage gelegt", FARBEN["pause"])
+
+        def anonymize():
+            self._count("anonymisiert")
+            self._set_clipboard_text(self.anon.anonymize(text, findings))
+            self._status("✔ Anonymisierte Fassung in der Zwischenablage", FARBEN["aktiv"])
+
+        def leeren():
+            self._set_clipboard_text("")
+            self._status("Zwischenablage geleert")
+
+        topic = f"Thema: {', '.join(verdicts[0].categories)}" if verdicts and verdicts[0].categories else ""
+        if findings:
+            actions = [("Original verwenden", original, False)] if safe else [("Anonymisieren", anonymize, True)]
+            status = ("✔ In der Zwischenablage liegt jetzt die anonymisierte Fassung." if safe
+                      else "Das Original liegt noch in der Zwischenablage.")
+            self._popup(level="warnung", title=f"{len(findings)} sensible Angabe(n) kopiert",
+                        summary=self._summary([f.kind for f in findings]), topic=topic, status=status,
+                        actions=actions, timeout_ms=9000 if safe else 20000,
+                        on_details=lambda: self._warn_text_dialog(text, findings, verdict, safe))
+        else:
+            v = verdicts[0] if verdicts else None
+            hints = ", ".join(f"„{h}“" for h in (v.hints if v else [])[:3])
+            summary = (f"{', '.join(v.categories)}" + (f" – erkannt an {hints}" if hints else "")) if v else ""
+            self._popup(level="thema", title="Sensibles Thema kopiert", summary=summary,
+                        status="Willst du das wirklich teilen?",
+                        actions=[("Zwischenablage leeren", leeren, False)], timeout_ms=12000,
+                        on_details=lambda: self._warn_text_dialog(text, findings, verdict, False))
+
+    def _warn_text_dialog(self, text: str, findings, verdict, already_anonymized: bool) -> None:
+        """Ausführliche Ansicht („Details“) mit allen Funden."""
+        verdicts = [verdict] if verdict and verdict.warning else []
+        rows = [("Text", {"label": f.label, "display": f.masked(), "severity": f.severity}) for f in findings]
+        dlg = self._dialog(f"Du hast {len(findings)} sensible Angabe(n) kopiert" if findings
+                           else "Bitte kurz prüfen, was du kopiert hast", rows, verdicts, count=False)
+        b = dlg.buttons
+        if findings and already_anonymized:
             ttk.Label(b, text="Die Zwischenablage enthält bereits die anonymisierte Fassung.").pack(anchor="w")
             ttk.Button(b, text="✔ Anonymisiert lassen", command=dlg.destroy).pack(side="left")
         elif findings:
@@ -913,8 +979,7 @@ class App:
         self._status(f"⚠ {len(rows)} Fund(e) in {len(reports)} Datei(en)", "#c62828")
         title = (f"{len(rows)} sensible Angabe(n) gefunden" if rows else
                  "Bitte kurz prüfen, was du hochlädst" if verdicts else "Nicht vollständig prüfbar")
-        dlg = self._dialog(title, rows, verdicts, notes)
-        b = dlg.buttons
+        ui = {"close": lambda: None}
 
         def anonymize():
             self._count("anonymisiert", sum(1 for r in reports if r.can_anonymize))
@@ -934,17 +999,43 @@ class App:
             if origin == "drop" and outs and sys.platform == "win32":
                 subprocess.Popen(["explorer", "/select,", outs[0]])
             self._status("✔ Anonymisierte Fassung bereit – jetzt einfügen (Strg+V) oder hineinziehen", "#2e7d32")
-            dlg.destroy()
+            ui["close"]()
 
         def original():
             self._release(paths, origin, True, original_image)
-            dlg.destroy()
+            ui["close"]()
 
         def abbrechen():
             if hold:
                 winclip.clear()
                 self._mark_own_write()
-            dlg.destroy()
+            ui["close"]()
+
+        if origin.startswith("clipboard"):   # beim Kopieren: Benachrichtigung unten rechts
+            what = "Screenshot" if origin == "clipboard-image" else (
+                reports[0].name if len(reports) == 1 else f"{len(reports)} Dateien")
+            kinds = [row["kind"] for r in reports for row in r.rows()]
+            topic = "; ".join(f"Thema: {', '.join(v.categories)}" for v in verdicts if v.categories)
+            if can_anon:
+                actions = [("Geschwärzt einfügen", anonymize, True), ("Original", original, False)]
+                status = "Bis du entscheidest, ist die Zwischenablage leer." if hold else ""
+            else:
+                actions = [("Trotzdem verwenden", original, True), ("Verwerfen", abbrechen, False)]
+                status = "; ".join(notes[:2])
+            self._popup(level="warnung" if rows else "thema",
+                        title=f"{what}: {len(rows)} sensible Angabe(n)" if rows else f"{what}: bitte prüfen",
+                        summary=self._summary(kinds), topic=topic, status=status, actions=actions,
+                        on_details=lambda: self._files_dialog(title, rows, verdicts, notes, can_anon, anonymize,
+                                                              original, abbrechen, ui),
+                        on_close=abbrechen)
+            return
+        self._files_dialog(title, rows, verdicts, notes, can_anon, anonymize, original, abbrechen, ui, count=True)
+
+    def _files_dialog(self, title, rows, verdicts, notes, can_anon, anonymize, original, abbrechen, ui,
+                      count: bool = False) -> None:
+        dlg = self._dialog(title, rows, verdicts, notes, count=count)
+        ui["close"] = dlg.destroy
+        b = dlg.buttons
         if can_anon:
             ttk.Button(b, text="✔ Anonymisierte Fassung erstellen", command=anonymize).pack(side="left")
             ttk.Button(b, text="Original trotzdem verwenden", command=original).pack(side="left", padx=6)

@@ -150,8 +150,12 @@ RULES: list[Rule] = [
          re.compile(r"(?<![\w+/.])(?:\+\d{1,3}|00\d{1,3}|0)[ /.-]?\(?\d{2,5}\)?(?:[ /.-]?\d{2,}){1,4}(?!\w|\.\d)"),
          MITTEL, min_digits=7, max_digits=15),
     Rule("ADRESSE", "Straße und Hausnummer",
-         re.compile(rf"\b[{_UC}][{_LC}]+(?:[- ][{_UC}]?[{_LC}]+)*"
+         # „Hauptstraße 12“, „Karl-Marx-Straße 5“, „Bad Homburger Weg 3“ – aber nie ganze Sätze davor
+         re.compile(rf"\b(?:[{_UC}][{_LC}]+(?:-[{_UC}][{_LC}]+)*"
                     rf"(?:straße|strasse|str\.|weg|gasse|platz|allee|ring|damm|ufer|chaussee|pfad|steig)"
+                    rf"|(?:(?:[{_UC}][{_LC}]+-){{1,3}}|(?:(?:Bad|Sankt|St\.|Alte|Neue|Große|Kleine|Obere|Untere) )?"
+                    rf"[{_UC}][{_LC}]+er )"
+                    rf"(?:Straße|Strasse|Str\.|Weg|Gasse|Platz|Allee|Ring|Damm|Ufer|Chaussee|Pfad|Steig))"
                     rf"\s+\d{{1,4}}(?:\s?[a-zA-Z])?\b"), MITTEL),
     Rule("ADRESSE", "PLZ und Ort",
          re.compile(rf"(?<![\d.,])\b\d{{5}}\s+(?!(?:Euro|EUR|Stück|Mal|Jahre|Tage|Mitarbeiter|Kunden|Nutzer)\b)"

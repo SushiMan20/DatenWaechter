@@ -161,13 +161,13 @@ Desktop-Apps lassen sich nicht sauber beim Hineinziehen abfangen. Das ginge nur 
 Virenscannern blockiert. Auch ihren eigenen „Datei hinzufügen“-Dialog kann kein anderes Programm abfangen.
 Das Fenster setzt deshalb an der **Zwischenablage** und an einer eigenen **Ablagefläche** an:
 
-- **Text kopiert:** Im *sicheren Modus* liegt sofort nur noch die anonymisierte Fassung in der Zwischenablage. Das Original holst du mit einem Klick zurück.
+- **Text kopiert:** Unten rechts über dem Infobereich erscheint eine kurze **Benachrichtigung**. Sie zeigt, was gefunden wurde, z. B. „Name · IBAN · Telefon“, und nimmt dem Programm, in das du einfügen willst, nicht den Fokus weg. Im *sicheren Modus* liegt sofort nur noch die anonymisierte Fassung in der Zwischenablage, und die Benachrichtigung verschwindet nach ein paar Sekunden von selbst. Fährst du mit der Maus darüber, bleibt sie stehen. „Original verwenden“ holt das Original zurück, „Details“ zeigt die volle Liste.
 - **Screenshot kopiert (Win+Umschalt+S):** Das Bild wird gelesen. Bei Funden kommt die Warnung, und die geschwärzte Fassung geht in die Zwischenablage.
 - **Datei im Explorer kopiert (Strg+C):** Die Datei wird geprüft, Strg+V im Chat fügt die geschwärzte Kopie ein.
 - **Datei ins Fenster ziehen:** Die geschwärzte Kopie erscheint im Explorer und kann direkt in die App weitergezogen werden.
 - **KI-Antwort zurückübersetzen:** Platzhalter werden wieder zu echten Namen.
 
-![Warnung im Fenster](docs/gui-warnung.png)
+![Benachrichtigung unten rechts](docs/benachrichtigung.png)
 
 ### Optionale Zusätze
 
