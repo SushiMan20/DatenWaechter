@@ -76,6 +76,14 @@ nur die rechte Fassung. Die echten Werte stehen in der Datei nicht mehr drin.
 
 ![Vorher/Nachher](docs/schwaerzung.png)
 
+### KI-Desktop-Apps (ChatGPT, Claude, Copilot)
+
+Ziehst du eine Datei über das Fenster der App, legt sich eine Auffangfläche darüber: Die Datei landet erst beim
+Datenwächter, wird geprüft und dann – Original oder geschwärzt – an die App übergeben. Im Fenster „Datei öffnen“ der App
+hält er „Öffnen“, Enter und Doppelklick kurz an, bis die Datei geprüft ist.
+
+<p align="center"><img src="docs/drop-schutz.png" alt="Auffangfläche über der ChatGPT-App beim Hineinziehen einer Datei" width="760"></p>
+
 ### KI-Aktionen
 
 Text markieren – in jedem Windows-Programm erscheint daneben ein kleiner **✨ KI**-Knopf. Alternativ

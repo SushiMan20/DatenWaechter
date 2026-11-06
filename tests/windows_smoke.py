@@ -416,6 +416,15 @@ def t_dialog_schutz():
         pop.buttons[name].event_generate("<Button-1>")
         return None
 
+    def sicher_(fn):
+        def wrapper():
+            try:
+                fn()
+            except Exception as e:  # noqa: BLE001
+                out.setdefault("fehler", f"{fn.__name__}: {type(e).__name__}: {e}")
+                app._quit()
+        return wrapper
+
     def schritt1():   # Datei mit IBAN, Klick auf „Öffnen“ -> Rückfrage -> geschwärzt
         try:
             p, d = kind()
@@ -423,7 +432,7 @@ def t_dialog_schutz():
             l, t, r, b = schutz.rechteck(d.ok)
             _klick((l + r) // 2, (t + b) // 2)
             out["p"] = p
-            app.root.after(3500, schritt1b)
+            app.root.after(3500, sicher_(schritt1b))
         except Exception as e:  # noqa: BLE001
             out["fehler"] = f"Schritt 1: {e}"
             app._quit()
@@ -432,7 +441,7 @@ def t_dialog_schutz():
         fehler = popup_knopf("Geschwärzt übergeben")
         pfad = ergebnis(out["p"])
         out["geschwaerzt"] = (fehler, pfad)
-        app.root.after(500, schritt2)
+        app.root.after(500, sicher_(schritt2))
 
     def schritt2():   # harmlose Datei per Enter -> geht ohne Rückfrage durch
         try:
@@ -443,14 +452,14 @@ def t_dialog_schutz():
             u.keybd_event(0x0D, 0, 0, 0)
             u.keybd_event(0x0D, 0, 2, 0)
             out["p"] = p
-            app.root.after(3500, schritt2b)
+            app.root.after(3500, sicher_(schritt2b))
         except Exception as e:  # noqa: BLE001
             out["fehler"] = f"Schritt 2: {e}"
             app._quit()
 
     def schritt2b():
         out["harmlos"] = ergebnis(out["p"])
-        app.root.after(500, schritt3)
+        app.root.after(500, sicher_(schritt3))
 
     def schritt3():   # Doppelklick auf „Vertrag“ in der Liste -> Rückfrage -> Original
         try:
@@ -468,7 +477,7 @@ def t_dialog_schutz():
             r = el.CurrentBoundingRectangle
             _klick((r.left + r.right) // 2, (r.top + r.bottom) // 2, doppel=True)
             out["p"] = p
-            app.root.after(3500, schritt3b)
+            app.root.after(3500, sicher_(schritt3b))
         except Exception as e:  # noqa: BLE001
             out["doppel"] = (f"Schritt 3: {e}", "")
             app.root.after(100, app._quit)
@@ -478,7 +487,8 @@ def t_dialog_schutz():
         out["doppel"] = (fehler, ergebnis(out["p"]))
         app._quit()
 
-    app.root.after(1500, schritt1)
+    app.root.after(1500, sicher_(schritt1))
+    app.root.after(90000, lambda: (out.setdefault("fehler", "Zeitüberschreitung"), app._quit()))
     try:
         app.run()
     finally:
@@ -567,6 +577,7 @@ def t_drop_schutz():
 
     app.root.after(1500, lambda: threading.Thread(target=ziehen, daemon=True).start())
     app.root.after(12000, pruefen)
+    app.root.after(60000, lambda: (out.setdefault("fehler", "Zeitüberschreitung"), app._quit()))
     try:
         app.run()
     finally:

@@ -21,7 +21,7 @@ class Auffangflaeche(tk.Toplevel):
         self.overrideredirect(True)
         self.attributes("-topmost", True)
         try:
-            self.attributes("-alpha", 0.92)
+            self.attributes("-alpha", 0.86)
         except tk.TclError:
             pass
         self.on_drop = on_drop
