@@ -1,234 +1,204 @@
-# 🛡 Datenwächter
+<p align="center">
+  <img src="docs/banner.png" alt="Datenwächter – sensible Daten erkennen und anonymisieren, bevor sie in ChatGPT, Claude &amp; Co. landen" width="100%">
+</p>
 
-Prüft Texte, PDFs, Word-Dateien, Bilder und Fotos, **bevor** sie in Claude, ChatGPT, Codex & Co. landen.
-Alles läuft lokal auf deinem PC, es geht nichts ins Internet.
+<p align="center">
+  <a href="https://github.com/SushiMan20/TestRepo/actions/workflows/windows.yml"><img src="https://github.com/SushiMan20/TestRepo/actions/workflows/windows.yml/badge.svg" alt="Windows-Build"></a>
+  <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4" alt="Windows 10 | 11">
+  <img src="https://img.shields.io/badge/Browser-Chrome%20%7C%20Edge%20%7C%20Brave-4285F4" alt="Chrome | Edge | Brave">
+  <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB" alt="Python 3.10+">
+  <img src="https://img.shields.io/badge/l%C3%A4uft-lokal-2e7d32" alt="läuft lokal">
+</p>
 
-Der Datenwächter beantwortet zwei Fragen:
+**Datenwächter** prüft Texte, PDFs (auch eingescannte), Word-Dateien, Screenshots und Fotos, **bevor** sie in einen KI-Chat
+hochgeladen werden. Findet er Namen, Bankdaten, Adressen, Zugangsdaten oder Gesichter, warnt er. Du kannst dann
+eine anonymisierte Fassung hochladen, das Original verwenden oder abbrechen. Die Prüfung läuft auf deinem Rechner.
 
-1. **Welche sensiblen Daten stecken drin?** Zum Beispiel IBAN, Namen, Adressen, API-Schlüssel oder Gesichter auf Fotos.
-2. **Was lädst du da eigentlich hoch?** Zum Beispiel: *„Du lädst gerade Familienunterlagen hoch (Sorgerecht, Jugendamt, Tochter). Willst du das wirklich?“*
+> 🇬🇧 *Datenwächter (“data guardian”) checks what you paste or upload into AI chats such as ChatGPT or Claude for personal
+> and confidential data (IBANs, names, addresses, API keys, faces) and offers an anonymized version instead. It runs
+> locally as a Windows app and a Chrome/Edge extension. The UI and documentation are in German.*
 
-Danach entscheidest du: **anonymisiert hochladen**, **Original hochladen** oder **abbrechen**.
+<p align="center"><img src="docs/browser-warnung.png" alt="Warnung beim Hochladen eines Arbeitsvertrags in einen KI-Chat" width="860"></p>
 
-| Inhalts-Check | Fundliste |
+## Was er kann
+
+- **Prüft beim Hochladen, Einfügen und Kopieren.** Im Browser fängt er Drag & Drop, „Datei hinzufügen“ und Strg+V auf claude.ai, chatgpt.com, Gemini, Copilot, Mistral und Perplexity ab. Unter Windows prüft er alles, was du kopierst, auch Dateien und Screenshots.
+- **Erkennt sensible Daten:** IBAN, Kreditkarte und Steuer-ID (jeweils mit Prüfsumme), Sozialversicherungs-, Ausweis- und Passnummer, API-Schlüssel, Passwörter, E-Mail, Telefon, Adressen, Geburtsdaten, Namen und Gesichter auf Fotos.
+- **Liest Bilder und Scans** mit der Windows-Texterkennung, alternativ mit Tesseract.
+- **Schwärzt statt zu löschen.** PDFs und Bilder behalten ihr Layout, Funde bekommen einen Kasten mit Platzhalter wie `[IBAN_1]`, Gesichter werden verpixelt.
+- **Sagt dir, *was* du hochlädst:** „Du lädst gerade Familienunterlagen hoch – willst du das?“
+- **Übersetzt KI-Antworten zurück:** Aus `[PERSON_1]` wird wieder der echte Name.
+- **Optional mit eigenem KI-Server** (OpenAI-kompatible API mit Adresse und Token). Die KI bewertet dann Inhalte und Fotos genauer und findet auch Namen ohne „Herr/Frau“.
+- **KI-Aktionen** wie „Umformulieren“, „Kürzen“, „Übersetzen“ oder eigene Anweisungen. Im Browser per Rechtsklick, in jedem Windows-Programm per Strg+Alt+Leertaste.
+
+## So sieht es aus
+
+### Im Browser
+
+| Fund-Warnung beim Hochladen | Themen-Warnung beim Einfügen (dunkel) |
 |---|---|
-| ![Inhalts-Warnung](docs/browser-inhalt.png) | ![Fund-Warnung](docs/browser-warnung.png) |
+| ![Fund-Warnung](docs/browser-warnung.png) | ![Themen-Warnung](docs/browser-thema-dunkel.png) |
 
-## Oberfläche: Tray-Symbol, Fenster und Browser-Leiste
+Klickst du in der Browserleiste auf das Datenwächter-Symbol, siehst du den Schutzstatus, kannst pausieren und siehst
+die Tageszähler. Außerdem zeigt das Fenster, ob der lokale Scanner und der KI-Server verbunden sind.
 
-Ein **Schild im Infobereich** zeigt auf einen Blick den Zustand: grün = Schutz aktiv, blau = prüft gerade,
-rot = Warnung, orange = pausiert. Ein **Rechtsklick** öffnet das Menü mit diesen Punkten: Schutz an/aus,
-15 Minuten pausieren, Datei prüfen, KI-Antwort zurückübersetzen, Einstellungen, Mit Windows starten und Beenden.
-Kommt eine Warnung, während das Fenster geschlossen ist, erscheint eine Windows-Benachrichtigung.
+<p align="center"><img src="docs/browser-popup.png" alt="Fenster der Browser-Erweiterung, hell und dunkel" width="560"></p>
 
-![Fenster und Tray-Symbole](docs/oberflaeche.png)
+### Auf dem Windows-Desktop
 
-- **Ein Schalter** schaltet den Schutz an und aus. Nach einer Pause schaltet er sich automatisch wieder ein.
-- Die **Ablagefläche** prüft Dateien, die du hineinziehst.
-- Die **Tageszähler** zeigen geprüft, gewarnt und anonymisiert. Gezählt werden nur Zahlen, keine Inhalte.
-- **„Zuletzt“** zeigt die letzten Ereignisse mit Uhrzeit.
-- **Schließen (X)** blendet nur das Fenster aus, der Schutz läuft im Infobereich weiter. Mit „Mit Windows starten“ läuft der Datenwächter ab der Anmeldung (`datenwaechter gui --minimiert`).
-- Das Fenster ist **hell oder dunkel**, passend zur Windows-Einstellung.
+Ein Schild im Infobereich zeigt den Zustand: grün = aktiv, blau = prüft, rot = Warnung, orange = pausiert. Kopierst du
+etwas Sensibles, erscheint unten rechts eine Benachrichtigung. Im *sicheren Modus* liegt dann schon die anonymisierte
+Fassung in der Zwischenablage.
 
-**In der Browser-Leiste** zeigt das Datenwächter-Symbol denselben Zustand. Pausiert trägt es den Hinweis „AUS“.
-Ein Klick zeigt Schalter, Pause-Knöpfe, die Tageszähler und ob der lokale Scanner und der KI-Server verbunden sind.
+| Hell | Dunkel (folgt der Windows-Einstellung) |
+|---|---|
+| ![Desktop hell](docs/desktop-hell.png) | ![Desktop dunkel](docs/desktop-dunkel.png) |
 
-![Fenster der Browser-Erweiterung](docs/browser-popup.png)
+### Schwärzen statt hochladen
 
-**Anonymisieren heißt bei PDFs und Bildern schwärzen.** Das Layout bleibt erhalten. Funde werden mit einem Kasten
-samt Platzhalter überdeckt, Gesichter werden verpixelt. Der Originaltext ist danach nicht mehr in der Datei enthalten.
+Aus einem eingescannten Brief wird ein geschwärztes PDF, aus einem Foto eines mit verpixeltem Gesicht. Hochgeladen wird
+nur die rechte Fassung. Die echten Werte stehen in der Datei nicht mehr drin.
 
-![Schwärzung](docs/schwaerzung.png)
+![Vorher/Nachher](docs/schwaerzung.png)
 
-## Installation (Windows)
+### KI-Aktionen
 
-1. **`Datenwaechter-Setup-1.0.0.exe`** herunterladen und starten. Die Datei liegt unter *Releases* bzw. im Ergebnis des Builds *Windows-Programm* unter *Actions*. Der Installer braucht keine Admin-Rechte und kein Python.
-2. Danach erscheint das grüne Schild im Infobereich. Der Schutz der Zwischenablage läuft ab jetzt, auf Wunsch auch automatisch nach der Windows-Anmeldung.
-3. **Browser-Erweiterung** einmalig laden: `chrome://extensions` bzw. `edge://extensions` öffnen, den **Entwicklermodus** einschalten, **Entpackte Erweiterung laden** wählen und den Ordner *Datenwächter – Browser-Erweiterung* aus dem Startmenü auswählen. Die Verbindung zum Scanner (für PDFs, Bilder und KI-Aktionen) richtet der Installer automatisch ein.
+Text markieren, dann im Browser Rechtsklick auf **„Mit KI bearbeiten …“** oder in einem beliebigen Windows-Programm
+**Strg+Alt+Leertaste**. Das Ergebnis ersetzt die Markierung, wird darunter eingefügt oder angezeigt. Tippst du etwas
+ein, filtert das die Liste. Passt keine Aktion, wird das Getippte als eigene Anweisung ausgeführt.
 
-Ohne Installer geht es auch mit Python, siehe *Die zwei Bausteine* unten. Den Installer baust du selbst mit `packaging\build_windows.ps1`.
+| Browser | Windows (hell / dunkel) |
+|---|---|
+| ![Aktionsleiste im Browser](docs/aktionsleiste-browser.png) | ![Aktionsleiste unter Windows](docs/ki-aktionen-windows.png) |
 
-## Was geprüft wird
+Eigene Aktionen legst du unter *Einstellungen → KI-Aktionen bearbeiten* an:
 
-| | Wie | Ergebnis beim Anonymisieren |
+<p align="center"><img src="docs/ki-aktionen-editor.png" alt="Editor für eigene KI-Aktionen" width="620"></p>
+
+## Installation
+
+### 1. Windows-Programm
+
+1. **`Datenwaechter-Setup-x.y.z.exe`** herunterladen. Die Datei findest du unter [Releases](../../releases) oder im letzten erfolgreichen Lauf von [*Windows-Programm*](../../actions/workflows/windows.yml) unter *Artifacts*.
+2. Installieren. Du brauchst keine Admin-Rechte und kein Python. Der Installer ist nicht signiert, deshalb fragt Windows beim ersten Start nach: *Weitere Informationen → Trotzdem ausführen*.
+3. Fertig: Das grüne Schild erscheint im Infobereich. Wenn du willst, startet der Datenwächter künftig automatisch mit Windows.
+
+### 2. Browser-Erweiterung (Chrome, Edge, Brave)
+
+1. `chrome://extensions` bzw. `edge://extensions` öffnen und den **Entwicklermodus** einschalten.
+2. **Entpackte Erweiterung laden** wählen und den Ordner *Datenwächter – Browser-Erweiterung* auswählen. Eine Verknüpfung dazu legt der Installer im Startmenü an.
+3. Die Verbindung zum Windows-Programm, die für PDFs, Bilder und KI-Aktionen nötig ist, richtet der Installer automatisch ein. Ohne das Programm prüft die Erweiterung nur Text.
+
+### Mit Python (für Entwickler und andere Systeme)
+
+```bash
+pip install ".[windows,gesichter]"     # unter Windows: Tray, Windows-Texterkennung, Gesichter
+datenwaechter-gui                      # Fenster + Tray-Symbol
+datenwaechter browser-bruecke          # Browser-Erweiterung mit dem Scanner verbinden
+```
+
+Unter Linux/macOS: `pip install ".[tesseract,gesichter]"` und Tesseract mit Sprachpaket Deutsch installieren.
+
+## Eigener KI-Server (optional)
+
+Ohne KI arbeitet der Datenwächter mit Regeln und Stichwörtern. Mit einer KI wird er genauer. Unter *Einstellungen →
+KI-Server einrichten* trägst du die **API-Adresse** und dein **Token** ein. Das funktioniert mit jedem Dienst, der die
+OpenAI-Schnittstelle (`/v1/chat/completions`) spricht, z. B. OpenAI, Azure OpenAI, Mistral, OpenRouter, ein
+Firmen-Gateway, LM Studio oder vLLM.
+
+<p align="center"><img src="docs/ki-server.png" alt="KI-Server einrichten: API-Adresse, Token, Modell" width="620"></p>
+
+Du legst fest, was die KI prüfen soll:
+
+- **Inhalt bewerten:** z. B. „Du lädst gerade Personal- und Arbeitsunterlagen hoch“.
+- **Namen ohne „Herr/Frau“ finden**, z. B. den Kindernamen „Mia Schneider“ in einem Gerichtsbrief.
+- **Fotos und Screenshots bewerten**, z. B. „Foto eines Ausweises“.
+- **Vor dem Senden anonymisieren:** IBAN, Telefon und bekannte Namen gehen nur als Platzhalter raus.
+
+Bei einem **externen Server** sagt der Dialog genau, was deinen Rechner verlässt. Standardmäßig wird vorher
+anonymisiert, und Fotos werden nicht gesendet. Das Token liegt in der Windows-Anmeldeinformationsverwaltung. Für
+Firmen-Rollouts gibt es zusätzlich die Umgebungsvariablen `DATENWAECHTER_LLM_URL`, `DATENWAECHTER_LLM_TOKEN` und
+`DATENWAECHTER_LLM_MODELL`.
+
+```bash
+datenwaechter ki-server --url https://gateway.firma.de/v1 --token - --modell gpt-4.1-mini --testen
+```
+
+## Datenschutz: Was passiert mit meinen Daten?
+
+| | Ohne KI-Server | Mit eigenem KI-Server |
 |---|---|---|
-| Text, Code, CSV, JSON … | Regeln mit Prüfsummen | Platzhalter wie `[IBAN_1]` |
-| Word (.docx) | Regeln | .docx mit Platzhaltern |
-| PDF mit Text | Regeln, Position jedes Zeichens | geschwärztes PDF |
-| **Eingescanntes PDF** | Texterkennung (OCR) | geschwärztes PDF |
-| **Bilder / Screenshots** | Texterkennung (OCR) | geschwärztes Bild |
-| **Fotos von Personen** | Gesichtserkennung (OpenCV) | Gesichter verpixelt |
-| **Motiv eines Fotos** („Ausweis“, „Kind am Strand“) | KI-Server mit Bildverständnis (optional) | Warnung mit Beschreibung |
+| Erkennung von IBAN, Namen, Adressen … | lokal | lokal |
+| Texterkennung, Gesichter, Schwärzen | lokal | lokal |
+| Inhalts-Check | lokal (Stichwörter) | Text an deinen Server, standardmäßig anonymisiert |
+| Fotos bewerten | – | nur wenn eingeschaltet |
+| Namen ohne Anrede finden | – | nur wenn eingeschaltet; bekannte Angaben vorher als Platzhalter |
+| Statistik, Telemetrie | nur Tageszähler (Zahlen) auf deinem PC | dito |
 
-**Sensible Daten:** IBAN, Kreditkarte, Steuer-ID (jeweils mit Prüfsumme), Sozialversicherungsnummer, Ausweis-/Passnummer, API-Schlüssel
-(Anthropic, OpenAI, AWS, GitHub, Google, Slack, Stripe), private Schlüssel, Tokens, Passwörter, Datenbank-Zugänge,
-Namen (nach Anrede, mit KI-Modell auch ohne), E-Mail, Telefon, Adressen, Geburtsdatum, IP-Adressen.
+Die Zuordnung der Platzhalter (`[PERSON_1]` = …) bleibt auf deinem Rechner, damit du KI-Antworten zurückübersetzen kannst.
 
-**Inhalts-Check:** Familie, Gesundheit, Finanzen, Recht, Personal/Arbeit, Ausweise, Firmeninterna und besonders
-geschützte Daten nach Art. 9 DSGVO (Religion, Politik, Gewerkschaft, Sexualität). Ohne weitere Installation arbeitet
-der Check mit Stichwörtern ([`kategorien.json`](datenwaechter/kategorien.json), leicht erweiterbar). Mit einem
-**KI-Server** (siehe unten) liest ein Sprachmodell den Inhalt tatsächlich und bewertet auch Fotos.
+## Was erkannt wird
 
-## KI: lokales Modell per Klick oder eigener KI-Server
-
-Unter *Einstellungen → KI-Server einrichten* gibt es zwei Wege, die sich auch kombinieren lassen:
-
-- **Lokales KI-Modell, läuft komplett auf deinem PC.** Der Datenwächter installiert auf Knopfdruck das kostenlose Programm Ollama (über winget) und lädt das gewählte Modell mit Fortschrittsanzeige herunter:
-  - *Empfohlen:* `gemma3:4b`, versteht Text und Bilder, 3,3 GB
-  - *Klein und schnell:* `gemma3:1b`, nur Text, 0,8 GB
-  - *Genauer:* `qwen2.5vl:7b`, 6 GB
-- **Eigener KI-Server** mit URL und Token, Details unten.
-
-**Die KI prüft mit.** Sie bewertet, was du hochlädst („Familienunterlagen“, „Foto eines Ausweises“). Auf Wunsch sucht sie zusätzlich **Namen ohne „Herr/Frau“**, Adressen und Geburtsdaten, z. B. den Kindernamen „Mia Schneider“ in einem Gerichtsbrief. Das schaltest du unter *Einstellungen* ein. Diese Namenssuche läuft nur mit einem lokalen Modell oder einem Server im eigenen Netz. An externe Anbieter müsste der Datenwächter dafür genau die Daten schicken, die geschützt werden sollen.
-
-## KI-Server für den Inhalts-Check: Ollama oder eigener OpenAI-kompatibler Server
-
-Du kannst jeden Server nutzen, der die OpenAI-Schnittstelle (`/v1/chat/completions`) spricht, mit eigener URL und eigenem Token.
-Beispiele: LM Studio, vLLM, LocalAI, llama.cpp-Server, Ollama im OpenAI-Modus, ein Firmen-Gateway, OpenRouter, Mistral oder OpenAI.
-
-| Im Fenster | Kommandozeile |
+| Stufe | Daten |
 |---|---|
-| ![KI-Server einstellen](docs/gui-ki-server.png) | `datenwaechter ki-server --url http://localhost:1234/v1 --modell qwen2.5-7b-instruct --testen`<br><br>Mit Token (`-` liest es von der Eingabe, damit es nicht im Verlauf landet):<br>`datenwaechter ki-server --url https://gateway.firma.de/v1 --token - --testen` |
+| **hoch** | IBAN (auch mit OCR-Lesefehlern wie „O“ statt „0“), Kreditkarte, Steuer-ID, Sozialversicherungsnummer, Ausweis-/Passnummer, API-Schlüssel (Anthropic, OpenAI, AWS, GitHub, Google, Slack, Stripe), private Schlüssel, Tokens, Passwörter, Datenbank-Zugänge |
+| **mittel** | Namen (nach Anrede, mit KI auch ohne), E-Mail, Telefon, Straße + Hausnummer, PLZ + Ort, Geburtsdatum, Gesichter |
+| **niedrig** | IP-Adressen |
+| **Themen** | Familie, Gesundheit, Finanzen, Recht, Personal/Arbeit, Ausweise, Firmeninterna, besonders geschützte Daten nach Art. 9 DSGVO ([Stichwörter](datenwaechter/kategorien.json)) |
 
-- **„Modelle laden“** holt die Liste vom Server, **„Verbindung testen“** schickt eine kleine Testanfrage.
-- **Ein Ort für alles:** Fenster, Kommandozeile und Browser-Erweiterung nutzen dieselbe Einstellung (`%APPDATA%\Datenwaechter\einstellungen.json`).
-- **Token:** Mit `keyring` (im Paket `[windows]` enthalten) liegt es in der Windows-Anmeldeinformationsverwaltung, sonst in der Einstellungsdatei.
-- **Firmen-Rollout:** Die Umgebungsvariablen `DATENWAECHTER_LLM_URL`, `DATENWAECHTER_LLM_TOKEN` und `DATENWAECHTER_LLM_MODELL` haben Vorrang.
-- **Server ohne JSON-Modus oder ohne Bildverständnis** funktionieren auch, der Datenwächter fragt dann automatisch ohne diese Funktionen nach.
-- **Auch kleine lokale Modelle funktionieren.** Der Datenwächter stellt dem Modell einfache Ja/Nein-Fragen, z. B. „Sind Menschen zu sehen?“, „Ist es ein Ausweis?“, „Geht es um Gesundheit?“, statt es Kategorien auswählen zu lassen. Den Warnsatz baut er selbst. Die Stichwörter laufen immer zusätzlich mit, falls das Modell etwas übersieht.
+## Grenzen und häufige Fragen
 
-**Mit einem echten Bildmodell getestet** (Qwen2-VL-2B, nur CPU, 4 Kerne, etwa 20 bis 35 Sekunden pro Bild):
-
-| Bild | Ergebnis |
-|---|---|
-| Personenfoto (ohne Text) | „Du lädst gerade Fotos von Personen hoch“, dazu 1 Gesicht erkannt |
-| Personalausweis (Muster) | „Fotos von Personen und Ausweisdokumente“, dazu Ausweisnummer und Geburtsdatum per OCR |
-| Katze, Kaffeetasse | keine Warnung |
-| Abfotografierter Arztbrief | „Gesundheitsdaten“, Name, Geburtsdatum und Telefon per OCR |
-
-Mit einer Grafikkarte oder einem größeren Modell (z. B. `gemma3:4b` über Ollama) geht es schneller und genauer.
-
-**Datenschutz bei externen Servern:** Liegt der Server außerhalb deines Rechners oder Netzes (z. B. `api.openai.com`),
-zeigt der Datenwächter eine Warnung. Er stellt außerdem automatisch Folgendes ein:
-- Der Text wird **vor dem Senden anonymisiert**: Aus Namen, IBAN usw. werden Platzhalter. Für die Frage „Was ist das für ein Inhalt?“ braucht die KI keine echten Daten.
-- **Bilder werden nicht mitgeschickt.**
-
-Beides lässt sich umstellen. Im Warndialog steht dann z. B. *„Bewertet von KI-Server (gpt-4o-mini@api.openai.com) – Inhalt wurde anonymisiert an api.openai.com gesendet“*.
-
-![Bewertung durch eigenen KI-Server](docs/browser-ki-server.png)
-
-## KI-Aktionen: „Formuliere das um“ & eigene Aktionen per Rechtsklick
-
-Markierten Text mit deinem KI-Server bearbeiten: umformulieren, kürzen, freundlicher oder professioneller
-formulieren, Rechtschreibung korrigieren, übersetzen, zusammenfassen, eine Antwort entwerfen oder **eigene Aktionen**.
-
-- **Im Browser, auf jeder Webseite:** Text markieren, **Rechtsklick** und dann **„Mit KI bearbeiten …“** wählen. Die Aktionsleiste öffnet sich direkt an der Markierung. Das Ergebnis ersetzt die Markierung im Eingabefeld oder wird darunter eingefügt. Auf normalem Seitentext erscheint es in einer Karte zum Kopieren. Ist nichts markiert, wird das ganze Eingabefeld genommen. Strg+Z macht die Änderung rückgängig.
-- **In jedem Windows-Programm** (Outlook, Word, Teams, Desktop-Apps): Text markieren und **Strg+Alt+Leertaste** drücken. Dieselbe Aktionsleiste erscheint am Mauszeiger, das Ergebnis wird an Stelle der Markierung eingesetzt. Ein eigener Eintrag im Rechtsklick-Menü fremder Programme ist unter Windows technisch nicht möglich. Das Tastenkürzel lässt sich ändern.
-- **Datenschutz:** Ist dein KI-Server extern, ersetzt der Datenwächter Namen, IBAN usw. vor dem Senden durch Platzhalter und setzt die echten Werte in der Antwort wieder ein. Der Anbieter sieht die echten Daten nie.
-
-**Die Aktionsleiste:** Sie zeigt eine Vorschau des markierten Texts, ein Suchfeld und die Aktionen mit Symbol. Ein Hinweis
-erscheint, wenn eine Aktion etwas anderes tut als ersetzen („zeigt an“, „fügt ein“). Bedienen lässt sie sich mit Maus
-oder ↑ ↓ Enter Esc. **Tippen filtert.** Passt nichts, führst du das Getippte direkt als **eigene Anweisung** aus,
-z. B. „in Reimform“ oder „als Liste für Kollegen“. Sie ist hell oder dunkel und hat unter Windows 11 runde Ecken und einen Schatten.
-
-| Browser (hell / dunkel, eigene Anweisung) | Windows (hell / dunkel, eigene Anweisung) |
-|---|---|
-| ![KI-Aktionen im Browser](docs/ki-aktionen-browser.png) | ![KI-Aktionen in Windows](docs/ki-aktionen-windows.png) |
-
-**Eigene Aktionen** legst du im Fenster unter *Einstellungen → KI-Aktionen bearbeiten* an. Jede Aktion hat einen
-Namen, eine Anweisung an die KI und eine Einstellung, was mit dem Ergebnis passiert: *Markierung ersetzen*,
-*darunter einfügen* oder *nur anzeigen*. Browser-Menü und Tastenkürzel nutzen dieselbe Liste.
-
-![Aktionen bearbeiten](docs/ki-aktionen-editor.png)
-
-Per Kommandozeile:
-```
-datenwaechter aktionen                                         # Liste anzeigen
-datenwaechter aktionen --neu "Als Tweet" --anweisung "Mach daraus einen Tweet (max. 280 Zeichen)" --modus anzeigen
-datenwaechter aktion Umformulieren --text "hallo herr becker anbei die unterlagen"
-```
-
-## Die zwei Bausteine
-
-### 1. Browser-Erweiterung (Chrome / Edge / Brave) für claude.ai, chatgpt.com, Gemini, Copilot …
-
-Fängt **alle Upload-Wege** ab, *bevor* die Seite die Daten bekommt:
-
-- **Drag & Drop** von Dateien oder Text
-- **„Datei hinzufügen“ / Büroklammer**, auch bei Knöpfen mit unsichtbarem Eingabefeld und beim modernen Dateidialog (`showOpenFilePicker`)
-- **Einfügen (Strg+V)** von Text, Dateien oder Screenshots
-
-Kopierst du später eine KI-Antwort mit Platzhaltern, setzt die Erweiterung die echten Werte automatisch wieder ein.
-
-**Installieren:**
-1. `chrome://extensions` (bzw. `edge://extensions`) öffnen und den **Entwicklermodus** einschalten
-2. **Entpackte Erweiterung laden** und den Ordner `extension/` wählen
-3. Für PDFs, Bilder und Fotos den lokalen Scanner installieren (Abschnitt 2 unten). Dann die angezeigte **ID** kopieren und ausführen:
-   ```
-   python install_browser_bridge.py <ERWEITERUNGS-ID>
-   ```
-   Danach den Browser neu starten. Ohne diesen Schritt prüft die Erweiterung nur Text und Textdateien.
-
-### 2. Lokaler Scanner + Windows-Fenster (auch für Claude Desktop, ChatGPT-App, Codex)
-
-```
-pip install ".[windows,gesichter]"     # Tray-Symbol, Windows-Texterkennung, Zwischenablage, Drag & Drop, Gesichter
-datenwaechter-gui                      # Fenster + Tray-Symbol starten
-datenwaechter gui --minimiert          # nur als Tray-Symbol starten
-```
-
-Desktop-Apps lassen sich nicht sauber beim Hineinziehen abfangen. Das ginge nur per DLL-Injektion, und die wird von
-Virenscannern blockiert. Auch ihren eigenen „Datei hinzufügen“-Dialog kann kein anderes Programm abfangen.
-Das Fenster setzt deshalb an der **Zwischenablage** und an einer eigenen **Ablagefläche** an:
-
-- **Text kopiert:** Unten rechts über dem Infobereich erscheint eine kurze **Benachrichtigung**. Sie zeigt, was gefunden wurde, z. B. „Name · IBAN · Telefon“, und nimmt dem Programm, in das du einfügen willst, nicht den Fokus weg. Im *sicheren Modus* liegt sofort nur noch die anonymisierte Fassung in der Zwischenablage, und die Benachrichtigung verschwindet nach ein paar Sekunden von selbst. Fährst du mit der Maus darüber, bleibt sie stehen. „Original verwenden“ holt das Original zurück, „Details“ zeigt die volle Liste.
-- **Screenshot kopiert (Win+Umschalt+S):** Das Bild wird gelesen. Bei Funden kommt die Warnung, und die geschwärzte Fassung geht in die Zwischenablage.
-- **Datei im Explorer kopiert (Strg+C):** Die Datei wird geprüft, Strg+V im Chat fügt die geschwärzte Kopie ein.
-- **Datei ins Fenster ziehen:** Die geschwärzte Kopie erscheint im Explorer und kann direkt in die App weitergezogen werden.
-- **KI-Antwort zurückübersetzen:** Platzhalter werden wieder zu echten Namen.
-
-![Benachrichtigung unten rechts](docs/benachrichtigung.png)
-
-### Optionale Zusätze
-
-| Zweck | Installation |
-|---|---|
-| Texterkennung ohne Windows-OCR | [Tesseract](https://github.com/UB-Mannheim/tesseract/wiki) mit Sprachpaket „Deutsch“, dann `pip install ".[tesseract]"` |
-| Inhalts-Check und Fotos mit lokaler KI ohne Einrichtung | [Ollama](https://ollama.com) installieren, `ollama pull gemma3:4b` (~3 GB, versteht Text **und** Bilder). Wird automatisch erkannt. Anderes Modell: Umgebungsvariable `DATENWAECHTER_OLLAMA_MODELL` |
-| Eigener KI-Server mit URL + Token | siehe Abschnitt „KI-Server“ oben |
-| Namen ohne Anrede | `pip install ".[ki]"` (GLiNER, ~600 MB, CPU) |
+- **Gibt es eine Handy-App?** Noch nicht. iOS und Android erlauben Apps nicht, die Zwischenablage im Hintergrund zu lesen oder Uploads in anderen Apps abzufangen. Möglich wäre „Teilen → Datenwächter → weiter an die KI“.
+- **Warum gibt es keinen Eintrag im Windows-Rechtsklick-Menü?** Fremde Programme lassen sich dort nicht erweitern. Deshalb gibt es das Tastenkürzel Strg+Alt+Leertaste.
+- **Desktop-Apps wie die ChatGPT-App?** Deren eigener „Datei hinzufügen“-Dialog lässt sich nicht abfangen. Geschützt sind Kopieren/Einfügen sowie Dateien, die du erst ins Datenwächter-Fenster ziehst.
+- **Warum Entwicklermodus?** Die Erweiterung ist (noch) nicht im Chrome Web Store.
+- **Was wird nicht geschwärzt?** Gesundheitsangaben im Fließtext lösen eine Warnung aus, werden aber nicht geschwärzt. Handschrift erkennt die Texterkennung kaum. Bilder *in* Word-Dateien werden nicht geprüft.
+- **Ist das eine Garantie?** Nein. Der Datenwächter ist eine Schutzschicht gegen Versehen. Regeln und KI haben Lücken.
 
 ## Kommandozeile
 
+```bash
+datenwaechter scan Vertrag.pdf Foto.jpg kunden.csv     # Exit-Code 2 = kritische Funde, 1 = mittlere
+datenwaechter anonymisieren Scan.pdf --zuordnung       # schreibt Scan_anonymisiert.pdf
+datenwaechter aktion Umformulieren --text "…"          # KI-Aktion auf Text anwenden
+datenwaechter aktionen --neu "Als Tweet" --anweisung "Mach daraus einen Tweet" --modus anzeigen
 ```
-datenwaechter scan Vertrag.pdf Foto.jpg kunden.csv   # Exit-Code 2 = kritische Funde
-datenwaechter anonymisieren Scan.pdf --zuordnung     # schreibt Scan_anonymisiert.pdf
-```
-
-## Grenzen
-
-- Ohne KI-Server mit Bildverständnis bewertet der Datenwächter das *Motiv* eines Fotos nicht. Er findet dann nur Text im Bild und Gesichter.
-- Gesundheitsangaben im Text (z. B. „Diagnose: Depression“) lösen eine Warnung aus, werden beim Anonymisieren aber nicht geschwärzt. Geschwärzt werden Namen, Nummern, Kontakt- und Adressdaten.
-- Die Gesichtserkennung (OpenCV) findet vor allem frontale Gesichter. Bei Profilen, kleinen oder verdeckten Gesichtern kann sie etwas übersehen.
-- Handschrift erkennt die Texterkennung kaum.
-- Geschwärzte PDFs bestehen aus Seitenbildern, Text lässt sich darin nicht mehr markieren. Claude und ChatGPT lesen sie trotzdem.
-- Bilder *innerhalb* von Word-Dateien werden noch nicht geprüft.
-- In Desktop-Apps (Claude Desktop, Codex) fängt das Tool den eigenen „Datei hinzufügen“-Dialog nicht ab. Dort schützt nur der Weg über die Zwischenablage oder die Ablagefläche.
-- Die Erweiterung hängt am Aufbau der Chat-Seiten. Ändert ein Anbieter seine Upload-Logik, muss sie eventuell nachgezogen werden.
-- Es ist eine Schutzschicht gegen Versehen, keine Garantie.
 
 ## Entwicklung
 
-```
+```bash
 pip install -e ".[dev]"
-pytest                               # Regeln, Inhalts-Check (simuliertes Ollama + OpenAI-Server), OCR, Schwärzen, Gesichter, Oberfläche
-node --test tests/detectors.test.js  # Browser-Regeln (gleiche Testfälle wie Python)
-node tests/e2e_extension.js          # Erweiterung in echtem Chromium: Upload-Wege, Scanner, KI-Server, Leisten-Fenster, Pause
-node tests/e2e_ki_aktionen.js        # KI-Aktionen im Rechtsklick-Menü (ersetzen, einfügen, anzeigen)
-SITE=chatgpt.com node tests/e2e_extension.js   # dasselbe unter der Adresse von ChatGPT
+pytest                                   # Regeln, Schwärzen, OCR, Gesichter, KI-Anbindung (simulierte Server), Oberfläche
+node --test tests/detectors.test.js      # Browser-Regeln = Python-Regeln
+node tests/e2e_extension.js              # Erweiterung in echtem Chromium (SITE=chatgpt.com für ChatGPT)
+node tests/e2e_ki_aktionen.js            # KI-Aktionen im Browser
+python tests/windows_smoke.py            # nur Windows: Zwischenablage, OCR, Tastenkürzel, Benachrichtigung, Notepad
 ```
 
-Die Erkennungsregeln gibt es zweimal, in `datenwaechter/detectors.py` und `extension/detectors.js`. Die Tests
-prüfen beide mit denselben Beispielen. Die Stichwörter stehen nur in `datenwaechter/kategorien.json`. Nach einer
-Änderung erzeugst du die Browser-Fassung neu:
-`python -c "import datenwaechter.content_check as c; c.write_extension_categories()"`
+Bei jedem Push baut [GitHub Actions](.github/workflows/windows.yml) auf echtem Windows. Der Lauf führt die Tests und
+den Windows-Praxistest aus, baut das Programm (PyInstaller) und den Installer (Inno Setup) und installiert ihn testweise
+still und wieder ab. Bei einem Tag `v*` entsteht ein Release. Selbst bauen kannst du mit `packaging\build_windows.ps1`.
+
+```
+datenwaechter/      Python-Paket: Regeln, OCR, Schwärzen, KI-Anbindung, Fenster, Tray, Browser-Brücke
+extension/          Browser-Erweiterung (Manifest V3)
+packaging/          PyInstaller-Rezept, Installer, Programm-Symbol
+tests/              pytest, Browser- und Windows-Tests
+```
+
+Die Erkennungsregeln gibt es zweimal, in `datenwaechter/detectors.py` und `extension/detectors.js`. Die Tests prüfen
+beide mit denselben Beispielen. Ändern sich die Stichwörter, erzeugst du die Browser-Fassung so neu:
+`python -c "import datenwaechter.content_check as c; c.write_extension_categories()"`.
+
+## Mitmachen
+
+Fehler und Ideen bitte als Issue melden. Sicherheitslücken bitte nicht öffentlich, siehe [SECURITY.md](SECURITY.md).
+Wie du beiträgst, steht in [CONTRIBUTING.md](CONTRIBUTING.md), Änderungen im [CHANGELOG](CHANGELOG.md).
+
+## Danksagung
+
+[pypdfium2](https://github.com/pypdfium2-team/pypdfium2), [pypdf](https://github.com/py-pdf/pypdf),
+[OpenCV](https://opencv.org), [Tesseract](https://github.com/tesseract-ocr/tesseract), [pystray](https://github.com/moses-palmer/pystray),
+[PyInstaller](https://pyinstaller.org), [Inno Setup](https://jrsoftware.org/isinfo.php).
+Das Testfoto stammt aus einem gemeinfreien NASA-Foto (über [scikit-image](https://scikit-image.org)). Alle Personen,
+Adressen, Kontonummern und Firmen in Beispielen und Screenshots sind erfunden.

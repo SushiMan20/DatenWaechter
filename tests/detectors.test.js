@@ -81,3 +81,11 @@ test("IBAN mit OCR-Verwechslern", () => {
   }
   assert.deepStrictEqual(DW.scan("IBAN: DE89 37O4 OO44 O532 O13O O1"), []);
 });
+
+test("gleiche Person, gleicher Platzhalter", () => {
+  const a = new DW.Anonymizer();
+  assert.strictEqual(a.anonymize("Herrn Thomas Schneider ... Sehr geehrter Herr Schneider, Frau Mia Schneider ist informiert."),
+    "Herrn [PERSON_1] ... Sehr geehrter Herr [PERSON_1], Frau [PERSON_2] ist informiert.");
+  const b = new DW.Anonymizer();
+  assert.strictEqual(b.anonymize("Herr Thomas Schneider, Frau Mia Schneider, Herr Schneider"), "Herr [PERSON_1], Frau [PERSON_2], Herr [PERSON_3]");
+});

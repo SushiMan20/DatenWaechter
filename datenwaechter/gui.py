@@ -38,6 +38,11 @@ except ImportError:
     TkinterDnD = None
 
 POLL_MS = 200
+
+
+def anzahl(n: int, eins: str, mehr: str) -> str:
+    """„1 sensible Angabe“, „3 sensible Angaben“, „eine Datei“ …"""
+    return f"{n} {eins if n == 1 else mehr}"
 MIN_CONTENT_CHECK = 400   # kopierte Texte erst ab dieser Länge auf Themen prüfen (sonst zu viele Hinweise)
 TEMP_DIR = Path(tempfile.gettempdir()) / "datenwaechter"
 COLORS = {HOCH: "#c62828", 2: "#ef6c00", 1: "#757575", 0: "#1565c0"}
@@ -763,7 +768,7 @@ class App:
             self._mark_own_write()
         self._busy = True
         self._count("geprueft", len(paths))
-        self._status(f"Prüfe {len(paths)} Datei(en) …")
+        self._status(f"Prüfe {anzahl(len(paths), 'Datei', 'Dateien')} …")
 
         def job():
             reports, errors = [], []
@@ -918,7 +923,7 @@ class App:
         """Kopierter Text mit sensiblen Daten -> Benachrichtigung unten rechts."""
         verdicts = [verdict] if verdict and verdict.warning else []
         safe = bool(findings) and self.safe.get()
-        self._status(f"⚠ {len(findings)} Fund(e) in kopiertem Text" if findings
+        self._status(f"⚠ {anzahl(len(findings), 'Fund', 'Funde')} in kopiertem Text" if findings
                      else "⚠ Sensibles Thema im kopierten Text", "#c62828")
         if safe:
             self._count("anonymisiert")
@@ -941,7 +946,7 @@ class App:
             actions = [("Original verwenden", original, False)] if safe else [("Anonymisieren", anonymize, True)]
             status = ("✔ In der Zwischenablage liegt jetzt die anonymisierte Fassung." if safe
                       else "Das Original liegt noch in der Zwischenablage.")
-            self._popup(level="warnung", title=f"{len(findings)} sensible Angabe(n) kopiert",
+            self._popup(level="warnung", title=f"{anzahl(len(findings), 'sensible Angabe', 'sensible Angaben')} kopiert",
                         summary=self._summary([f.kind for f in findings]), topic=topic, status=status,
                         actions=actions, timeout_ms=9000 if safe else 20000,
                         on_details=lambda: self._warn_text_dialog(text, findings, verdict, safe))
@@ -958,7 +963,7 @@ class App:
         """Ausführliche Ansicht („Details“) mit allen Funden."""
         verdicts = [verdict] if verdict and verdict.warning else []
         rows = [("Text", {"label": f.label, "display": f.masked(), "severity": f.severity}) for f in findings]
-        dlg = self._dialog(f"Du hast {len(findings)} sensible Angabe(n) kopiert" if findings
+        dlg = self._dialog(f"Du hast {anzahl(len(findings), 'sensible Angabe', 'sensible Angaben')} kopiert" if findings
                            else "Bitte kurz prüfen, was du kopiert hast", rows, verdicts, count=False)
         b = dlg.buttons
         if findings and already_anonymized:
@@ -991,8 +996,8 @@ class App:
         verdicts = [r.verdict for r in reports if r.verdict.warning]
         notes = errors + [f"{shown(r)}: {n}" for r in reports for n in r.doc.notes + r.info]
         can_anon = any(r.can_anonymize for r in reports)
-        self._status(f"⚠ {len(rows)} Fund(e) in {len(reports)} Datei(en)", "#c62828")
-        title = (f"{len(rows)} sensible Angabe(n) gefunden" if rows else
+        self._status(f"⚠ {anzahl(len(rows), 'Fund', 'Funde')} in {anzahl(len(reports), 'Datei', 'Dateien')}", "#c62828")
+        title = (f"{anzahl(len(rows), 'sensible Angabe', 'sensible Angaben')} gefunden" if rows else
                  "Bitte kurz prüfen, was du hochlädst" if verdicts else "Nicht vollständig prüfbar")
         ui = {"close": lambda: None}
 
@@ -1038,7 +1043,8 @@ class App:
                 actions = [("Trotzdem verwenden", original, True), ("Verwerfen", abbrechen, False)]
                 status = "; ".join(notes[:2])
             self._popup(level="warnung" if rows else "thema",
-                        title=f"{what}: {len(rows)} sensible Angabe(n)" if rows else f"{what}: bitte prüfen",
+                        title=f"{what}: {anzahl(len(rows), 'sensible Angabe', 'sensible Angaben')}" if rows
+                        else f"{what}: bitte prüfen",
                         summary=self._summary(kinds), topic=topic, status=status, actions=actions,
                         on_details=lambda: self._files_dialog(title, rows, verdicts, notes, can_anon, anonymize,
                                                               original, abbrechen, ui),
@@ -1151,7 +1157,7 @@ class App:
                     model_box.configure(values=r)
                     if r and not modell.get():
                         modell.set(r[0])
-                    status.configure(text=f"{len(r)} Modell(e) gefunden.", foreground="#2e7d32")
+                    status.configure(text=f"{anzahl(len(r), 'Modell', 'Modelle')} gefunden.", foreground="#2e7d32")
             in_thread(fetch, done)
         ttk.Button(frm, text="Modelle laden", command=load_models).grid(row=4, column=2, padx=(6, 0))
 

@@ -19,6 +19,12 @@ class Anonymizer:
 
     def placeholder(self, f: Finding) -> str:
         key = (f.kind, f.text.strip())
+        if key not in self._by_value and f.kind == "PERSON":
+            same = self._same_person(key[1])
+            if same:   # „Herr Schneider“ nach „Herrn Thomas Schneider“ = dieselbe Person
+                self._by_value[key] = same
+                if len(f.text) > len(self._by_placeholder[same]):
+                    self._by_placeholder[same] = f.text
         if key not in self._by_value:
             n = self._counter.get(f.kind, 0) + 1
             self._counter[f.kind] = n
@@ -26,6 +32,19 @@ class Anonymizer:
             self._by_value[key] = ph
             self._by_placeholder[ph] = f.text
         return self._by_value[key]
+
+    def _same_person(self, value: str) -> str | None:
+        """Nur Nachname ↔ voller Name mit gleichem Nachnamen; bei mehreren Kandidaten (Familie!) nichts zusammenlegen."""
+        parts = value.split()
+        matches = set()
+        for (kind, v), ph in self._by_value.items():
+            if kind != "PERSON" or v.split()[-1].lower() != parts[-1].lower():
+                continue
+            # nur Nachname → passt zu jeder Person mit diesem Nachnamen;
+            # voller Name → nur an einen reinen Nachnamen, der noch keiner anderen Person gehört
+            if len(parts) == 1 or len(self._by_placeholder[ph].split()) == 1:
+                matches.add(ph)
+        return matches.pop() if len(matches) == 1 else None
 
     def anonymize(self, text: str, findings: list[Finding] | None = None, use_ki: bool = False) -> str:
         if findings is None:

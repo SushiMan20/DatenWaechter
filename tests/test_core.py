@@ -90,6 +90,19 @@ def test_anonymisieren_und_zurück():
     assert a.restore(antwort) == "Ich habe Müller geantwortet, Konto DE89 3704 0044 0532 0130 00."
 
 
+def test_gleiche_person_gleicher_platzhalter():
+    a = Anonymizer()
+    out = a.anonymize("Herrn Thomas Schneider ... Sehr geehrter Herr Schneider, Frau Mia Schneider ist informiert.")
+    assert out == "Herrn [PERSON_1] ... Sehr geehrter Herr [PERSON_1], Frau [PERSON_2] ist informiert.", out
+    assert a.restore("[PERSON_1]") == "Thomas Schneider"
+    c = Anonymizer()   # erst Nachname, dann voller Name -> zusammen, Zurückübersetzen mit vollem Namen
+    assert c.anonymize("Herr Schneider bittet ... Herr Thomas Schneider") == "Herr [PERSON_1] bittet ... Herr [PERSON_1]"
+    assert c.restore("[PERSON_1]") == "Thomas Schneider"
+    b = Anonymizer()   # Nachname passt zu zwei Personen -> nicht zusammenlegen
+    assert b.anonymize("Herr Thomas Schneider, Frau Mia Schneider, Herr Schneider") == \
+        "Herr [PERSON_1], Frau [PERSON_2], Herr [PERSON_3]"
+
+
 def test_secrets_werden_maskiert_angezeigt():
     f = [x for x in scan_text("token: sk-proj-ABCDEFGHIJKLMNOPQRSTUVWX12") if x.kind == "API_SCHLUESSEL"][0]
     assert "ABCDEFGHIJ" not in f.masked()

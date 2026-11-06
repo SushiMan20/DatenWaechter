@@ -14,6 +14,7 @@
   const MIN_LLM_CHECK = 300;                 // ab dieser Länge fragt die Erweiterung zusätzlich das Sprachmodell
   const COLORS = { 3: "#c62828", 2: "#ef6c00", 1: "#757575", 0: "#1565c0" };
   const STUFE = { 3: "hoch", 2: "mittel", 1: "niedrig" };
+  const anzahl = (n, eins, mehr) => `${n === 1 && eins.startsWith("Datei") ? "einer" : n} ${n === 1 ? eins : mehr}`;
 
   // Ein/Aus aus dem Popup (Symbol in der Browserleiste)
   let enabled = true;
@@ -67,7 +68,7 @@
     const { findings, content } = await checkText(text);
     if (!findings.length && !content) return { choice: "pass" };
     const choice = await showDialog({
-      title: findings.length ? `Du ${verb} ${findings.length} sensible Angabe(n) ein` : "Bitte kurz prüfen, was du einfügst",
+      title: findings.length ? `Du ${verb} ${anzahl(findings.length, "sensible Angabe", "sensible Angaben")} ein` : "Bitte kurz prüfen, was du einfügst",
       content: content ? [content] : [],
       rows: findings.map((f) => ({ ...f, where: "Text" })),
       actions: findings.length
@@ -195,7 +196,7 @@
 
   // ------------------------------------------------------------------ Dateien prüfen
   async function checkFiles(files) {
-    toast(`Datenwächter prüft ${files.length} Datei(en) …`);
+    toast(`Datenwächter prüft ${files.length === 1 ? "die Datei" : `${files.length} Dateien`} …`);
     stat("geprueft", files.length);
     const status = await hostStatus();
     const reports = [];
@@ -214,8 +215,8 @@
       ? [["anon", "✔ Anonymisierte Fassung hochladen", true], ["orig", "Original hochladen"], ["cancel", "Abbrechen"]]
       : [["cancel", "Abbrechen", true], ["orig", "Trotzdem hochladen"]];
     const choice = await showDialog({
-      title: rows.length ? `${rows.length} sensible Angabe(n) in ${reports.filter((r) => r.rows.length).length} Datei(en)`
-        : content.length ? "Bitte kurz prüfen, was du hochlädst" : "Datei(en) konnten nicht vollständig geprüft werden",
+      title: rows.length ? `${anzahl(rows.length, "sensible Angabe", "sensible Angaben")} in ${anzahl(reports.filter((r) => r.rows.length).length, "Datei", "Dateien")}`
+        : content.length ? "Bitte kurz prüfen, was du hochlädst" : "Nicht alles ließ sich prüfen",
       content, rows, notes: [...notes, ...info],
       actions,
       hint: canAnon ? "Bilder und PDFs werden geschwärzt (Kasten mit Platzhalter), Gesichter verpixelt." : "",

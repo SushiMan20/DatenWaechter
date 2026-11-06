@@ -132,6 +132,13 @@
     constructor() { this.byValue = new Map(); this.byPlaceholder = new Map(); this.counter = {}; }
     placeholder(f) {
       const key = f.kind + "\u0000" + f.text.trim();
+      if (!this.byValue.has(key) && f.kind === "PERSON") {
+        const same = this.samePerson(f.text.trim());
+        if (same) {   // „Herr Schneider“ nach „Herrn Thomas Schneider“ = dieselbe Person
+          this.byValue.set(key, same);
+          if (f.text.length > this.byPlaceholder.get(same).length) this.byPlaceholder.set(same, f.text);
+        }
+      }
       if (!this.byValue.has(key)) {
         const n = (this.counter[f.kind] = (this.counter[f.kind] || 0) + 1);
         const ph = `[${f.kind}_${n}]`;
@@ -139,6 +146,18 @@
         this.byPlaceholder.set(ph, f.text);
       }
       return this.byValue.get(key);
+    }
+    samePerson(value) {
+      // Nur Nachname ↔ voller Name mit gleichem Nachnamen; bei mehreren Kandidaten (Familie!) nichts zusammenlegen
+      const parts = value.split(/\s+/), last = parts.at(-1).toLowerCase();
+      const matches = new Set();
+      for (const [k, ph] of this.byValue) {
+        const [kind, v] = k.split("\u0000");
+        if (kind !== "PERSON" || v.split(/\s+/).at(-1).toLowerCase() !== last) continue;
+        // nur Nachname → jede Person mit diesem Nachnamen; voller Name → nur an einen reinen Nachnamen ohne andere Person
+        if (parts.length === 1 || this.byPlaceholder.get(ph).trim().split(/\s+/).length === 1) matches.add(ph);
+      }
+      return matches.size === 1 ? [...matches][0] : null;
     }
     anonymize(text, findings = scan(text)) {
       let out = "", last = 0;
