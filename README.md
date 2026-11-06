@@ -81,6 +81,8 @@ Text markieren – in jedem Windows-Programm erscheint daneben ein kleiner **✨
 **Strg+Alt+Leertaste** oder im Browser Rechtsklick auf **„Mit KI bearbeiten …“**. Das Ergebnis ersetzt die Markierung, wird darunter eingefügt oder angezeigt. Tippst du etwas
 ein, filtert das die Liste. Passt keine Aktion, wird das Getippte als eigene Anweisung ausgeführt.
 
+<p align="center"><img src="docs/ki-knopf.png" alt="Text markieren, ✨-Knopf erscheint, Klick öffnet die KI-Aktionen" width="860"></p>
+
 | Browser | Windows (hell / dunkel) |
 |---|---|
 | ![Aktionsleiste im Browser](docs/aktionsleiste-browser.png) | ![Aktionsleiste unter Windows](docs/ki-aktionen-windows.png) |
