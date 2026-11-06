@@ -154,14 +154,22 @@ print(load(${JSON.stringify(f)}).text)`);
   assert.strictEqual((await log())[1].text, "Bitte an Frau [PERSON_1], IBAN [IBAN_1]");
   step("persönliche Daten im Text -> anonymisiert eingefügt");
 
-  // 3) Text ohne Personendaten, aber mit Familienthema -> Inhalts-Warnung -> Enter = „Abbrechen“
-  await paste("Hallo, kannst du mir helfen? Es geht um das Sorgerecht für unsere Tochter nach der Trennung, das Jugendamt hat geschrieben.");
+  // 3) Familienthema ohne erkennbare Person -> geht durch („Themen-Warnung nur mit Person“, Standard an)
+  const familie = "Hallo, kannst du mir helfen? Es geht um das Sorgerecht für unsere Tochter nach der Trennung, das Jugendamt hat geschrieben.";
+  await paste(familie);
+  await waitLog(3);
+  assert.strictEqual((await log())[2].text, familie);
+  await page.evaluate(() => window.log.pop());
+  step("Familienthema ohne erkennbare Person -> ohne Rückfrage eingefügt");
+
+  // 3a) Dasselbe mit Namen -> Warnung (Name + Thema) -> Tab, Tab, Enter = „Abbrechen“
+  await paste(familie.replace("unsere Tochter", "unsere Tochter Mia Schneider"));
   await waitDialog();
   await shot("browser-inhalt.png");
-  await page.keyboard.press("Enter");
+  await page.keyboard.press("Tab"); await page.keyboard.press("Tab"); await page.keyboard.press("Enter");
   await page.waitForTimeout(300);
   assert.strictEqual((await log()).length, 2, "abgebrochener Text darf nicht ankommen");
-  step("Familienthema erkannt (Inhalts-Check) -> abgebrochen");
+  step("Familienthema mit Namen -> Warnung -> abgebrochen");
 
   // 3b) Text ohne Stichwörter – nur der eigene KI-Server (URL + Token) erkennt, dass er privat ist
   await paste("Kannst du mir helfen, eine Nachricht zu formulieren? Meine Nachbarin hat mir gestern im Treppenhaus anvertraut, " +

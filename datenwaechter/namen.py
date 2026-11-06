@@ -21,7 +21,13 @@ WORT = r"[^\W\d_]+(?:-[^\W\d_]+)*"
 _WORT = re.compile(WORT)
 _LEER = re.compile(r"[ \t\u00a0]{1,3}")
 _KOMMA = re.compile(r",[ \t]*")
-_PARTIKEL = re.compile(r"(?:von und zu|von der|von den|van der|van den|van de|de la|von|van|vom|zur|zu|de|da|di|del|della|du|dos|ten|ter|le|la)[ \t]+")
+_PARTIKEL = re.compile(r"(?i:von und zu|von der|von den|van der|van den|van de|de la|von|van|vom|zur|zu|de|da|di|del|della|du|dos|ten|ter|le|la)(?=[ \t]+[A-ZÄÖÜ])[ \t]+")
+_INITIALEN = re.compile(r"(?:[A-ZÄÖÜ][a-zäöü]?\.[ \t]*){1,3}(?=[A-ZÄÖÜ]|(?i:von|van|de|zu)[ \t])")
+_MITTEL_INITIAL = re.compile(r"[ \t]+[A-ZÄÖÜ]\.(?=[ \t]+(?:[A-ZÄÖÜ]|(?i:von|van|de|zu|dos)[ \t]))")
+_END_INITIAL = re.compile(r"[ \t]+[A-ZÄÖÜ]\.(?![\w])")
+ABKUERZUNGEN = frozenset("""USA PDF CEO CTO CFO COO EDV DSGVO KFZ EKG MRT OP ICU ITS EU UK USB LDL HDL CRP TSH DIN ISO
+COPD AIDS HIV BMI KI AI OK NIDDM IDDM KHK AVK TIA ARDS ERCP PET MRSA ZNS GmbH AG KG UG SE OHG GBR VIP PIN TAN SMS
+FAQ API URL HTML PDF ZIP HRB USt BIC IBAN SWIFT DATEV ELSTER MBA MSC PHD MD BSC LLM DDR""".split())
 
 STOPP = frozenset("""
 Der Die Das Dem Den Des Ein Eine Einen Einem Einer Eines Kein Keine Ich Du Er Sie Es Wir Ihr Ihre Ihren Ihrem Ihrer
@@ -30,7 +36,7 @@ Sondern Wenn Weil Dass Daß Ob Als Wie Was Wer Wo Wann Warum Wieso Weshalb Welch
 Im In Am An Auf Aus Bei Mit Nach Seit Von Vom Vor Zu Zum Zur Für Über Unter Ohne Um Durch Gegen Bis Ab Hier Da Dort
 Dann Jetzt Heute Morgen Gestern Bald Noch Schon Auch Nur Sehr Ganz Gerne Gern Bitte Danke Ja Nein Hallo Hi Hey Moin
 Servus Tschüss Liebe Lieber Liebes Gruß Grüße Viele Beste Herzliche Freundliche Schöne Geehrte Geehrter Herr Herrn
-Frau Fräulein Dr Prof Doktor Familie Fam Eheleute Ehepaar Geschwister Team Alle Allen Zusammen Kollegen Kolleginnen
+Frau Fräulein Dr Prof Doktor Hr Fr Drs DDr Prim Doz PD OA Univ Priv Dra Familie Fam Eheleute Ehepaar Geschwister Team Alle Allen Zusammen Kollegen Kolleginnen
 Kollege Kollegin Eltern Kinder Kind Sohn Tochter Mutter Vater Mama Papa Oma Opa Onkel Tante Bruder Schwester Mann
 Ehemann Ehefrau Partner Partnerin Freund Freundin Freunde Leute Damen Herren Kunden Kunde Kundin Mitglieder Mitarbeiter
 Mitarbeiterin Mitarbeitende Teilnehmer Teilnehmende Nachbarn Nachbar Gemeinde Gäste Schüler Schülerin Lehrer Lehrerin
@@ -81,8 +87,10 @@ def write_extension_names() -> None:
 
 
 def extension_data() -> dict:
+    from .inhalte import MEDIKAMENTE
     sicher, mehrdeutig = lexikon()
-    return {"sicher": sorted(sicher), "mehrdeutig": sorted(mehrdeutig), "stopp": sorted(STOPP), "org": sorted(ORG)}
+    return {"sicher": sorted(sicher), "mehrdeutig": sorted(mehrdeutig), "stopp": sorted(STOPP), "org": sorted(ORG),
+            "medikamente": sorted(MEDIKAMENTE), "abkuerzungen": sorted(ABKUERZUNGEN), "koerper": sorted(KOERPER)}
 
 
 # --------------------------------------------------------------------------- Hilfen
@@ -100,36 +108,61 @@ def _vorname(w: str, namen: frozenset, versal: bool = False) -> bool:
     return all(t in namen for t in teile)
 
 
+_NOMEN_ENDUNG = re.compile(r"(?i)(?:ung|tion|ation|heit|keit|schaft|tät|amt|itis|ektomie|tomie|plastik|skopie|graphie|"
+                           r"therapie|logie|ismus|ierung)$")
+_STRASSE_DANACH = re.compile(r"[ \t]+[\w.-]*(?:straße|strasse|str\.|weg|gasse|platz|allee|ring|damm|ufer|chaussee|pfad|"
+                             r"steig)(?![\w])", re.IGNORECASE)
+_STRASSE_WORT = re.compile(r"(?i)[\w-]*(?:straße|strasse|gasse|allee|chaussee)$")
+
+
 def _nachname(w: str, versal: bool = False) -> bool:
-    if versal:
-        return w.isupper() and len(w) > 1 and (w[:1] + w[1:].lower()) not in STOPP
+    if len(w) > 6 and _NOMEN_ENDUNG.search(w):   # „Rektumamputation“, „Kreisjugendamt“ sind keine Namen
+        return False
+    if re.fullmatch(r"[IVXLCDM]+", w) or (w.isupper() and len(w) == 2):   # „II“ (Station), „OT“ (Abkürzung)
+        return False
+    if versal or (w.isupper() and len(w) >= 3):   # „Beatrice DE BEAUHARNAIS“, „Pierre JOUBERT“
+        return (w.isupper() and len(w) > 1 and (w[:1] + w[1:].lower()) not in STOPP and w not in ABKUERZUNGEN
+                and w.upper() not in {a.upper() for a in ABKUERZUNGEN})
     return _gross(w) and len(w) > 1 and w not in STOPP and w not in ORG
 
 
 def _name_ab(text: str, pos: int, max_teile: int = 3, komma: bool = False) -> tuple[int, int] | None:
-    """Liest ab pos einen Namen aus großgeschriebenen Wörtern (Partikel wie „von“ erlaubt). (start, ende) oder None."""
+    """Liest ab pos einen Namen aus großgeschriebenen Wörtern (Partikel wie „von“, Initialen wie „M.“ erlaubt)."""
+    vorn = pos
+    part = _PARTIKEL.match(text, pos)
+    if part and part.group().split()[0].lower() not in ("zu", "zur", "zum", "vom", "la", "le", "da"):
+        pos = part.end()
     m = _WORT.match(text, pos)
     if not m:
         return None
     versal = m.group().isupper() and len(m.group()) > 1
     if not _nachname(m.group(), versal):
         return None
-    start, ende, teile = m.start(), m.end(), 1
+    start, ende, teile = vorn, m.end(), 1
     while teile < max_teile:
         p = ende
+        mi = _MITTEL_INITIAL.match(text, p)
+        if mi:   # „Holger M. Recklinghausen“
+            p = mi.end()
         sep = _LEER.match(text, p) or (komma and _KOMMA.match(text, p))
         if not sep:
             break
+        nach_komma = "," in sep.group()
         p = sep.end()
         part = _PARTIKEL.match(text, p)
         if part and not versal:
             p = part.end()
         n = _WORT.match(text, p)
-        if not n or not _nachname(n.group(), versal):
+        if n and (_STRASSE_DANACH.match(text, n.end()) or _STRASSE_WORT.search(n.group())):
+            break   # „Dr. Pierre JOUBERT Innsbrucker Landstraße 22a“: dort beginnt die Adresse
+        if not n or not (_nachname(n.group(), versal) or (nach_komma and _nachname(n.group()))):
             if n and n.group() in ORG:
                 return None          # „Musterfirma GmbH“ ist kein Name
             break
         ende, teile = n.end(), teile + 1
+    ei = _END_INITIAL.match(text, ende)   # „Hendlbein H.“
+    if ei:
+        ende = ei.end()
     return start, ende
 
 
@@ -138,7 +171,7 @@ def _nur_leer(text: str, a: int, b: int) -> bool:
 
 
 _LISTENANFANG = re.compile(r"(?:^[ \t]*(?:(?:\d{1,3}[.)]|[•*\-–])[ \t]*)?|[:;][ \t]*)$")
-_DATUM_VOR = re.compile(r"\d{1,2}\.[ \t]*$")
+_DATUM_VOR = re.compile(r"\d[.]?[ \t]*$")
 _DATUM_NACH = re.compile(r"\.?[ \t]*\d")
 
 
@@ -207,12 +240,21 @@ def _aus_liste(text: str) -> list[Finding]:
 
 # --------------------------------------------------------------------------- 2. Typische Stellen
 
-_TITEL = re.compile(r"\b(?:Hr\.|Fr\.|Dr\.|Prof\.|Herrn?|Frau|Mr\.?|Mrs\.?|Ms\.?|Miss)[ \t]+"
-                    r"(?:(?:Dr|Prof|med|dent|jur|phil|rer\.[ ]?nat|Dipl\.-Ing|Ing|h\.[ ]?c)\.?[ \t]+)*")
+_TITELWORT = (r"(?:(?:(?:Univ|UNIV|univ|Priv|PRIV|Ao)\.?[ \t-]?)?(?:Prof|PROF|Doz|DOZ|DDr|DDR|Drs|Dr|DR|PD|Prim|PRIM|Mag|"
+              r"Dipl\.-[A-Za-zäöü]+|Dipl|med|MED|dent|vet|univers|univer|univ|UNIV|jur|phil|rer\.?[ \t]?nat|mult|habil|"
+              r"h\.[ \t]?c|OA|OÄ|Ass|MSc|MBA|PhD|MD)"
+              r"(?:\.(?:in|a)?|ª|in\.?(?![\w])|a\.?(?![\w]))?|Kollegin|Kollege)")
+_TITEL = re.compile(r"(?<![\w])(?:(?:Hr\.|Fr\.|Herrn?|HERRN?|Frau|FRAU|Mr\.?|Mrs\.?|Ms\.?|Miss)[ \t]+"
+                    rf"(?:{_TITELWORT}[ \t]*)*"
+                    r"|(?:(?:Univ|UNIV|Priv|PRIV)\.?[ \t-]?(?:Prof|PROF|Doz|DOZ)|Prof|PROF|Doz|DOZ|DDr|DDR|Drs|Dr|DR|Prim|PRIM)"
+                    r"(?:\.(?:in|a)?|ª|in\.?(?![\w])|a\.?(?![\w]))?"
+                    r"(?:[ \t]+|(?=med|MED|univ|UNIV|rer|phil|jur|dent|vet))"
+                    rf"(?:{_TITELWORT}[ \t]*)*"
+                    r"|(?:PD|OA|OÄ|Ass\.?)[ \t]+(?=(?:Dr|Prof|Doz)))")
+_TITEL_KETTE = re.compile(rf"(?:{_TITELWORT}[ \t]*)*")
 _ANREDE = re.compile(r"(?i)(?:^|(?<=[\s>„\"(]))(?:liebe[rs]?|hallo|hi|hey|moin|servus|dear|hello|ciao|salut|"
                      r"guten (?:tag|morgen|abend))[ \t]+")
-_GRUSS = re.compile(r"(?im)^[ \t]*(?:mit (?:freundlichen|besten|herzlichen|lieben) grüßen|freundliche grüße|viele grüße|"
-                    r"liebe grüße|beste grüße|herzliche grüße|schöne grüße|sonnige grüße|grüße|gruß|lg|vg|mfg|"
+_GRUSS = re.compile(r"(?im)^[ \t]*(?:(?:mit[ \t]+)?(?:[a-zäöüß.]+[ \t]+){0,3}(?:grüßen|grüssen|grüße|grüsse|gruß|gruss)|lg|vg|mfg|"
                     r"hochachtungsvoll|best regards|kind regards|best wishes|warm regards|regards|cheers|bis bald|"
                     r"bis dann|dein|deine|euer|eure|ihr|ihre)[ \t]*[,.!]?[ \t]*(?:\n[ \t]*){1,2}")
 _GRUSS_ZEILE = re.compile(r"(?im)^[ \t]*(?:dein|deine|euer|eure|lg|vg|gruß|grüße|cheers)[ \t,]+")
@@ -226,12 +268,19 @@ _FELD = re.compile(r"(?i)\b(?:vor-? und (?:nach|zu)name|(?:nach)?name,[ ]?vornam
                    r"verfasser(?:in)?|erziehungsberechtigte[r]?|unterzeichner(?:in)?|teilnehmer(?:in)?|"
                    r"mandant(?:in)?|klient(?:in)?|beschuldigte[r]?|kläger(?:in)?|beklagte[r]?|zeug(?:e|in)|"
                    r"betreuer(?:in)?|vormund|full name|first name|last name|surname|given name|name)[ \t]*:[ \t]*")
+_BERUF = re.compile(r"(?i)(?<![\w])(?:[a-zäöü-]*(?:arzt|ärztin|direktor|direktorin|leiter|leiterin|psychologe|psychologin|"
+                    r"therapeut|therapeutin|orthoptist|orthoptistin|pfleger|pflegerin|hebamme|primar|primaria|primarius|"
+                    r"sachbearbeiter|sachbearbeiterin))[ \t]*:[ \t]*")
+_VERFASST = re.compile(r"(?i)(?<![\w])(?:(?:geschrieben|erstellt|diktiert|vidiert|untersucht|befundet|unterschrieben|"
+                       r"freigegeben|behandelt|überwiesen)[ \t]+(?:von|durch)|untersuchung durch|gez\.)[: \t]+")
 _FAMILIE = re.compile(r"\b(?:Familie|Fam\.|Eheleute|Ehepaar|Geschwister)[ \t]+")
 _VERWANDT = re.compile(r"\b(?:Sohn|Tochter|Kind|Enkel(?:in|kind)?|Bruder|Schwester|Ehemann|Ehefrau|Mann|Partner(?:in)?|"
                        r"Freund(?:in)?|Lebensgefährt(?:e|in)|Verlobte[r]?|Vater|Mutter|Papa|Mama|Oma|Opa|Onkel|Tante|"
                        r"Cousine?|Neffe|Nichte|Schwager|Schwägerin|Kollege|Kollegin|Chef(?:in)?|Nachbar(?:in)?|"
-                       r"Patient(?:in)?|Klient(?:in)?|Mandant(?:in)?|Schüler(?:in)?|Azubi|Ex-Mann|Ex-Frau|Exmann|"
+                       r"Patient(?:in|en)?|Pat\.|Klient(?:in)?|Mandant(?:in)?|Schüler(?:in)?|Azubi|Ex-Mann|Ex-Frau|Exmann|"
                        r"Exfrau|Stief(?:sohn|tochter|vater|mutter)|Pflegekind|Baby)[ \t]+")
+_PATIENT = re.compile(r"\b(?:Patient(?:in|en)?|Pat\.)\s+")   # nach „Patientin“ steht fast immer ein Name
+_NUR_INITIAL = re.compile(r"([A-ZÄÖÜ]\.)(?=[ \t]*(?:[,;:)]|\s+[a-zäöüß]|$))")
 _ALTER = re.compile(r"[ \t]*\([ \t]*\d{1,2}\b")
 _ZEILENENDE = re.compile(r"[ \t]*(?:\n|$|,)")
 
@@ -240,8 +289,24 @@ def _an_stellen(text: str) -> list[Finding]:
     sicher, mehrdeutig = lexikon()
     out: list[Finding] = []
 
-    def nimm(m, teile, *, komma=False, danach=None, bedingung=None):
-        span = _name_ab(text, m.end(), teile, komma)
+    def nimm(m, teile, *, komma=False, danach=None, bedingung=None, titel=True, und=False, initial_allein=False):
+        pos = m.end()
+        if titel:
+            pos = _TITEL_KETTE.match(text, pos).end()
+        ini = _INITIALEN.match(text, pos)
+        span = _name_ab(text, ini.end() if ini else pos, teile, komma)
+        if span is None and initial_allein:   # „Herr K.“, „Frau I.“ – abgekürzter Name
+            nur = _NUR_INITIAL.match(text, pos)
+            if nur:
+                out.append(_f(text, nur.start(1), nur.end(1)))
+                return
+        if span and ini:
+            span = (ini.start(), span[1])
+        if span and und:   # „Drs. Seiler und Wantzer“
+            u = re.compile(r"[ \t]+und[ \t]+").match(text, span[1])
+            zweiter = _name_ab(text, u.end(), 2) if u else None
+            if zweiter:
+                out.append(_f(text, *zweiter))
         if not span:
             return
         if danach and not danach.match(text, span[1]):
@@ -251,6 +316,12 @@ def _an_stellen(text: str) -> list[Finding]:
         out.append(_f(text, *span))
 
     for m in _TITEL.finditer(text):
+        nimm(m, 3, komma=True, und=True, initial_allein=True)
+    for m in _PATIENT.finditer(text):
+        nimm(m, 3, komma=True, initial_allein=True)
+    for m in _BERUF.finditer(text):
+        nimm(m, 3)
+    for m in _VERFASST.finditer(text):
         nimm(m, 3)
     for m in _ANREDE.finditer(text):
         nimm(m, 2, danach=re.compile(r"[ \t]*(?:[,!:;]|\n|$)"))
@@ -264,7 +335,10 @@ def _an_stellen(text: str) -> list[Finding]:
         nimm(m, 2)
     alle = sicher | mehrdeutig
     for m in _VERWANDT.finditer(text):
-        nimm(m, 2, bedingung=lambda sp: _vorname(_WORT.match(text, sp[0]).group(), alle) or bool(_ALTER.match(text, sp[1])))
+        if m.group().startswith(("Patient", "Pat.")):   # eigene Regel _PATIENT
+            continue
+        nimm(m, 2, bedingung=lambda sp: (_vorname((_WORT.search(text, sp[0]) or _WORT.match(text, sp[0])).group(), alle)
+                                         or bool(_ALTER.match(text, sp[1]))))
     return out
 
 
@@ -276,13 +350,47 @@ def weitere_nennungen(text: str, personen: list[Finding]) -> list[Finding]:
     teile = set()
     for f in personen:
         for t in _WORT.findall(f.text):
-            if (len(t) >= 3 and (_gross(t) or t.isupper()) and t not in STOPP and t not in ORG
-                    and t not in mehrdeutig):   # „Ernst Jünger“ ja, aber nicht jedes „Ernst“
+            if len(t) >= 3 and (_gross(t) or t.isupper()) and t not in STOPP and t not in ORG and t not in ABKUERZUNGEN:
                 teile.add(t)
     out: list[Finding] = []
     for t in sorted(teile):
-        for m in re.finditer(rf"(?<![^\W\d_]){re.escape(t)}(?=s?(?![^\W\d_]))", text):
+        if t in KOERPER:
+            continue   # Dr. Leber ja – aber nicht jede „Leber“ im Befund
+        for m in re.finditer(rf"(?<![^\W\d_])(?<!-){re.escape(t)}(?=s?(?!-|[^\W\d_]))", text):
+            davor = text[max(0, m.start() - 12):m.start()]
+            if _ARTIKEL_DAVOR.search(davor):
+                continue   # „die Leber“, „im Schädel“ – Wort, nicht der Arzt Dr. Leber
+            if t in mehrdeutig and _SATZANFANG.search(text[:m.start()]):
+                continue   # „Ernst der Lage“ – mehrdeutiger Vorname am Satzanfang
             out.append(_f(text, m.start(), m.end()))
+    return out
+
+
+KOERPER = frozenset("""Leber Niere Nieren Herz Lunge Magen Darm Milz Galle Blase Becken Schädel Knie Hüfte Schulter
+Rücken Haut Blut Hals Kopf Fuß Hand Arm Bein Auge Ohr Nase Mund Zahn Brust Bauch Knochen Muskel Nerv Gehirn Hirn Zunge
+Lippe Ferse Zehe Finger Daumen Wade Nacken Kiefer Rippe Wirbel Becker""".split()) - {"Becker"}
+
+_ARTIKEL_DAVOR = re.compile(r"(?i)(?<![\w])(?:der|die|das|den|dem|des|ein|eine|einen|einem|einer|eines|kein|keine|sein|seine|"
+                            r"seinen|seinem|seiner|ihr|ihre|ihren|ihrem|ihrer|mein|meine|unser|unsere|zur|zum|im|am|vom|"
+                            r"beim|ins|ans|beide|beiden)[ \t]+$")
+_SATZANFANG = re.compile(r"(?:^|[.!?\n])[ \t\u00a0]*$")
+
+
+_NACH_NAME = None
+
+
+def geburtsdaten_nach_namen(text: str, personen: list[Finding]) -> list[Finding]:
+    """„Albers (* 4.4.1997)“, „Haefner, Heinz, * 21.3.1979“, „Andrea Ilgner, 21.10.1982, wohnhaft …“"""
+    global _NACH_NAME
+    if _NACH_NAME is None:
+        from .detectors import _DATUM
+        _NACH_NAME = re.compile(rf"(?i)[ \t]*[,(]?[ \t]*(?:(?P<m>\*|geb\.?(?:[ \t]*am)?[ \t]*:?)[ \t]*)?(?P<d>{_DATUM})"
+                                r"(?P<n>[ \t]*[,)]|[ \t]+wohnhaft)?")
+    out: list[Finding] = []
+    for f in personen:
+        m = _NACH_NAME.match(text, f.end)
+        if m and (m.group("m") or m.group("n")):
+            out.append(Finding("GEBURTSDATUM", "Geburtsdatum", m.group("d"), m.start("d"), m.end("d"), MITTEL))
     return out
 
 

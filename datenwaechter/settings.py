@@ -163,3 +163,44 @@ def masked_token(token: str) -> str:
     if not token:
         return "(keins)"
     return "****" if len(token) <= 8 else f"{token[:3]}…{token[-4:]}"
+
+
+# --------------------------------------------------------------------------- Was soll geschwärzt werden?
+
+SCHWAERZEN_STANDARD = {
+    "firmen": True,                  # Firmennamen, Kunden-/Vertrags-/Angebotsnummern, Aktenzeichen
+    "betraege": False,               # Preise und Beträge (die KI braucht sie oft)
+    "medizin": False,                # Diagnosen, ICD-Codes, Medikamente, Laborwerte
+    "themen_nur_mit_person": True,   # Gesundheit/Familie/Recht … nur melden, wenn eine Person erkennbar ist
+}
+_schwaerzen_cache: dict = {}
+
+
+def schwaerzen() -> dict:
+    """Einstellungen „Was soll geschwärzt werden?“ (mit Standardwerten; kurz zwischengespeichert)."""
+    p = path()
+    try:
+        stand = p.stat().st_mtime_ns
+    except OSError:
+        stand = None
+    if _schwaerzen_cache.get("p") == str(p) and _schwaerzen_cache.get("stand") == stand:
+        return dict(_schwaerzen_cache["wert"])
+    wert = dict(SCHWAERZEN_STANDARD)
+    try:
+        eigene = json.loads(p.read_text(encoding="utf-8")).get("schwaerzen", {})
+        wert.update({k: bool(v) for k, v in eigene.items() if k in SCHWAERZEN_STANDARD})
+    except (OSError, ValueError, AttributeError):
+        pass
+    _schwaerzen_cache.update(p=str(p), stand=stand, wert=wert)
+    return dict(wert)
+
+
+def schwaerzen_speichern(werte: dict) -> None:
+    p = path()
+    try:
+        data = json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+    except (OSError, ValueError):
+        data = {}
+    data["schwaerzen"] = {k: bool(werte.get(k, v)) for k, v in SCHWAERZEN_STANDARD.items()}
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")

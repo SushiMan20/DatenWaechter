@@ -62,6 +62,8 @@ def analyze(path: str | Path, use_ki: bool = False, use_llm: bool | str = "auto"
     elif doc.preview:
         image = doc.preview()
     verdict = content_check.check(doc.text, image=image, name=doc.path.name, use_llm=use_llm)
+    verdict = content_check.nur_mit_personenbezug(verdict, findings, faces=len(found_faces) + (doc.kind == "image" and
+                                                                                 "Fotos von Personen" in verdict.categories))
     info = []
     if doc.kind == "image" and not verdict.by_ai:
         info.append("Motiv des Bildes nicht bewertet – dafür einen KI-Server mit Bildverständnis einrichten")

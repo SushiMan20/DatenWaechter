@@ -1,51 +1,196 @@
 {
-  "_hinweis": "Stichwörter für den Inhalts-Check. '!' = ein Treffer reicht, sonst braucht es 2 verschiedene. '*' = Wortanfang (Scheidung* trifft Scheidungsantrag). Diese Datei ist die Quelle; extension/kategorien.js muss dieselben Daten enthalten (Test prüft das).",
-  "familie": {
-    "name": "Familienunterlagen", "stufe": 2,
-    "begriffe": ["!sorgerecht*", "!scheidung*", "!jugendamt*", "!vormundschaft*", "!umgangsrecht*", "!familiengericht*",
-      "unterhalt*", "ehefrau", "ehemann", "ehepartner*", "tochter", "sohn", "kinder", "kindes*", "kita", "testament*",
-      "erbschaft*", "erbe", "adoption*", "trennung*", "geschieden*", "familie*", "enkel*", "elternteil*", "mutter", "vater",
-      "schwiegermutter", "schwiegervater", "geschwister"]
-  },
-  "gesundheit": {
-    "name": "Gesundheitsdaten", "stufe": 3,
-    "begriffe": ["!arztbrief*", "!diagnose*", "!befund*", "!krankschreibung*", "!arbeitsunfähigkeit*", "!psychotherap*",
-      "!pflegegrad*", "!icd-10", "!entlassungsbericht*", "krankenhaus*", "klinik*", "therapie*", "medikament*", "krankheit*",
-      "depression*", "krebs", "tumor*", "hiv", "schwanger*", "behinderung*", "blutwerte", "laborwerte", "operation",
-      "patient*", "symptom*", "diagnosis", "medical"]
-  },
-  "finanzen": {
-    "name": "Finanzunterlagen", "stufe": 2,
-    "begriffe": ["!kontoauszug*", "!gehaltsabrechnung*", "!lohnabrechnung*", "!steuerbescheid*", "!pfändung*", "!insolvenz*",
-      "!schufa*", "gehalt*", "einkommen*", "schulden", "kredit*", "mahnung*", "vermögen*", "depot*", "kontostand*",
-      "überweisung*", "steuererklärung*", "salary"]
-  },
-  "recht": {
-    "name": "rechtliche Unterlagen", "stufe": 2,
-    "begriffe": ["!klageschrift*", "!strafanzeige*", "!staatsanwaltschaft*", "!ermittlungsverfahren*", "!vorstraf*",
-      "klage", "anwalt*", "rechtsanwalt*", "gericht*", "urteil*", "aktenzeichen*", "polizei*", "bußgeld*", "beschuldigt*",
-      "mandant*"]
-  },
-  "arbeit": {
-    "name": "Personal- und Arbeitsunterlagen", "stufe": 2,
-    "begriffe": ["!abmahnung*", "!personalakte*", "!arbeitszeugnis*", "kündigung*", "arbeitsvertrag*", "bewerbung*",
-      "lebenslauf*", "mitarbeitergespräch*", "leistungsbeurteilung*", "betriebsrat*", "gehaltserhöhung*", "probezeit*",
-      "arbeitgeber*", "arbeitnehmer*"]
-  },
-  "ausweis": {
-    "name": "Ausweisdokumente", "stufe": 3,
-    "begriffe": ["!personalausweis*", "!reisepass*", "!führerschein*", "!aufenthaltstitel*", "!ausweisnummer*",
-      "!geburtsurkunde*", "!passport", "!identity card", "!id card", "staatsangehörigkeit", "nationality"]
-  },
-  "vertraulich": {
-    "name": "vertrauliche Firmeninterna", "stufe": 2,
-    "begriffe": ["!streng vertraulich", "!betriebsgeheimnis*", "!nur für den internen gebrauch", "!confidential",
-      "!do not distribute", "!nicht zur weitergabe", "vertraulich*", "geheimhaltung*", "nda", "intern", "internal",
-      "umsatzplanung*", "übernahme*", "aufsichtsrat*"]
-  },
-  "besonders": {
-    "name": "besonders geschützte Daten (Religion, Politik, Gewerkschaft, Sexualität)", "stufe": 3,
-    "begriffe": ["!religionszugehörigkeit", "!konfession*", "!kirchenaustritt*", "!gewerkschaftsmitglied*",
-      "!parteimitglied*", "!sexuelle orientierung", "!biometrisch*", "homosexuell*", "transgender", "ethnische herkunft"]
-  }
+ "_hinweis": "Stichwörter für den Inhalts-Check. '!' = ein Treffer reicht, sonst braucht es 2 verschiedene. '*' = Wortanfang (Scheidung* trifft Scheidungsantrag). Diese Datei ist die Quelle; extension/kategorien.js muss dieselben Daten enthalten (Test prüft das).",
+ "familie": {
+  "name": "Familienunterlagen",
+  "stufe": 2,
+  "begriffe": [
+   "!sorgerecht*",
+   "!scheidung*",
+   "!jugendamt*",
+   "!vormundschaft*",
+   "!umgangsrecht*",
+   "!familiengericht*",
+   "unterhalt*",
+   "ehefrau",
+   "ehemann",
+   "ehepartner*",
+   "tochter",
+   "sohn",
+   "kinder",
+   "kindes*",
+   "kita",
+   "testament*",
+   "erbschaft*",
+   "erbe",
+   "adoption*",
+   "trennung*",
+   "geschieden*",
+   "familie*",
+   "enkel*",
+   "elternteil*",
+   "mutter",
+   "vater",
+   "schwiegermutter",
+   "schwiegervater",
+   "geschwister"
+  ]
+ },
+ "gesundheit": {
+  "name": "Gesundheitsdaten",
+  "stufe": 3,
+  "begriffe": [
+   "!arztbrief*",
+   "!diagnose*",
+   "!befund*",
+   "!krankschreibung*",
+   "!arbeitsunfähigkeit*",
+   "!psychotherap*",
+   "!pflegegrad*",
+   "!icd-10",
+   "!entlassungsbericht*",
+   "krankenhaus*",
+   "klinik*",
+   "therapie*",
+   "medikament*",
+   "krankheit*",
+   "depression*",
+   "krebs",
+   "tumor*",
+   "hiv",
+   "schwanger*",
+   "behinderung*",
+   "blutwerte",
+   "laborwerte",
+   "operation",
+   "patient*",
+   "symptom*",
+   "diagnosis",
+   "medical"
+  ]
+ },
+ "finanzen": {
+  "name": "Finanzunterlagen",
+  "stufe": 2,
+  "begriffe": [
+   "!kontoauszug*",
+   "!gehaltsabrechnung*",
+   "!lohnabrechnung*",
+   "!steuerbescheid*",
+   "!pfändung*",
+   "!insolvenz*",
+   "!schufa*",
+   "gehalt*",
+   "einkommen*",
+   "schulden",
+   "kredit*",
+   "mahnung*",
+   "vermögen*",
+   "depot*",
+   "kontostand*",
+   "überweisung*",
+   "steuererklärung*",
+   "salary",
+   "finanzamt*",
+   "steuernummer",
+   "einkommensteuer*",
+   "identifikationsnummer"
+  ]
+ },
+ "recht": {
+  "name": "rechtliche Unterlagen",
+  "stufe": 2,
+  "begriffe": [
+   "!klageschrift*",
+   "!strafanzeige*",
+   "!staatsanwaltschaft*",
+   "!ermittlungsverfahren*",
+   "!vorstraf*",
+   "klage",
+   "anwalt*",
+   "rechtsanwalt*",
+   "gericht*",
+   "urteil*",
+   "aktenzeichen*",
+   "polizei*",
+   "bußgeld*",
+   "beschuldigt*",
+   "mandant*"
+  ]
+ },
+ "arbeit": {
+  "name": "Personal- und Arbeitsunterlagen",
+  "stufe": 2,
+  "begriffe": [
+   "!abmahnung*",
+   "!personalakte*",
+   "!arbeitszeugnis*",
+   "kündigung*",
+   "arbeitsvertrag*",
+   "bewerbung*",
+   "lebenslauf*",
+   "mitarbeitergespräch*",
+   "leistungsbeurteilung*",
+   "betriebsrat*",
+   "gehaltserhöhung*",
+   "probezeit*",
+   "arbeitgeber*",
+   "arbeitnehmer*",
+   "arbeitsverhältnis*",
+   "personalnummer",
+   "kündigen"
+  ]
+ },
+ "ausweis": {
+  "name": "Ausweisdokumente",
+  "stufe": 3,
+  "begriffe": [
+   "!personalausweis*",
+   "!reisepass*",
+   "!führerschein*",
+   "!aufenthaltstitel*",
+   "!ausweisnummer*",
+   "!geburtsurkunde*",
+   "!passport",
+   "!identity card",
+   "!id card",
+   "staatsangehörigkeit",
+   "nationality"
+  ]
+ },
+ "vertraulich": {
+  "name": "vertrauliche Firmeninterna",
+  "stufe": 2,
+  "begriffe": [
+   "!streng vertraulich",
+   "!betriebsgeheimnis*",
+   "!nur für den internen gebrauch",
+   "!confidential",
+   "!do not distribute",
+   "!nicht zur weitergabe",
+   "vertraulich*",
+   "geheimhaltung*",
+   "nda",
+   "intern",
+   "internal",
+   "umsatzplanung*",
+   "übernahme*",
+   "aufsichtsrat*"
+  ]
+ },
+ "besonders": {
+  "name": "besonders geschützte Daten (Religion, Politik, Gewerkschaft, Sexualität)",
+  "stufe": 3,
+  "begriffe": [
+   "!religionszugehörigkeit",
+   "!konfession*",
+   "!kirchenaustritt*",
+   "!gewerkschaftsmitglied*",
+   "!parteimitglied*",
+   "!sexuelle orientierung",
+   "!biometrisch*",
+   "homosexuell*",
+   "transgender",
+   "ethnische herkunft"
+  ]
+ }
 }

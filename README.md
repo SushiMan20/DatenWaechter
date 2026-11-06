@@ -26,7 +26,8 @@ eine anonymisierte Fassung hochladen, das Original verwenden oder abbrechen. Die
 
 - **Prüft beim Hochladen, Einfügen und Kopieren.** Im Browser fängt er Drag & Drop, „Datei hinzufügen“ und Strg+V auf claude.ai, chatgpt.com, Gemini, Copilot, Mistral und Perplexity ab. Unter Windows prüft er alles, was du kopierst, auch Dateien und Screenshots.
 - **Schützt auch die Desktop-Apps** von ChatGPT, Claude, Copilot und Perplexity: Ziehst du eine Datei hinein oder wählst sie über „Datei öffnen“, prüft der Datenwächter sie *vorher* – die App bekommt auf Wunsch nur die geschwärzte Fassung.
-- **Erkennt sensible Daten:** IBAN, Kreditkarte und Steuer-ID (jeweils mit Prüfsumme), Sozialversicherungs-, Ausweis- und Passnummer, API-Schlüssel, Passwörter, E-Mail, Telefon, Adressen, Geburtsdaten, Namen und Gesichter auf Fotos.
+- **Erkennt sensible Daten:** IBAN, Kreditkarte und Steuer-ID (jeweils mit Prüfsumme), Sozialversicherungs-, Ausweis-, Pass-, Steuer- und Versichertennummer, Fall- und Patientennummern, API-Schlüssel, Passwörter, E-Mail, Telefon, Adressen, Geburtsdaten, Namen und Gesichter auf Fotos.
+- **Du stellst ein, was geschwärzt wird.** Angaben zur Person immer. Firmen und Kundennummern, Preise und medizinische Inhalte (Diagnosen, Medikamente, Laborwerte) nach Wahl. So darf „Erkläre mir CRP 200 und 15.000 Leukos“ zur KI, ein Arztbrief mit Namen nicht.
 - **Liest Bilder und Scans** mit der Windows-Texterkennung, alternativ mit Tesseract.
 - **Schwärzt statt zu löschen.** PDFs und Bilder behalten ihr Layout, Funde bekommen einen Kasten mit Platzhalter wie `[IBAN_1]`, Gesichter werden verpixelt.
 - **Sagt dir, *was* du hochlädst:** „Du lädst gerade Familienunterlagen hoch – willst du das?“
@@ -184,6 +185,37 @@ eigene Aktionen und die Zuordnung liegen nur im Speicher des Handys. Die App lä
 | **niedrig** | IP-Adressen |
 | **Themen** | Familie, Gesundheit, Finanzen, Recht, Personal/Arbeit, Ausweise, Firmeninterna, besonders geschützte Daten nach Art. 9 DSGVO ([Stichwörter](datenwaechter/kategorien.json)) |
 
+### Was soll geschwärzt werden?
+
+Einstellbar im Windows-Programm (*Einstellungen*) und in der Handy-App. Die Browser-Erweiterung übernimmt die Einstellung
+des Windows-Programms.
+
+| Gruppe | Standard | Was |
+|---|---|---|
+| Angaben zur Person | immer | Name, Adresse, Geburtsdatum, Telefon, E-Mail, IBAN, Ausweis-, Steuer- und Versichertennummer, Fall-/Patientennummer, Kfz-Kennzeichen, IMEI, GPS |
+| Firmen & Kunden | an | Firmen („Müller Bau GmbH“), Kliniken und Praxen, Kunden-, Vertrags-, Angebots- und Rechnungsnummern, USt-IdNr., Aktenzeichen |
+| Preise & Beträge | aus | „1.250,00 €“ |
+| Medizinische Inhalte | aus | Diagnosen, ICD-Codes, Medikamente, Laborwerte |
+| Themen-Warnung nur mit Person | an | „Du lädst Gesundheitsdaten hoch“ nur, wenn auch jemand erkennbar ist |
+
+### Wie gut erkennt er?
+
+Gemessen an [GraSCCo](https://zenodo.org/records/15747389): 63 deutsche Arztbriefe mit erfundenen Personen, in denen
+Fachleute jede personenbezogene Stelle markiert haben. Ein Treffer zählt, wenn der Datenwächter mindestens 80 % der Stelle schwärzt.
+
+| Angabe | erkannt |
+|---|---|
+| Namen (Patienten, Ärzte, Angehörige) | 314 von 322 (97 %) |
+| Geburtsdaten | 59 von 61 (97 %) |
+| Straße, PLZ | 69 von 74 (93 %) |
+| Telefon, Fax, E-Mail | 24 von 28 (86 %) |
+| Fall-, Patienten-, Befundnummern | 29 von 35 (83 %) |
+| **zusammen** | **495 von 520 (95 %)** |
+
+Schwächer sind Orte ohne Straße („in Graz“, 59 %) und Klinik-Namen (70 %). Fehlalarme: 6, alles Abteilungsnamen wie
+„Universitätsklinik für Dermatologie“. Nachmessen: `python tests/benchmark_grascco.py` (lädt die Daten einmal herunter, sie
+landen nicht im Repository).
+
 ## Grenzen und häufige Fragen
 
 - **Kann die Handy-App Uploads in der ChatGPT-App abfangen?** Nein. iOS und Android lassen keine App die Zwischenablage im Hintergrund lesen oder in fremde Apps eingreifen. Deshalb gilt auf dem Handy: erst *Teilen → Datenwächter*, dann *Geschützt teilen → ChatGPT*.
@@ -192,7 +224,7 @@ eigene Aktionen und die Zuordnung liegen nur im Speicher des Handys. Die App lä
 - **Wie zuverlässig ist die Namenserkennung?** Häufige Vornamen (deutsch und international) und Namen an typischen Stellen findet sie zuverlässig. Seltene Namen ohne Zusammenhang („Wenzeslaus“) erkennt nur der eigene KI-Server. Wörter, die auch Namen sein können („Ernst“, „Rose“, „August“, „Claude“), zählen nur mit Nachnamen oder in eindeutigem Zusammenhang. Die Liste steht in [`datenwaechter/vornamen.txt`](datenwaechter/vornamen.txt) und lässt sich erweitern.
 - **Desktop-Apps wie die ChatGPT- oder Claude-App?** Geschützt (Windows): Ziehst du eine Datei über das App-Fenster, legt sich eine Auffangfläche darüber – die Datei landet erst beim Datenwächter. Im Fenster „Datei öffnen“ der App hält er „Öffnen“, Enter und Doppelklick kurz an und prüft. Die App bekommt auf Wunsch nur die geschwärzte Fassung. Grenzen: Apps mit eigenem (nicht Windows-)Auswahlfenster; die App muss Einfügen von Dateien (Strg+V) können. Abschaltbar in den Einstellungen.
 - **Warum Entwicklermodus?** Die Erweiterung ist (noch) nicht im Chrome Web Store.
-- **Was wird nicht geschwärzt?** Gesundheitsangaben im Fließtext lösen eine Warnung aus, werden aber nicht geschwärzt. Handschrift erkennt die Texterkennung kaum. Bilder *in* Word-Dateien werden nicht geprüft.
+- **Was wird nicht geschwärzt?** Gesundheitsangaben im Fließtext (außer Diagnosen, ICD-Codes, Medikamenten und Laborwerten, wenn *Medizinische Inhalte* an ist) lösen nur eine Warnung aus. Handschrift erkennt die Texterkennung kaum. Bilder *in* Word-Dateien werden nicht geprüft.
 - **Ist das eine Garantie?** Nein. Der Datenwächter ist eine Schutzschicht gegen Versehen. Regeln und KI haben Lücken.
 
 ## Kommandozeile
@@ -210,6 +242,8 @@ datenwaechter aktionen --neu "Als Tweet" --anweisung "Mach daraus einen Tweet" -
 pip install -e ".[dev]"
 pytest                                   # Regeln, Schwärzen, OCR, Gesichter, KI-Anbindung (simulierte Server), Oberfläche
 node --test tests/detectors.test.js      # Browser-Regeln = Python-Regeln
+python tests/korpus_bericht.py           # eigene Testdokumente: was gefunden, was verpasst wird
+python tests/benchmark_grascco.py        # Messung an 63 Arztbriefen (GraSCCo, wird heruntergeladen)
 node tests/e2e_extension.js              # Erweiterung in echtem Chromium (SITE=chatgpt.com für ChatGPT)
 node tests/e2e_ki_aktionen.js            # KI-Aktionen im Browser
 python tests/windows_smoke.py            # nur Windows: Zwischenablage, OCR, Tastenkürzel, Benachrichtigung, Notepad
@@ -230,8 +264,9 @@ packaging/          PyInstaller-Rezept, Installer, Programm-Symbol
 tests/              pytest, Browser- und Windows-Tests
 ```
 
-Die Erkennungsregeln gibt es zweimal, in `datenwaechter/detectors.py` und `extension/detectors.js`. Die Tests prüfen
-beide mit denselben Beispielen. Die Handy-App nutzt dieselbe `extension/detectors.js`. Ändern sich die Stichwörter, erzeugst du die Browser-Fassung so neu:
+Die Erkennungsregeln gibt es zweimal, in `datenwaechter/detectors.py` (mit `namen.py`, `inhalte.py`) und
+`extension/detectors.js`. Die Tests prüfen beide mit denselben Beispielen; `tests/test_gleichstand.py` vergleicht die Funde
+beider Fassungen Stelle für Stelle. Die Handy-App nutzt dieselbe `extension/detectors.js`. Ändern sich die Stichwörter, erzeugst du die Browser-Fassung so neu:
 `python -c "import datenwaechter.content_check as c; c.write_extension_categories()"`.
 
 ## Mitmachen
@@ -245,5 +280,6 @@ Wie du beiträgst, steht in [CONTRIBUTING.md](CONTRIBUTING.md), Änderungen im [
 [OpenCV](https://opencv.org), [Tesseract](https://github.com/tesseract-ocr/tesseract), [pystray](https://github.com/moses-palmer/pystray),
 [PyInstaller](https://pyinstaller.org), [Inno Setup](https://jrsoftware.org/isinfo.php), [pdf.js](https://mozilla.github.io/pdf.js/),
 [tesseract.js](https://tesseract.projectnaptha.com), [jsPDF](https://github.com/parallax/jsPDF), [JSZip](https://stuk.github.io/jszip/).
+Gemessen wird mit GraSCCo_PII (Lohr et al., [Zenodo](https://zenodo.org/records/15747389), CC BY 4.0).
 Das Testfoto stammt aus einem gemeinfreien NASA-Foto (über [scikit-image](https://scikit-image.org)). Alle Personen,
 Adressen, Kontonummern und Firmen in Beispielen und Screenshots sind erfunden.

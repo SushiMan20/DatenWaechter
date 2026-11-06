@@ -104,3 +104,21 @@ test("Vorname allein bekommt den Platzhalter der Person", () => {
   assert.strictEqual(a.anonymize("Mia Schneider ist 7. Mia geht in die Kita, Thomas Schneider zahlt. Schneider ist einverstanden."),
     "[PERSON_1] ist 7. [PERSON_1] geht in die Kita, [PERSON_2] zahlt. [PERSON_3] ist einverstanden.");
 });
+
+test("Testsammlung (tests/fixtures/korpus.json) wie in Python", () => {
+  const { dokumente } = JSON.parse(fs.readFileSync(path.join(__dirname, "fixtures", "korpus.json"), "utf8"));
+  const standard = { firmen: true, betraege: false, medizin: false, themen_nur_mit_person: true };
+  const orte = (text, teil) => { const o = []; let i = text.indexOf(teil); while (i !== -1) { o.push([i, i + teil.length]); i = text.indexOf(teil, i + 1); } return o; };
+  for (const doc of dokumente) {
+    const opt = { ...standard, ...(doc.gruppen || {}) };
+    const funde = DW.scan(doc.text, opt);
+    const deckt = (s, e) => { for (let i = s; i < e; i++) if (!funde.some((f) => f.start <= i && i < f.end)) return false; return true; };
+    for (const [art, teile] of Object.entries(doc.finden || {})) {
+      for (const teil of teile) assert.ok(orte(doc.text, teil).every(([s, e]) => deckt(s, e)), `${doc.name}: ${art} „${teil}“ verpasst`);
+    }
+    for (const teil of doc.stehen || []) {
+      assert.ok(orte(doc.text, teil).every(([s, e]) => !funde.some((f) => f.start < e && s < f.end)), `${doc.name}: „${teil}“ fälschlich markiert`);
+    }
+    if ("thema" in doc) assert.strictEqual(Boolean(DW.contentCheck(doc.text, funde).warning), doc.thema, `${doc.name}: Themen-Warnung`);
+  }
+});

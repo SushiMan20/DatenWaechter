@@ -23,9 +23,10 @@ import sys
 import tempfile
 from pathlib import Path
 
-from . import __version__, actions, content_check, faces, llm, ocr
+from . import __version__, actions, content_check, faces, llm, ocr, settings
 from .analysis import analyze, anonymize
 from .anonymize import Anonymizer
+from .detectors import scan_text
 from .files import UnsupportedFile
 
 CHUNK = 200_000  # Zeichen pro Teilnachricht (max. 800 KB UTF-8)
@@ -58,9 +59,11 @@ def handle(msg: dict) -> dict:
     action = msg.get("action")
     if action == "ping":
         return {"ok": True, "version": __version__, "ocr": ocr.backend(), "faces": faces.available(),
-                "llm": content_check.llm_status()}
+                "llm": content_check.llm_status(), "schwaerzen": settings.schwaerzen()}
     if action == "check_text":
-        return {"ok": True, "content": content_check.check(msg.get("text", "")).to_dict()}
+        text = msg.get("text", "")
+        verdict = content_check.nur_mit_personenbezug(content_check.check(text), scan_text(text))
+        return {"ok": True, "content": verdict.to_dict()}
     if action == "list_actions":
         b = llm.backend()
         return {"ok": True, "llm": b.label if b else None, "extern": bool(b and b.extern),

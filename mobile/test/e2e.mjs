@@ -288,6 +288,27 @@ try {
   assert.ok(zurueck2.includes("DE89 3704 0044 0532 0130 00"), zurueck2);
   ok("Zuordnung überlebt Neustart, Antwort wird automatisch zurückübersetzt");
 
+  schritt("Laborwerte ohne Person: kein Fund, keine Warnung – „Medizinische Inhalte“ einschaltbar");
+  await page.click('.tabs [data-gehe="pruefen"]');
+  await page.click("#btn-leeren");
+  await page.fill("#eingabe", "Bitte interpretieren: CRP 200 mg/l, Leukozyten 15.000, Diagnose: Pneumonie, Therapie mit Amoxicillin.");
+  await page.waitForSelector("#ergebnis:not([hidden])");
+  assert.match(await textVon("#urteil"), /Keine persönlichen Daten/);
+  assert.ok(await page.locator("#thema").isHidden(), "ohne Person keine Themen-Warnung");
+  await page.click('.tabs [data-gehe="einstellungen"]');
+  assert.ok(!(await page.isChecked("#opt-medizin")) && await page.isChecked("#opt-firmen"), "Standard: Medizin aus, Firmen an");
+  await page.check("#opt-medizin");
+  await page.click('.tabs [data-gehe="pruefen"]');
+  await page.waitForSelector(".fund");
+  const med = await page.locator(".fund").allInnerTexts();
+  assert.ok(med.some((f) => f.includes("Laborwert")) && med.some((f) => f.includes("Medikament")), `Medizin-Funde: ${med}`);
+  await page.reload();
+  await bereit();
+  await page.click('.tabs [data-gehe="einstellungen"]');
+  assert.ok(await page.isChecked("#opt-medizin"), "Einstellung bleibt nach Neustart");
+  await page.uncheck("#opt-medizin");
+  ok(`ohne Person: nichts markiert; mit „Medizinische Inhalte“: ${med.length} Funde`);
+
   schritt("Eigener KI-Server (Adresse + Token): Verbindung testen");
   await page.click('.tabs [data-gehe="einstellungen"]');
   await page.click("#ki-aktiv");

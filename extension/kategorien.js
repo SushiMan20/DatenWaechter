@@ -91,7 +91,11 @@ globalThis.DWKategorien = {
    "kontostand*",
    "überweisung*",
    "steuererklärung*",
-   "salary"
+   "salary",
+   "finanzamt*",
+   "steuernummer",
+   "einkommensteuer*",
+   "identifikationsnummer"
   ]
  },
  "recht": {
@@ -132,7 +136,10 @@ globalThis.DWKategorien = {
    "gehaltserhöhung*",
    "probezeit*",
    "arbeitgeber*",
-   "arbeitnehmer*"
+   "arbeitnehmer*",
+   "arbeitsverhältnis*",
+   "personalnummer",
+   "kündigen"
   ]
  },
  "ausweis": {

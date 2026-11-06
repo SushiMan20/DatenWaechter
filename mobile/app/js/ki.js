@@ -132,7 +132,7 @@ export const KATEGORIEN = {
   intim: "intime oder private Inhalte", besonders: "besonders geschützte Daten (Religion, Politik, Sexualität)",
   personenfoto: "Fotos von Personen", personen: "Fotos von Personen",
 };
-const STUFE = { kinder: 3, ausweis: 3, gesundheit: 3, intim: 3, zugangsdaten: 3, besonders: 3 };
+export const STUFE = { kinder: 3, ausweis: 3, gesundheit: 3, intim: 3, zugangsdaten: 3, besonders: 3 };
 export const FRAGEN = {
   personen: "Sind auf einem Bild Menschen zu sehen (Foto, Selfie, Gruppenbild)?",
   kinder: "Sind Kinder zu sehen oder geht es um ein bestimmtes Kind?",
@@ -194,7 +194,7 @@ export async function thema(s, text, bild, name) {
   let beschreibung = typeof data.beschreibung === "string" ? data.beschreibung.trim().replace(/\.+$/, "") : "";
   beschreibung = beschreibung ? beschreibung + "." : null;
   return {
-    categories: namen, severity: Math.max(0, ...keys.map((k) => STUFE[k] || 2)), description: beschreibung,
+    categories: namen, keys, severity: Math.max(0, ...keys.map((k) => STUFE[k] || 2)), description: beschreibung,
     warning: namen.length ? `Du lädst gerade ${verbinde(namen)} hoch.` : null,
     host: host(s.url), extern: extern(s.url), anonym, mitBild: Boolean(mitBild),
   };

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import lru_cache
 from pathlib import Path
 
@@ -169,3 +169,36 @@ def check(text: str, image=None, name: str = "", use_llm: bool | str = "auto") -
         llm.warning = kw.warning
     llm.severity = max(llm.severity, kw.severity)
     return llm
+
+
+# --------------------------------------------------------------------------- Themen nur mit Personenbezug
+
+# Diese Themen sind nur heikel, wenn eine Person erkennbar ist („CRP 200 – was heißt das?“ ist anonym und unkritisch).
+# Firmeninterna, Zugangsdaten, Ausweise, Fotos von Personen und intime Inhalte bleiben immer eine Warnung.
+PERSONENBEZOGEN = {"familie", "gesundheit", "finanzen", "recht", "arbeit", "besonders", "kinder"}
+
+
+def _themen_namen() -> dict[str, str]:
+    """Anzeigename → Schlüssel (Stichwort-Kategorien und KI-Kategorien)."""
+    out = {name: key for key, (name, _st, _t) in _categories().items()}
+    out.update({name: key for key, name in llm.KATEGORIEN.items()})
+    return out
+
+
+def nur_mit_personenbezug(v: Verdict, findings, faces: int = 0, aktiv: bool | None = None) -> Verdict:
+    """Entfernt personenbezogene Themen, wenn im Inhalt keine Person erkennbar ist (Einstellung, Standard an)."""
+    from .inhalte import IDENTITAET
+    from .settings import schwaerzen
+    if aktiv is None:
+        aktiv = schwaerzen()["themen_nur_mit_person"]
+    if not aktiv or not v.categories or faces or any(f.kind in IDENTITAET for f in findings):
+        return v
+    schluessel = _themen_namen()
+    rest = [c for c in v.categories if schluessel.get(c) not in PERSONENBEZOGEN]
+    if rest == v.categories:
+        return v
+    stufen = {name: st for _k, (name, st, _t) in _categories().items()}
+    stufen.update({name: llm.STUFE.get(k, 2) for k, name in llm.KATEGORIEN.items()})
+    # Kopie: keyword_check ist zwischengespeichert, das Original darf sich nicht ändern
+    return replace(v, categories=rest, severity=max((stufen.get(c, 2) for c in rest), default=0),
+                   warning=f"Du lädst gerade {_join(rest)} hoch." if rest else None)

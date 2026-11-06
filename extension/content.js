@@ -33,6 +33,8 @@
 
   const host = (request) => chrome.runtime.sendMessage({ type: "host", request }).catch((e) => ({ ok: false, error: String(e) }));
   const hostStatus = () => chrome.runtime.sendMessage({ type: "ping" }).catch(() => ({ ok: false }));
+  // „Was soll geschwärzt werden?“ kommt aus den Einstellungen des Windows-Programms (sonst Standard)
+  hostStatus().then((st) => { if (st?.ok && st.schwaerzen) DW.setOptions(st.schwaerzen); });
 
   function block(e) {
     e.preventDefault();
@@ -52,7 +54,7 @@
   // ------------------------------------------------------------------ Text prüfen (Einfügen / Ziehen)
   async function checkText(text) {
     const findings = DW.scan(text);
-    let content = text.length >= MIN_CONTENT_CHECK ? DW.contentCheck(text) : null;
+    let content = text.length >= MIN_CONTENT_CHECK ? DW.contentCheck(text, findings) : null;
     if (text.length >= MIN_LLM_CHECK) {
       const status = await hostStatus();
       if (status?.ok && status.llm) {
@@ -97,7 +99,7 @@
     if (!text) return;
     stat("geprueft");
     // Regeln + Stichwörter sind synchron: nur blockieren, wenn es etwas zu fragen gibt (oder die KI gefragt wird)
-    const quick = DW.scan(text).length || (text.length >= MIN_CONTENT_CHECK && DW.contentCheck(text).warning);
+    const quick = ((f) => f.length || (text.length >= MIN_CONTENT_CHECK && DW.contentCheck(text, f).warning))(DW.scan(text));
     if (!quick && text.length < MIN_LLM_CHECK) return;
     block(e);
     const html = dt.getData("text/html"); // nur während des Ereignisses lesbar
@@ -138,7 +140,7 @@
       const text = dt.getData("text/plain");
       if (!text) return;
       stat("geprueft");
-      const quick = DW.scan(text).length || (text.length >= MIN_CONTENT_CHECK && DW.contentCheck(text).warning);
+      const quick = ((f) => f.length || (text.length >= MIN_CONTENT_CHECK && DW.contentCheck(text, f).warning))(DW.scan(text));
       if (!quick && text.length < MIN_LLM_CHECK) return;
       block(e);
       askAboutText(text, "ziehst").then(({ choice, findings }) => {
@@ -257,7 +259,7 @@
       if (file.size > MAX_TEXT) return { ...base, notes: ["Zu groß für die Prüfung im Browser"] };
       const text = await file.text();
       const findings = DW.scan(text);
-      const content = DW.contentCheck(text);
+      const content = DW.contentCheck(text, findings);
       const dot = file.name.lastIndexOf(".");
       const name = dot > 0 ? `${file.name.slice(0, dot)}_anonymisiert${file.name.slice(dot)}` : `${file.name}_anonymisiert.txt`;
       return {

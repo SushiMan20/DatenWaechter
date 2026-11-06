@@ -4,7 +4,7 @@ import * as dok from "./js/dokumente.js";
 
 const D = globalThis.DWDetect;
 const $ = (id) => document.getElementById(id);
-const ZUORDNUNG = "dw-zuordnung", STATISTIK = "dw-statistik";
+const ZUORDNUNG = "dw-zuordnung", STATISTIK = "dw-statistik", SCHWAERZEN = "dw-schwaerzen";
 const PLATZHALTER = /\[[A-Z_]+_\d+\]/g;
 
 const S = {
@@ -27,6 +27,8 @@ const schluessel = (f) => f.kind + "\u0000" + f.text.trim();
 const anzahl = (n, eins, mehr) => `${n} ${n === 1 ? eins : mehr}`;
 const lesen = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
 const schreiben = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* privater Modus */ } };
+
+D.setOptions(lesen(SCHWAERZEN, {}));   // „Was soll geschwärzt werden?“
 
 let toastTimer;
 function toast(text, ms = 2600) {
@@ -295,8 +297,11 @@ function ergebnisZeigen() {
   const alle = docs.flatMap((d) => d.funde);
   const text = gesamtText();          // vergibt die Platzhalter in Lesereihenfolge
   // ---- Urteil
-  const kw = D.contentCheck(docs.map((d) => d.text).join("\n"));
-  const thema = mischeThema(kw, S.kiThema);
+  // Themen wie „Gesundheitsdaten“ nur melden, wenn eine Person erkennbar ist (Fotos zählen immer als möglicher Personenbezug)
+  const mitPerson = !D.optionen.themen_nur_mit_person || docs.some((d) => d.typ === "bild")
+    || alle.some((f) => D.IDENTITAET.has(f.kind)) || ["personen", "personenfoto"].some((k) => S.kiThema?.keys?.includes(k));
+  const kw = D.contentCheck(docs.map((d) => d.text).join("\n"), mitPerson ? null : alle);
+  const thema = mischeThema(kw, S.kiThema && !mitPerson ? ohnePersonenThemen(S.kiThema) : S.kiThema);
   const stufe = Math.max(0, ...alle.map((f) => f.severity), thema.severity >= 3 ? 3 : thema.severity ? 2 : 0);
   const typen = [...new Set(alle.filter((f) => f.severity >= 3).map((f) => f.label))];
   const urteil = $("urteil");
@@ -354,6 +359,12 @@ function ergebnisZeigen() {
 }
 
 const verb = (a) => (a.length === 1 ? a[0] : a.slice(0, -1).join(", ") + " und " + a.at(-1));
+function ohnePersonenThemen(t) {
+  const keys = (t.keys || []).filter((k) => !D.PERSONENBEZOGEN.has(k));
+  const namen = [...new Set(keys.map((k) => ki.KATEGORIEN[k]))];
+  return { ...t, keys, categories: namen, severity: Math.max(0, ...keys.map((k) => ki.STUFE[k] || 2)) };
+}
+
 function mischeThema(kw, kiThema) {
   if (!kiThema) {
     return { ...kw, warning: kw.categories.length ? `Du lädst gerade ${verb(kw.categories)} hoch.` : null,
@@ -648,6 +659,7 @@ function formular() {
   return s;
 }
 function einstellungenZeigen() {
+  for (const el of document.querySelectorAll("#schwaerzen [data-gruppe]")) el.checked = Boolean(D.optionen[el.dataset.gruppe]);
   const s = S.einst;
   for (const [k, id] of Object.entries(felder)) $(id).value = s[k] || "";
   aktivZeigen(s.aktiv);
@@ -702,6 +714,14 @@ $("ki-aktiv").addEventListener("click", () => {
 for (const id of ["ki-url", "ki-token", "ki-modell", "opt-thema", "opt-namen", "opt-anonym", "opt-bilder"]) {
   $(id).addEventListener("change", () => einstellungenSpeichern());
 }
+$("schwaerzen").addEventListener("change", (e) => {
+  const g = e.target.dataset?.gruppe;
+  if (!g) return;
+  D.setOptions({ [g]: e.target.checked });
+  schreiben(SCHWAERZEN, { ...D.optionen });
+  if (S.docs.length) pruefen();   // neu prüfen, Markierungen der KI bleiben
+  toast("Gespeichert");
+});
 $("ki-url").addEventListener("input", () => {
   if (S.einst.anonymisieren == null) $("opt-anonym").checked = ki.extern($("ki-url").value);
   if (S.einst.bilder == null) $("opt-bilder").checked = !ki.extern($("ki-url").value);

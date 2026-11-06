@@ -272,6 +272,26 @@ class App:
         ttk.Button(frm, text="KI-Aktionen (Umformulieren …) bearbeiten …", command=self._actions_editor).pack(
             anchor="w", padx=22)
         ttk.Label(frm, text=hk, foreground="#777").pack(anchor="w", padx=22, pady=(0, 6))
+        box = ttk.LabelFrame(frm, text="Was soll geschwärzt werden?", padding=(10, 6))
+        box.pack(anchor="w", fill="x", pady=(4, 8))
+        werte = settings.schwaerzen()
+        person = tk.BooleanVar(value=True)
+        ttk.Checkbutton(box, text="Angaben zur Person – immer (Name, Adresse, Geburtsdatum, Kontakt, IBAN, "
+                                  "Ausweis-, Steuer-, Versichertennummer)", variable=person, state="disabled").pack(anchor="w")
+        schalter = {}
+        for key, text in (("firmen", "Firmen & Kunden (Firmennamen, Kunden-/Vertragsnummern, Aktenzeichen)"),
+                          ("betraege", "Preise & Beträge"),
+                          ("medizin", "Medizinische Inhalte (Diagnosen, ICD-Codes, Medikamente, Laborwerte)"),
+                          ("themen_nur_mit_person", "Themen wie Gesundheit, Familie, Recht nur melden, wenn eine "
+                                                    "Person erkennbar ist")):
+            schalter[key] = tk.BooleanVar(value=werte[key])
+            ttk.Checkbutton(box, text=text, variable=schalter[key],
+                            command=lambda: settings.schwaerzen_speichern({k: v.get() for k, v in schalter.items()})
+                            ).pack(anchor="w")
+        ttk.Label(box, text="Beispiel: „CRP 200, Leukos 15.000 – was heißt das?“ ist anonym und geht ohne Warnung "
+                            "durch; ein Arztbrief mit Name nicht.", foreground="#777", wraplength=520).pack(anchor="w",
+                                                                                                         pady=(4, 0))
+        win.schwaerzen = schalter
         ki_apps = tk.BooleanVar(value=schutz.aktiv())
 
         def ki_apps_schalten():
@@ -971,6 +991,8 @@ class App:
                                content_check.check(text, use_llm=use_llm) if long_text else None))
         else:
             verdict = content_check.keyword_check(text) if long_text else None
+            if verdict:
+                verdict = content_check.nur_mit_personenbezug(verdict, findings)
             if findings or (verdict and verdict.warning):
                 self._warn_text(text, findings, verdict)
 
@@ -1046,6 +1068,8 @@ class App:
                 self._ok(f"Fehler: {item[1]}")
             elif item[0] == "text":
                 _, text, findings, verdict = item
+                if verdict:
+                    verdict = content_check.nur_mit_personenbezug(verdict, findings)
                 if findings and self.safe.get():
                     self._set_clipboard_text(self.anon.anonymize(text, findings))
                 if findings or (verdict and verdict.warning):

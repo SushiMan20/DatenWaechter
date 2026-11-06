@@ -24,6 +24,7 @@ class Finding:
     severity: int
     source: str = "regel"   # "regel" oder "ki"
     score: float = 1.0
+    gruppe: str = ""        # "" = Person (immer), sonst "firmen" | "betraege" | "medizin" (einstellbar)
 
     @property
     def severity_label(self) -> str:
@@ -150,6 +151,8 @@ RULES: list[Rule] = [
                     r"\b[\"']?\s*[:=]\s*[\"']?(?P<v>[^\s\"',;]{4,})"), HOCH, group="v"),
 
     # ---- Finanz- und Identitätsdaten
+    Rule("GERAETE_ID", "IMEI (Handy)",
+         re.compile(r"(?i)\bIMEI\s*[:.]?\s*(?P<v>\d{15})\b"), HOCH, group="v", validate=lambda s: luhn_valid(s)),
     Rule("IBAN", "IBAN / Bankverbindung",
          re.compile(r"\b[A-Z]{2}[ ]?[0-9OIl]{2}(?:[ ]?[A-Z0-9Il|]{4}){2,7}(?:[ ]?[A-Z0-9Il|]{1,4})?\b"), HOCH,
          validate=iban_valid),
@@ -158,15 +161,16 @@ RULES: list[Rule] = [
     Rule("STEUER_ID", "Steuer-ID",
          re.compile(r"(?<!\d)\d{2}[ ]?\d{3}[ ]?\d{3}[ ]?\d{3}(?!\d)"), HOCH, validate=steuer_id_valid),
     Rule("AUSWEIS", "Ausweis-/Passnummer",
-         re.compile(r"(?i)\b(?:personalausweis-?nr\.?|ausweis-?nr\.?|ausweisnummer|personalausweisnummer|passnummer|"
+         re.compile(r"(?i)\b(?:personalausweis-?nr\.?|ausweis-?nr\.?|ausweisnummer|personalausweisnummer|reisepassnummer|"
+                    r"reisepass-?nr\.?|passnummer|"
                     r"pass-?nr\.?|document no\.?|führerscheinnummer)\s*:?\s*(?P<v>(?=[A-Za-z]*\d)[A-Z0-9]{8,11})\b"), HOCH, group="v"),
     Rule("SOZIALVERSICHERUNG", "Sozialversicherungsnummer",
          re.compile(r"\b\d{2}[ ]?(?:0[1-9]|[12]\d|3[01])(?:0[1-9]|1[0-2])\d{2}[ ]?[A-Z][ ]?\d{3}\b"), HOCH),
     # „geb. am 03.04.1985“, „Geburtsdatum:\n12. März 1985“, „geboren am Montag, dem 3.5.90“, „* 12.03.1985“, „Jahrgang 1985“
     Rule("GEBURTSDATUM", "Geburtsdatum",
          re.compile(rf"(?i)\b{_GEB}[^\d\n.]{{0,40}}?(?:\n[^\d\n.]{{0,15}}?)?(?P<v>{_DATUM})"), MITTEL, group="v"),
-    Rule("GEBURTSDATUM", "Geburtsdatum",
-         re.compile(rf"(?i)(?:(?<![\w*])\*|(?<=[^\W\d_] )\*[ ]?)(?P<v>{_DATUM})"), MITTEL, group="v"),
+    Rule("GEBURTSDATUM", "Geburtsdatum",   # „*12.03.1985“, „Becker * 12.03.1985“, „(* 4.4.1997)“, „, * 21.3.1979“
+         re.compile(rf"(?i)(?:(?<![\w*])\*|(?<=[^\s*] )\*[ ]?|(?<=\()\*[ ]?)(?P<v>{_DATUM})"), MITTEL, group="v"),
     Rule("GEBURTSDATUM", "Geburtsjahr",
          re.compile(r"(?i)\b(?:geburtsjahr(?:gang)?|jahrgang|geb\.|geboren(?: im jahr?| in)?|born(?: in)?|year of birth)"
                     r"[ ]*:?[ ]*(?P<v>(?:19|20)\d{2})(?![\d.])"), MITTEL, group="v"),
@@ -175,26 +179,109 @@ RULES: list[Rule] = [
     Rule("EMAIL", "E-Mail-Adresse",
          re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"), MITTEL),
     Rule("TELEFON", "Telefonnummer",
-         re.compile(r"(?<![\w+/.])(?:\+\d{1,3}|00\d{1,3}|0)[ /.-]?\(?\d{2,5}\)?(?:[ /.-]?\d{2,}){1,4}(?!\w|\.\d)"),
-         MITTEL, min_digits=7, max_digits=15),
+         # auch „+43(0)333 775-8447“, „(0461) 708 - 223“
+         re.compile(r"(?<![\w+/.(])(?:\(?(?:\+\d{1,3}|00\d{1,3})\)?(?:[ ]?\(0\))?|\(?0)[ /.-]?\(?\d{2,5}\)?"
+                    r"(?:(?:[ ]?[/.-][ ]?|[ ])?\d{2,}){1,4}(?!\w|\.\d)"),
+         MITTEL, min_digits=7, max_digits=16),
     Rule("ADRESSE", "Straße und Hausnummer",
          # „Hauptstraße 12“, „Karl-Marx-Straße 5“, „Bad Homburger Weg 3“ – aber nie ganze Sätze davor
-         re.compile(rf"\b(?:[{_UC}][{_LC}]+(?:-[{_UC}][{_LC}]+)*"
-                    rf"(?:straße|strasse|str\.|weg|gasse|platz|allee|ring|damm|ufer|chaussee|pfad|steig)"
+         # auch „Innsbrucker Landstraße 22a“, „Rote Str. 3“, „Friesische Str. 21 a“, „Kantstraße. 21“
+         re.compile(rf"\b(?!(?:Die|Eine|Seine|Meine|Ihre|Deine|Unsere|Keine|Diese|Jede|Alle|Andere)\b)"
+                    rf"(?:(?:[{_UC}][{_LC}]+(?:er|e|es|en) )?[{_UC}][{_LC}]+(?:-[{_UC}][{_LC}]+)*"
+                    rf"(?:straße|strasse|str\.|weg|gasse|platz|allee|ring|damm|ufer|chaussee|pfad|steig|landstraße)"
                     rf"|(?:(?:[{_UC}][{_LC}]+-){{1,3}}|(?:(?:Bad|Sankt|St\.|Alte|Neue|Große|Kleine|Obere|Untere) )?"
-                    rf"[{_UC}][{_LC}]+er )"
+                    rf"[{_UC}][{_LC}]+(?:er|e|es|en) )"
                     rf"(?:Straße|Strasse|Str\.|Weg|Gasse|Platz|Allee|Ring|Damm|Ufer|Chaussee|Pfad|Steig))"
-                    rf"\s+\d{{1,4}}(?:\s?[a-zA-Z])?\b"), MITTEL),
+                    rf"\.?\s+\d{{1,4}}(?:\s?[a-zA-Z])?\b"), MITTEL),
     Rule("ADRESSE", "PLZ und Ort",
-         re.compile(rf"(?<![\d.,])\b\d{{5}}\s+(?!(?:Euro|EUR|Stück|Mal|Jahre|Tage|Mitarbeiter|Kunden|Nutzer)\b)"
+         re.compile(rf"(?<![\w-])(?:A|CH|D|AT|DE|FL)-\d{{4,5}}[ \t]+[{_UC}][{_LC}]+(?:[ -][{_UC}][{_LC}]+)?\b"), MITTEL),
+    Rule("ADRESSE", "Straße und Hausnummer",   # „Am Waldsaum 21“, „An der Mühle 3“, „Im Winkel 7“
+         re.compile(rf"\b(?:Am|An der|An den|Im|In der|Auf der|Auf dem|Zum|Zur|Hinter der|Unter den|Vor dem)[ \t]+"
+                    rf"(?![\w-]*(?:ung|ion|heit|keit|schaft|tät)\b)"
+                    rf"(?!(?:Montag|Dienstag|Mittwoch|Donnerstag|Freitag|Samstag|Sonntag|Wochenende|Ende|Anfang|Abend|"
+                    rf"Morgen|Tag|Januar|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)\b)"
+                    rf"[{_UC}][{_LC}]+(?:-[{_UC}][{_LC}]+)*[ \t]+\d{{1,4}}(?:\s?[a-zA-Z])?\b"), MITTEL),
+    Rule("ADRESSE", "Straße und Hausnummer",   # Adressblock: „Korekamp 15“ in der Zeile über „47809 Krefeld“
+         re.compile(rf"(?m)^[ \t]*(?P<v>[{_UC}][{_LC}-]+(?:[ \t][{_UC}][{_LC}-]+)?[ \t]\d{{1,4}}[ \t]?[a-zA-Z]?)"
+                    rf"(?:[ \t]*\n[ \t]*|,[ \t]*|[ \t]{{2,}})(?:[A-Z]{{1,2}}-)?\d{{4,5}}[ \t]+[{_UC}]"), MITTEL, group="v"),
+    Rule("ADRESSE", "PLZ und Ort",   # vierstellig (Österreich/Schweiz) nach Straße oder „wohnhaft“
+         re.compile(rf"(?:(?<=\d, )|(?<=\d[a-z], )|(?i:(?<=wohnhaft )|(?<=wohnhaft in )|(?<=wh\.: )|(?<=wh\. )))"
+                    rf"\d{{4}}[ \t]+[{_UC}][{_LC}]+(?:[ -][{_UC}][{_LC}]+)?\b"), MITTEL),
+    Rule("ADRESSE", "Wohnort",
+         re.compile(rf"\b(?i:wohnhaft|wohnt|lebt|geboren|aufgewachsen)[ \t]+(?:in[ \t]+)?"
+                    rf"(?P<v>[{_UC}][{_LC}]+(?:[ -](?:am|an der|im|bei)?[ ]?[{_UC}][{_LC}]+)?)\b"), MITTEL, group="v"),
+    Rule("ADRESSE", "PLZ und Ort",
+         re.compile(rf"(?<![\d.,])\b\d{{5}}[ \t]+(?!(?:Euro|EUR|Stück|Mal|Jahre|Tage|Mitarbeiter|Kunden|Nutzer)\b)"
                     rf"[{_UC}][{_LC}]+(?:[ -](?:am|an der|im|ob der)?\s?[{_UC}][{_LC}]+)?\b"), MITTEL),
     Rule("PERSON", "Name (Anrede)",
          re.compile(rf"\b(?:Herr|Herrn|Frau|Mr\.?|Mrs\.?|Ms\.?)\s+(?:(?:Dr|Prof)\.\s+)*"
-                    rf"(?P<v>[{_UC}][{_LC}]+(?:[- ][{_UC}][{_LC}]+)?)"), MITTEL, group="v"),
+                    rf"(?P<v>[{_UC}][{_LC}]+(?:[- ][{_UC}][{_LC}]+)?)"), MITTEL, group="v",
+         validate=lambda v: _kein_stoppwort(v)),
+    # ---- weitere Kennungen einer Person (immer)
+    Rule("STEUERNUMMER", "Steuernummer",
+         re.compile(r"(?i)\b(?:steuernummer|steuer-?nr\.?|st\.?-?nr\.?)\s*[:.]?\s*"
+                    r"(?P<v>\d{2,3}/\d{3,4}/\d{4,5}|\d{10,13})(?!\d)"), HOCH, group="v"),
+    Rule("KRANKENVERSICHERUNG", "Krankenversichertennummer",
+         re.compile(r"(?i)\b(?:krankenversichertennummer|versichertennummer|versicherten-?nr\.?|kv-?nr\.?|kvnr|"
+                    r"versicherten-?id)\s*[:.]?\s*(?P<v>[A-Z]\d{9}|\d{9,12})\b"), HOCH, group="v"),
+    Rule("KENNNUMMER", "Fall-/Patientenkennung",   # Arztbriefe: „PIZ: 1822544“, „Fallzahl: 103354008“, „E-Nr.: 172…“
+         re.compile(r"(?i)\b(?:piz|pid|fn|fallzahl|fall|e-?nr\.?|h-?nr\.?|einsende-?(?:nummer|nr\.?)|histo(?:logie)?-?nr\.?|"
+                    r"befund-?nr\.?|labor-?nr\.?|pat\.?-?(?:nr\.?|id)|kis-?nr\.?|sv[- ]?nr\.?|sv|histologie\s*\()\s*[:.#]?\s*"
+                    r"(?P<v>(?=[\w./-]{4,})(?=[\w./-]*\d)[A-Za-z0-9](?:[\w./-]*\w)?)"), MITTEL, group="v"),
+    Rule("KENNNUMMER", "Personen-/Patientennummer",
+         re.compile(r"(?i)\b(?:patienten|personal|mitglieds|versicherungsschein|policen|police|versicherungs|mandanten|"
+                    r"schüler|matrikel|klienten|fall|aufnahme)[-\s]?(?:nr\.?|nummer|n°|no\.?|id)\s*[:.#]?\s*"
+                    r"(?P<v>(?=[\w./-]*\d)[A-Za-z0-9](?:[\w./-]*\w)?)"), MITTEL, group="v"),
+    Rule("KFZ", "Kfz-Kennzeichen",
+         re.compile(r"(?i)\b(?:kfz-?kennzeichen|amtl\.?\s*kennzeichen|kennzeichen|nummernschild)\s*[:.]?\s*"
+                    r"(?P<v>[A-ZÄÖÜ]{1,3}[- ][A-Z]{1,2}[- ]?\d{1,4}[EH]?)\b"), MITTEL, group="v"),
+    Rule("STANDORT", "GPS-Koordinaten",
+         re.compile(r"(?<![\d.])-?\d{1,2}\.\d{4,7},\s?-?\d{1,3}\.\d{4,7}(?![\d.])"), MITTEL),
+
+    # ---- Firmen & Kunden (einstellbar, Standard an)
+    Rule("NUMMER", "Kunden-/Vertragsnummer",
+         re.compile(r"(?i)\b(?:kunden|kd|vertrags?|angebots?|auftrags?|rechnungs?|bestell(?:ungs?)?|lieferscheins?|"
+                    r"projekts?|vorgangs?|referenz|bearbeitungs)[-\s]?(?:nr\.?|nummer|n°|no\.?|id)\s*[:.#]?\s*"
+                    r"(?P<v>(?=[\w./-]*\d)[A-Za-z0-9](?:[\w./-]*\w)?)"), MITTEL, group="v", tags=("firmen",)),
+    Rule("NUMMER", "USt-IdNr.",
+         re.compile(r"(?i)\b(?:ust-?id(?:-?nr)?\.?|ust\.?-?idnr\.?|umsatzsteuer-?id(?:entifikationsnummer)?)\s*[:.]?\s*"
+                    r"(?P<v>[A-Z]{2}\s?\d{8,12})\b"), MITTEL, group="v", tags=("firmen",)),
+    Rule("NUMMER", "Aktenzeichen",
+         re.compile(r"(?i)\b(?:az\.|aktenzeichen|geschäftszeichen|kassenzeichen|ihr zeichen|unser zeichen)\s*[:.]?\s*"
+                    r"(?P<v>\d{1,4}\s?[A-Za-z]{1,4}\s?\d{1,6}/\d{2,4}|(?=[\w./-]*\d)[A-Za-z0-9](?:[\w./-]*\w)?)"),
+         MITTEL, group="v", tags=("firmen",)),
+
+    # ---- Preise & Beträge (einstellbar, Standard aus)
+    Rule("BETRAG", "Betrag / Preis",
+         re.compile(r"(?<![\w.,])(?:(?:€|EUR)\s?(?:\d{1,3}(?:[.' ]\d{3})+|\d+)(?:,\d{1,2})?|"
+                    r"(?:\d{1,3}(?:[.' ]\d{3})+|\d+)(?:,\d{1,2})?\s?(?:€|EUR|Euro)(?!\w))"), MITTEL, tags=("betraege",)),
+
+    # ---- Medizinische Inhalte (einstellbar, Standard aus)
+    Rule("DIAGNOSE", "Diagnose (ICD-Code)",
+         re.compile(r"\b[A-TV-Z]\d{2}\.\d{1,2}(?:[ ]?[GVZA](?![\w]))?|\b[A-TV-Z]\d{2}[ ]?[GVZ](?![\w])"), MITTEL,
+         tags=("medizin",)),
+    Rule("DIAGNOSE", "Medizinische Angabe",
+         re.compile(r"(?im)^[ \t]*(?:diagnosen?|dx|befund|beurteilung|anamnese|epikrise|vorerkrankungen|"
+                    r"medikation)[ \t]*:[ \t]*(?P<v>[^\n]{3,200})"), MITTEL, group="v", tags=("medizin",)),
+    Rule("LABORWERT", "Laborwert",
+         re.compile(r"(?i)(?<![\w-])(?:CRP|PCT|Procalcitonin|Leukozyten|Leukos?|Erythrozyten|Erys?|Thrombozyten|Thrombos?|"
+                    r"Hb|Hämoglobin|HbA1c|Hkt?|Hämatokrit|MCV|MCH|MCHC|TSH|fT3|fT4|Kreatinin|Krea|e?GFR|Harnstoff|"
+                    r"Harnsäure|GOT|GPT|AST|ALT|GGT|γ-GT|LDH|CK(?:-MB)?|Troponin(?:\s?[IT])?|hsTnT|D-Dimere|INR|Quick|"
+                    r"a?PTT|Ferritin|Transferrin|Vitamin\s?D3?|Vitamin\s?B12|Folsäure|Cholesterin|LDL|HDL|"
+                    r"Triglyz?c?eride|Natrium|Kalium|Calcium|Magnesium|Phosphat|Glukose|Glucose|Blutzucker|BZ|"
+                    r"Bilirubin|Albumin|Lipase|Amylase|PSA|NT-proBNP|BNP|IgE|IgG|IgM|BSG|Laktat|IL-6|CEA|AFP|HCG|"
+                    r"Testosteron|Östradiol|Cortisol|Prolaktin|AMH)\s*[:=]?\s*(?:[<>≤≥]\s*)?\d+(?:[.,]\d+)?"
+                    r"(?:\s?(?:k|tsd\.?|tausend))?(?:\s?(?:mg/dl|mg/l|g/dl|g/l|mmol/l|µmol/l|umol/l|µg/l|ng/ml|ng/l|pg/ml|"
+                    r"mU/l|µU/ml|U/l|IU/ml|/µl|/nl|G/l|T/l|%|fl|pg))?(?![\w])"), MITTEL, tags=("medizin",)),
     Rule("IP_ADRESSE", "IP-Adresse",
          re.compile(r"(?<![\d.])(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?![\d.])"),
          NIEDRIG),
 ]
+
+
+def _kein_stoppwort(v: str) -> bool:
+    from .namen import STOPP
+    return v.split()[0] not in STOPP
 
 
 def _rule_findings(text: str) -> Iterable[Finding]:
@@ -208,7 +295,8 @@ def _rule_findings(text: str) -> Iterable[Finding]:
                 n = len(_digits(value))
                 if n < rule.min_digits or (rule.max_digits and n > rule.max_digits):
                     continue
-            yield Finding(rule.kind, rule.label, value, start, end, rule.severity)
+            yield Finding(rule.kind, rule.label, value, start, end, rule.severity,
+                          gruppe=rule.tags[0] if rule.tags else "")
 
 
 def resolve_overlaps(findings: Iterable[Finding]) -> list[Finding]:
@@ -221,16 +309,25 @@ def resolve_overlaps(findings: Iterable[Finding]) -> list[Finding]:
     return sorted(kept, key=lambda f: f.start)
 
 
-def scan_text(text: str, use_ki: bool = False) -> list[Finding]:
-    """Durchsucht Text nach sensiblen Daten. `use_ki=True` ergänzt KI (eigener Server oder lokales Modell)."""
-    from . import namen
-    found = list(_rule_findings(text)) + namen.finde(text)
+def scan_text(text: str, use_ki: bool = False, gruppen: dict | None = None) -> list[Finding]:
+    """Durchsucht Text nach sensiblen Daten. `use_ki=True` ergänzt KI (eigener Server oder lokales Modell).
+
+    gruppen: welche einstellbaren Gruppen geschwärzt werden ({"firmen": True, "betraege": False, "medizin": False});
+    None = aus den Einstellungen. Angaben zur Person werden immer gesucht.
+    """
+    from . import inhalte, namen
+    if gruppen is None:
+        from .settings import schwaerzen
+        gruppen = schwaerzen()
+    found = [f for f in list(_rule_findings(text)) + namen.finde(text) + inhalte.finde(text)
+             if not f.gruppe or gruppen.get(f.gruppe)]
     if use_ki:
         from . import ner
         if ner.available():
             found.extend(ner.detect(text))
     personen = [f for f in resolve_overlaps(found) if f.kind == "PERSON"]
     found += namen.weitere_nennungen(text, personen)   # „Schneider“ allein, nachdem „Thomas Schneider“ erkannt ist
+    found += namen.geburtsdaten_nach_namen(text, personen)
     return resolve_overlaps(found)
 
 

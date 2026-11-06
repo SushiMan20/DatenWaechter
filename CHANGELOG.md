@@ -1,5 +1,17 @@
 # Änderungen
 
+## 1.3.0
+
+- **Einstellbar, was geschwärzt wird** („Was soll geschwärzt werden?“ in Windows-Programm und Handy-App; die Browser-Erweiterung übernimmt die Einstellung des Windows-Programms):
+  - *Angaben zur Person* – immer: Name, Adresse, Geburtsdatum, Kontakt, IBAN, Ausweis-, Steuer- und Versichertennummer, Fall- und Patientennummern, Kfz-Kennzeichen, IMEI, GPS.
+  - *Firmen & Kunden* – Standard an: Firmen (GmbH, AG, e.V. …), Kliniken und Praxen, Kunden-, Vertrags- und Angebotsnummern, USt-IdNr., Aktenzeichen.
+  - *Preise & Beträge* – Standard aus.
+  - *Medizinische Inhalte* – Standard aus: Diagnosen, ICD-Codes, Medikamente, Laborwerte.
+  - *Themen-Warnung nur mit Person* – Standard an: „Erkläre mir CRP 200 und 15.000 Leukos“ geht ohne Rückfrage durch, ein Arztbrief mit Namen nicht.
+- **Deutlich bessere Erkennung in Arztbriefen und Formularen**, gemessen an 63 Arztbriefen des Forschungskorpus GraSCCo: Namen, Geburtsdaten, Adressen, Kontakt und Kennnummern von 66 % auf 95 % (Namen 97 %, Geburtsdaten 97 %, Adressen 93 %). Neu u. a.: Titel-Ketten („Univ.-Prof. Dr. med.“, „OÄ Dr.“, „Drs. Seiler und Wantzer“), Namen in Großbuchstaben, Initialen („Holger M. Recklinghausen“, „Herr K.“), österreichische und Schweizer PLZ, Adressblöcke, „Am Waldsaum 21“, Telefonnummern wie „+43(0)333 775-8447“, „Albers (* 4.4.1997)“.
+- Weniger Fehlalarme: „die Leber“ ist kein Dr. Leber, „Rektumamputation“ kein Nachname, „Krankengymnastik KG“ keine Firma.
+- Windows-Programm, Browser-Erweiterung und Handy-App finden jetzt nachweislich dasselbe (eigener Test vergleicht beide Fassungen Fund für Fund).
+
 ## 1.2.0
 
 - **KI-Desktop-Apps geschützt (Windows):** ChatGPT, Claude, Copilot, Perplexity.

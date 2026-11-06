@@ -195,6 +195,18 @@
   </div>
 
   <div class="card">
+    <h2>Was soll geschwärzt werden?</h2>
+    <p class="muted small">Heikel ist vor allem der Bezug zu einer Person. „Erkläre mir CRP 200 und 15.000 Leukos“ darf so zur KI – ein Arztbrief mit Name und Geburtsdatum nicht.</p>
+    <div class="optionen" id="schwaerzen">
+      <label class="option"><input type="checkbox" checked disabled><span><b>Angaben zur Person – immer</b><small>Name, Adresse, Geburtsdatum, Telefon, E-Mail, IBAN, Ausweis-, Steuer- und Versichertennummer …</small></span></label>
+      <label class="option"><input type="checkbox" id="opt-firmen" data-gruppe="firmen"><span><b>Firmen &amp; Kunden</b><small>Firmen- und Kliniknamen, Kunden-, Vertrags- und Angebotsnummern, Aktenzeichen.</small></span></label>
+      <label class="option"><input type="checkbox" id="opt-betraege" data-gruppe="betraege"><span><b>Preise &amp; Beträge</b><small>„1.250,00 €“ – z. B. bei Angeboten.</small></span></label>
+      <label class="option"><input type="checkbox" id="opt-medizin" data-gruppe="medizin"><span><b>Medizinische Inhalte</b><small>Diagnosen, ICD-Codes, Medikamente, Laborwerte.</small></span></label>
+      <label class="option"><input type="checkbox" id="opt-themen-person" data-gruppe="themen_nur_mit_person"><span><b>Themen-Warnung nur mit Person</b><small>„Du lädst Gesundheitsdaten hoch“ nur, wenn auch jemand erkennbar ist.</small></span></label>
+    </div>
+  </div>
+
+  <div class="card">
     <h2>Texterkennung (Fotos, gescannte PDFs)</h2>
     <p class="muted small">Läuft auf dem Handy. Die Erkennungsdaten (ca. 5 MB) werden einmal geladen und dann offline genutzt.</p>
     <div class="zeile"><span id="ocr-status" class="grow">Noch nicht geladen</span><button id="ocr-laden" class="btn ghost">Jetzt laden</button></div>
@@ -205,7 +217,7 @@
     <div class="zeile" id="installieren-zeile" hidden><span class="grow">Auf den Startbildschirm legen</span><button id="installieren" class="btn primary">Installieren</button></div>
     <p id="ios-hinweis" class="muted small" hidden>iPhone/iPad: in Safari auf <b>Teilen</b> → <b>Zum Home-Bildschirm</b> tippen.</p>
     <div class="zeile"><span class="grow">Zuordnung &amp; Ergebnisse löschen</span><button id="alles-loeschen" class="btn ghost danger">Löschen</button></div>
-    <p class="muted small">Datenwächter <span id="version">1.2.0</span> · Open Source · Keine Werbung, kein Tracking, keine Konten. Gespeichert wird nur auf diesem Gerät: Einstellungen, eigene Aktionen und die Platzhalter-Zuordnung.</p>
+    <p class="muted small">Datenwächter <span id="version">1.3.0</span> · Open Source · Keine Werbung, kein Tracking, keine Konten. Gespeichert wird nur auf diesem Gerät: Einstellungen, eigene Aktionen und die Platzhalter-Zuordnung.</p>
   </div>
 </section>
 </main>
