@@ -52,8 +52,8 @@ dev = ["pytest>=8", "reportlab", "pytesseract>=0.3.10", "opencv-python-headless>
 build = ["pyinstaller>=6.10"]
 
 [project.urls]
-Quellcode = "https://github.com/SushiMan20/DatenW-chter"
-Fehler = "https://github.com/SushiMan20/DatenW-chter/issues"
+Quellcode = "https://github.com/SushiMan20/DatenWaechter"
+Fehler = "https://github.com/SushiMan20/DatenWaechter/issues"
 
 [project.scripts]
 datenwaechter = "datenwaechter.cli:main"

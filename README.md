@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/SushiMan20/DatenW-chter/actions/workflows/windows.yml"><img src="https://github.com/SushiMan20/DatenW-chter/actions/workflows/windows.yml/badge.svg" alt="Windows-Build"></a>
+  <a href="https://github.com/SushiMan20/DatenWaechter/actions/workflows/windows.yml"><img src="https://github.com/SushiMan20/DatenWaechter/actions/workflows/windows.yml/badge.svg" alt="Windows-Build"></a>
   <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4" alt="Windows 10 | 11">
   <img src="https://img.shields.io/badge/Browser-Chrome%20%7C%20Edge%20%7C%20Brave-4285F4" alt="Chrome | Edge | Brave">
   <img src="https://img.shields.io/badge/Handy-Android%20%7C%20iPhone-2e7d32" alt="Handy: Android | iPhone">
