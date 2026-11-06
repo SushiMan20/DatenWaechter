@@ -59,6 +59,12 @@ def test_strasse_ohne_ganzen_satz(text, adresse):
     assert all(len(t) <= len(adresse) for k, t in found if k == "ADRESSE"), "nie mehr als die Adresse markieren"
 
 
+@pytest.mark.parametrize("ocr", ["DE89 37O4 OO44 O532 O13O OO", "DE 89 3704 0044 0532 0130 00", "DE89 3704 0044 0532 0l30 00"])
+def test_iban_mit_ocr_verwechslern(ocr):
+    assert [f.kind for f in scan_text(f"IBAN: {ocr}")] == ["IBAN"]
+    assert scan_text("IBAN: DE89 37O4 OO44 O532 O13O O1") == [], "Prüfsumme muss weiter stimmen"
+
+
 def test_ausweisnummer():
     assert [(f.kind, f.text) for f in scan_text("Ausweisnummer: L01X00T47")] == [("AUSWEIS", "L01X00T47")]
     assert scan_text("Ausweisnummer: unbekannt") == []

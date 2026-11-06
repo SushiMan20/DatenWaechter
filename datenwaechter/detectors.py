@@ -58,8 +58,11 @@ def _digits(s: str) -> str:
     return re.sub(r"\D", "", s)
 
 
-def iban_valid(s: str) -> bool:
-    iban = re.sub(r"\s", "", s).upper()
+# Typische Verwechsler der Texterkennung in Ziffernfolgen (Scans, Screenshots)
+_OCR_ZIFFERN = str.maketrans({"O": "0", "Q": "0", "D": "0", "I": "1", "L": "1", "|": "1", "S": "5", "B": "8", "Z": "2"})
+
+
+def _iban_ok(iban: str) -> bool:
     if not re.fullmatch(r"[A-Z]{2}\d{2}[A-Z0-9]{11,30}", iban):
         return False
     if iban.startswith("DE") and len(iban) != 22:
@@ -67,6 +70,17 @@ def iban_valid(s: str) -> bool:
     rearranged = iban[4:] + iban[:4]
     num = "".join(str(int(c, 36)) for c in rearranged)
     return int(num) % 97 == 1
+
+
+def iban_valid(s: str) -> bool:
+    iban = re.sub(r"\s", "", s).upper()
+    if _iban_ok(iban):
+        return True
+    # Texterkennung liest z. B. „O“ statt „0“: Prüfziffern und (bei DE) Kontonummer nur aus Ziffern –
+    # die Prüfsumme muss trotzdem stimmen, Fehlalarme bleiben also ausgeschlossen
+    fixed = iban[:2] + (iban[2:] if not iban.startswith("DE") else iban[2:].translate(_OCR_ZIFFERN))
+    fixed = fixed[:2] + fixed[2:4].translate(_OCR_ZIFFERN) + fixed[4:]
+    return fixed != iban and _iban_ok(fixed)
 
 
 def luhn_valid(s: str) -> bool:
@@ -129,7 +143,8 @@ RULES: list[Rule] = [
 
     # ---- Finanz- und Identitätsdaten
     Rule("IBAN", "IBAN / Bankverbindung",
-         re.compile(r"\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]{4}){2,7}(?:[ ]?[A-Z0-9]{1,4})?\b"), HOCH, validate=iban_valid),
+         re.compile(r"\b[A-Z]{2}[ ]?[0-9OIl]{2}(?:[ ]?[A-Z0-9Il|]{4}){2,7}(?:[ ]?[A-Z0-9Il|]{1,4})?\b"), HOCH,
+         validate=iban_valid),
     Rule("KREDITKARTE", "Kreditkartennummer",
          re.compile(r"(?<![\d-])(?:\d[ -]?){12,18}\d(?![\d-])"), HOCH, validate=luhn_valid),
     Rule("STEUER_ID", "Steuer-ID",

@@ -37,6 +37,7 @@ jobs:
         run: pytest -q
 
       - name: Windows-Praxistest (Zwischenablage, OCR, Tastenkürzel, Benachrichtigung, Notepad, Registry)
+        if: success() || failure()   # auch zeigen, wenn pytest scheitert
         run: python tests/windows_smoke.py
 
       - name: Programm bauen (PyInstaller)

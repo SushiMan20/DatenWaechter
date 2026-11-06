@@ -74,3 +74,10 @@ test("Straße ohne ganzen Satz davor", () => {
   }
   assert.ok(DW.scan(faelle[4][0]).some((f) => f.kind === "PERSON" && f.text === "Thomas Schneider"), "Name darf nicht verschluckt werden");
 });
+
+test("IBAN mit OCR-Verwechslern", () => {
+  for (const t of ["DE89 37O4 OO44 O532 O13O OO", "DE 89 3704 0044 0532 0130 00", "DE89 3704 0044 0532 0l30 00"]) {
+    assert.deepStrictEqual(DW.scan(`IBAN: ${t}`).map((f) => f.kind), ["IBAN"], t);
+  }
+  assert.deepStrictEqual(DW.scan("IBAN: DE89 37O4 OO44 O532 O13O O1"), []);
+});

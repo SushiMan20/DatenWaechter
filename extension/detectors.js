@@ -10,8 +10,17 @@
 
   const digits = (s) => s.replace(/\D/g, "");
 
+  // Typische Verwechsler der Texterkennung in Ziffernfolgen (wie in detectors.py)
+  const OCR = { O: "0", Q: "0", D: "0", I: "1", L: "1", "|": "1", S: "5", B: "8", Z: "2" };
+  const ocrFix = (t) => t.replace(/[OQDIL|SBZ]/g, (c) => OCR[c]);
   function ibanValid(s) {
     const iban = s.replace(/\s/g, "").toUpperCase();
+    if (ibanOk(iban)) return true;
+    let fixed = iban.startsWith("DE") ? iban.slice(0, 2) + ocrFix(iban.slice(2)) : iban;
+    fixed = fixed.slice(0, 2) + ocrFix(fixed.slice(2, 4)) + fixed.slice(4);
+    return fixed !== iban && ibanOk(fixed);
+  }
+  function ibanOk(iban) {
     if (!/^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/.test(iban)) return false;
     if (iban.startsWith("DE") && iban.length !== 22) return false;
     const r = iban.slice(4) + iban.slice(0, 4);
@@ -61,7 +70,7 @@
       /\b(?:postgres(?:ql)?|mysql|mariadb|mongodb(?:\+srv)?|redis|amqp|mssql|ftp|sftp):\/\/[^\s:@/]+:[^\s@/]+@[^\s"'<>]+/g, HOCH],
     ["PASSWORT", "Passwort / Geheimnis",
       /\b(?:passwor[dt]|kennwort|passwd|pwd|secret|client[_-]?secret|api[_-]?key|access[_-]?token)\b["']?\s*[:=]\s*["']?(?<v>[^\s"',;]{4,})/gi, HOCH],
-    ["IBAN", "IBAN / Bankverbindung", /\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]{4}){2,7}(?:[ ]?[A-Z0-9]{1,4})?\b/g, HOCH, { validate: ibanValid }],
+    ["IBAN", "IBAN / Bankverbindung", /\b[A-Z]{2}[ ]?[0-9OIl]{2}(?:[ ]?[A-Z0-9Il|]{4}){2,7}(?:[ ]?[A-Z0-9Il|]{1,4})?\b/g, HOCH, { validate: ibanValid }],
     ["KREDITKARTE", "Kreditkartennummer", /(?<![\d-])(?:\d[ -]?){12,18}\d(?![\d-])/g, HOCH, { validate: luhnValid }],
     ["STEUER_ID", "Steuer-ID", /(?<!\d)\d{2}[ ]?\d{3}[ ]?\d{3}[ ]?\d{3}(?!\d)/g, HOCH, { validate: steuerIdValid }],
     ["AUSWEIS", "Ausweis-/Passnummer",

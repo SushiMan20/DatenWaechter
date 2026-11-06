@@ -114,7 +114,7 @@ def test_ohne_ollama_nur_stichworte(monkeypatch):
 def test_bild_mit_text_wird_erkannt_und_geschwaerzt(tmp_path):
     r = analyze(_text_image(tmp_path / "foto.png", BILD), use_llm=False)
     kinds = {row["kind"] for row in r.rows()}
-    assert {"PERSON", "IBAN"} <= kinds
+    assert {"PERSON", "IBAN"} <= kinds, f"OCR ({ocr.backend()}) las: {r.doc.text!r}"
     assert "Familienunterlagen" in r.verdict.categories
     out = anonymize(r, Anonymizer(), tmp_path / "aus")
     assert out.name == "foto_anonymisiert.png"
@@ -128,7 +128,7 @@ def test_eingescanntes_pdf(tmp_path):
     img = Image.open(_text_image(tmp_path / "s.png", BILD))
     img.save(tmp_path / "scan.pdf", "PDF", resolution=100)
     r = analyze(tmp_path / "scan.pdf", use_llm=False)
-    assert any(row["kind"] == "IBAN" for row in r.rows())
+    assert any(row["kind"] == "IBAN" for row in r.rows()), f"OCR ({ocr.backend()}) las: {r.doc.text!r}"
     out = anonymize(r, Anonymizer(), tmp_path / "aus")
     assert out.suffix == ".pdf" and "3704" not in load(out).text
 
