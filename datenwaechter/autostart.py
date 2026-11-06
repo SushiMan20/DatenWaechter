@@ -10,6 +10,8 @@ NAME = "Datenwaechter"
 
 
 def command() -> str:
+    if getattr(sys, "frozen", False):   # installiertes Programm (Datenwaechter.exe)
+        return f'"{sys.executable}" --minimiert'
     exe = Path(sys.executable)
     pythonw = exe.with_name("pythonw.exe")  # ohne schwarzes Konsolenfenster
     if sys.platform == "win32" and pythonw.exists():

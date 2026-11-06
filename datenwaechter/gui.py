@@ -21,7 +21,7 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from . import actions, autostart, content_check, hotkey, llm, ner, ocr, settings, winclip
+from . import actions, autostart, browser_bridge, content_check, hotkey, llm, ner, ocr, settings, winclip
 from .analysis import analyze, anonymize as anonymize_report
 from .anonymize import Anonymizer
 from .detectors import HOCH, SEVERITY_LABEL, scan_text
@@ -263,6 +263,25 @@ class App:
         auto = tk.BooleanVar(value=autostart.is_enabled())
         ttk.Checkbutton(frm, text="Mit Windows starten (im Infobereich)", variable=auto,
                         command=lambda: autostart.set_enabled(auto.get())).pack(anchor="w", pady=2)
+        bridge = ttk.Frame(frm)
+        bridge.pack(anchor="w", pady=(8, 2), fill="x")
+        bridge_text = tk.StringVar()
+
+        def bridge_refresh():
+            bridge_text.set("Browser-Erweiterung: Verbindung zum Scanner eingerichtet ✔" if browser_bridge.is_installed()
+                            else "Browser-Erweiterung: Verbindung zum Scanner fehlt")
+
+        def bridge_setup():
+            try:
+                browser_bridge.install()
+            except OSError as e:
+                bridge_text.set(f"Einrichten fehlgeschlagen: {e}")
+                return
+            bridge_refresh()
+            self._status("Browser-Brücke eingerichtet – Browser einmal neu starten")
+        ttk.Label(bridge, textvariable=bridge_text).pack(side="left")
+        ttk.Button(bridge, text="Einrichten", command=bridge_setup).pack(side="left", padx=8)
+        bridge_refresh()
         caps = [f"Texterkennung: {ocr.backend() or 'nicht installiert'}",
                 f"Gesichter: {'ja' if faces_available() else 'nicht installiert'}",
                 f"Tray-Symbol: {'ja' if self.tray.available else 'nicht verfügbar'}"]
@@ -1202,7 +1221,14 @@ def main(start_hidden: bool | None = None) -> None:
         return
     if start_hidden is None:
         start_hidden = "--minimiert" in sys.argv
-    App(start_hidden=start_hidden).run()
+    app = App(start_hidden=start_hidden)
+    # Für den automatischen Praxistest des fertigen Programms: Start bestätigen und nach kurzer Zeit beenden
+    marker = os.environ.get("DATENWAECHTER_STARTMARKER")
+    if marker:
+        Path(marker).write_text(f"gestartet tray={app.tray.available} hotkey={bool(app.hotkey and app.hotkey.active)}",
+                                encoding="utf-8")
+        app.root.after(int(os.environ.get("DATENWAECHTER_SMOKE_MS", "4000")), app._quit)
+    app.run()
 
 
 if __name__ == "__main__":

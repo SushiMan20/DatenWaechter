@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "datenwaechter"
-version = "0.5.1"
+version = "1.0.0"
 description = "Lokaler Scanner, der persönliche und geheime Daten vor dem Hochladen in KI-Chats erkennt und anonymisiert."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -38,6 +38,8 @@ gesichter = ["opencv-python-headless>=4.8,<5", "numpy"]
 ki = ["gliner>=0.2.13"]
 alles = ["datenwaechter[windows,tesseract,gesichter,ki]"]
 dev = ["pytest>=8", "reportlab", "pytesseract>=0.3.10", "opencv-python-headless>=4.8,<5", "numpy"]
+# Fertiges Windows-Programm bauen (siehe packaging/)
+build = ["pyinstaller>=6.10"]
 
 [project.scripts]
 datenwaechter = "datenwaechter.cli:main"

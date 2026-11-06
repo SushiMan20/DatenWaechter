@@ -1,0 +1,91 @@
+name: Windows-Programm
+
+# Baut das fertige Programm (Installer + portable Version + Browser-Erweiterung) auf echtem Windows
+# und testet dabei alles, was es nur unter Windows gibt. Bei einem Tag „v1.2.3“ entsteht ein Release.
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Abhängigkeiten installieren
+        run: |
+          python -m pip install --upgrade pip
+          pip install ".[windows,gesichter,dev,build]"
+          $v = python -c "import datenwaechter; print(datenwaechter.__version__)"
+          "VERSION=$v" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Tests (pytest)
+        run: pytest -q
+
+      - name: Windows-Praxistest (Zwischenablage, OCR, Tastenkürzel, Benachrichtigung, Notepad, Registry)
+        run: python tests/windows_smoke.py
+
+      - name: Programm bauen (PyInstaller)
+        run: pyinstaller --noconfirm --clean packaging/datenwaechter.spec --distpath dist --workpath build
+
+      - name: Fertiges Programm testen
+        run: python tests/windows_smoke.py --nur-exe --exe dist/Datenwaechter
+
+      - name: Installer bauen (Inno Setup)
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress; }
+          & $iscc "/DAppVersion=$env:VERSION" packaging\installer.iss
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      - name: Installer testen (still installieren, prüfen, deinstallieren)
+        run: |
+          $setup = "packaging\Output\Datenwaechter-Setup-$env:VERSION.exe"
+          Start-Process $setup -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/TASKS=autostart' -Wait
+          $app = "$env:LOCALAPPDATA\Programs\Datenwaechter"
+          if (-not (Test-Path "$app\Datenwaechter.exe")) { throw "Programm nicht installiert" }
+          if (-not (Test-Path "$app\Browser-Erweiterung\manifest.json")) { throw "Browser-Erweiterung fehlt" }
+          $run = Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name Datenwaechter
+          Write-Host "Autostart: $($run.Datenwaechter)"
+          $host_ = Get-ItemProperty "HKCU:\Software\Google\Chrome\NativeMessagingHosts\de.datenwaechter.host"
+          Write-Host "Browser-Brücke: $($host_.'(default)')"
+          & "$app\datenwaechter-cli.exe" scan packaging\..\tests\fixtures\gesicht.jpg --kein-sprachmodell
+          Start-Process "$app\unins000.exe" -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES' -Wait
+          Start-Sleep -Seconds 3
+          if (Test-Path "$app\Datenwaechter.exe") { throw "Deinstallation unvollständig" }
+          if (Test-Path "HKCU:\Software\Google\Chrome\NativeMessagingHosts\de.datenwaechter.host") { throw "Browser-Brücke nicht entfernt" }
+          "### Installer\n\n✔ still installiert (mit Autostart + Browser-Brücke), Programm geprüft, sauber deinstalliert" | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+      - name: Pakete zusammenstellen
+        run: |
+          New-Item -ItemType Directory -Force out | Out-Null
+          Copy-Item "packaging\Output\Datenwaechter-Setup-$env:VERSION.exe" out\
+          Compress-Archive -Path dist\Datenwaechter\* -DestinationPath "out\Datenwaechter-$env:VERSION-portable.zip"
+          Compress-Archive -Path extension\* -DestinationPath "out\Datenwaechter-Browser-Erweiterung-$env:VERSION.zip"
+          Get-ChildItem out | Format-Table Name, Length
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Datenwaechter-${{ env.VERSION }}-Windows
+          path: out/*
+          retention-days: 30
+
+      - name: Release veröffentlichen (nur bei Tag v*)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create $env:GITHUB_REF_NAME out/* --title "Datenwächter $env:VERSION" --notes "Installer für Windows, portable Version und Browser-Erweiterung."

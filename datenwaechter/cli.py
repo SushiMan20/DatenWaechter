@@ -127,7 +127,24 @@ def _aktionen(args) -> int:
     return 0
 
 
+def _bruecke(args) -> int:
+    from . import browser_bridge
+    if args.entfernen:
+        browser_bridge.uninstall()
+        print("Browser-Brücke entfernt.")
+        return 0
+    manifest = browser_bridge.install(args.id or browser_bridge.EXTENSION_ID)
+    print(f"✔ Browser-Brücke eingerichtet ({manifest}). Browser einmal neu starten.")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
+    args_in = sys.argv[1:] if argv is None else argv
+    # Chrome/Edge starten den Scanner mit der Herkunft der Erweiterung als erstem Argument
+    if args_in and args_in[0].startswith("chrome-extension://"):
+        return _native()
+    if not args_in or args_in == ["--minimiert"]:   # Doppelklick bzw. Autostart des fertigen Programms
+        return _gui(bool(args_in))
     p = argparse.ArgumentParser(prog="datenwaechter", description="Sensible Daten vor dem KI-Upload finden.")
     p.add_argument("--ki", action="store_true", help="zusätzlich lokales KI-Modell (GLiNER) für Namen nutzen")
     p.add_argument("--kein-sprachmodell", action="store_true",
@@ -168,15 +185,20 @@ def main(argv: list[str] | None = None) -> int:
     al.add_argument("--zuruecksetzen", action="store_true", help="Standard-Aktionen wiederherstellen")
     al.set_defaults(func=_aktionen)
 
+    br = sub.add_parser("browser-bruecke", help="Scanner bei Chrome/Edge/Brave anmelden (für PDFs, Bilder, KI-Aktionen)")
+    br.add_argument("--id", help="andere Erweiterungs-ID als die mitgelieferte")
+    br.add_argument("--entfernen", action="store_true")
+    br.set_defaults(func=_bruecke)
+
     g = sub.add_parser("gui", help="Wächter-Fenster starten")
     g.add_argument("--minimiert", action="store_true", help="nur als Symbol im Infobereich starten (für Autostart)")
     g.set_defaults(func=lambda a: _gui(a.minimiert))
     sub.add_parser("native-host", help="(intern) Brücke für die Browser-Erweiterung").set_defaults(
         func=lambda a: _native())
 
-    args = p.parse_args(argv)
+    args = p.parse_args(args_in)
     if not getattr(args, "func", None):
-        return _gui("--minimiert" in (argv or sys.argv[1:]))
+        return _gui("--minimiert" in args_in)
     return args.func(args)
 
 
