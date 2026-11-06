@@ -8,7 +8,7 @@ from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, co
 ROOT = os.path.abspath(os.path.join(SPECPATH, ".."))
 ICON = os.path.join(SPECPATH, "app.ico")
 
-datas = [(os.path.join(ROOT, "datenwaechter", "kategorien.json"), "datenwaechter")]
+datas = [(os.path.join(ROOT, "datenwaechter", n), "datenwaechter") for n in ("kategorien.json", "vornamen.txt")]
 datas += collect_data_files("tkinterdnd2")                       # Drag & Drop (tkdnd)
 datas += collect_data_files("cv2", includes=["data/haarcascade_*.xml"])   # Gesichtserkennung
 datas += collect_data_files("pypdfium2_raw") + collect_data_files("pypdfium2")

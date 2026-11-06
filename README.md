@@ -30,8 +30,9 @@ eine anonymisierte Fassung hochladen, das Original verwenden oder abbrechen. Die
 - **Schwärzt statt zu löschen.** PDFs und Bilder behalten ihr Layout, Funde bekommen einen Kasten mit Platzhalter wie `[IBAN_1]`, Gesichter werden verpixelt.
 - **Sagt dir, *was* du hochlädst:** „Du lädst gerade Familienunterlagen hoch – willst du das?“
 - **Übersetzt KI-Antworten zurück:** Aus `[PERSON_1]` wird wieder der echte Name.
-- **Optional mit eigenem KI-Server** (OpenAI-kompatible API mit Adresse und Token). Die KI bewertet dann Inhalte und Fotos genauer und findet auch Namen ohne „Herr/Frau“.
-- **KI-Aktionen** wie „Umformulieren“, „Kürzen“, „Übersetzen“ oder eigene Anweisungen. Im Browser per Rechtsklick, in jedem Windows-Programm per Strg+Alt+Leertaste.
+- **Erkennt Namen auch ohne „Herr/Frau“** – ohne KI, mit einer Liste von rund 1.500 Vornamen und typischen Stellen wie „Liebe Mia,“, „Viele Grüße, Thomas“, „Name: …“ oder „Familie Schneider“. Ist ein Name einmal erkannt, wird er überall im Text markiert.
+- **Optional mit eigenem KI-Server** (OpenAI-kompatible API mit Adresse und Token). Die KI bewertet dann Inhalte und Fotos genauer und findet auch seltene Namen.
+- **KI-Aktionen** wie „Umformulieren“, „Kürzen“, „Übersetzen“ oder eigene Anweisungen. Text markieren → **✨-Knopf** neben der Markierung (in jedem Windows-Programm), Strg+Alt+Leertaste oder im Browser Rechtsklick.
 - **Auch auf dem Handy:** In der Galerie, Mail- oder PDF-App auf *Teilen → Datenwächter* tippen, prüfen und schwärzen lassen, dann *Geschützt teilen → ChatGPT*. Die App läuft komplett auf dem Gerät, auch offline.
 
 ## So sieht es aus
@@ -76,8 +77,8 @@ nur die rechte Fassung. Die echten Werte stehen in der Datei nicht mehr drin.
 
 ### KI-Aktionen
 
-Text markieren, dann im Browser Rechtsklick auf **„Mit KI bearbeiten …“** oder in einem beliebigen Windows-Programm
-**Strg+Alt+Leertaste**. Das Ergebnis ersetzt die Markierung, wird darunter eingefügt oder angezeigt. Tippst du etwas
+Text markieren – in jedem Windows-Programm erscheint daneben ein kleiner **✨ KI**-Knopf. Alternativ
+**Strg+Alt+Leertaste** oder im Browser Rechtsklick auf **„Mit KI bearbeiten …“**. Das Ergebnis ersetzt die Markierung, wird darunter eingefügt oder angezeigt. Tippst du etwas
 ein, filtert das die Liste. Passt keine Aktion, wird das Getippte als eigene Anweisung ausgeführt.
 
 | Browser | Windows (hell / dunkel) |
@@ -168,7 +169,7 @@ eigene Aktionen und die Zuordnung liegen nur im Speicher des Handys. Die App lä
 | Stufe | Daten |
 |---|---|
 | **hoch** | IBAN (auch mit OCR-Lesefehlern wie „O“ statt „0“), Kreditkarte, Steuer-ID, Sozialversicherungsnummer, Ausweis-/Passnummer, API-Schlüssel (Anthropic, OpenAI, AWS, GitHub, Google, Slack, Stripe), private Schlüssel, Tokens, Passwörter, Datenbank-Zugänge |
-| **mittel** | Namen (nach Anrede, mit KI auch ohne), E-Mail, Telefon, Straße + Hausnummer, PLZ + Ort, Geburtsdatum, Gesichter |
+| **mittel** | Namen (Vornamenliste, Anrede, Gruß, Formularfelder, Familie; mit KI auch seltene), E-Mail, Telefon, Straße + Hausnummer, PLZ + Ort, Geburtsdatum und -jahr (viele Schreibweisen), Gesichter |
 | **niedrig** | IP-Adressen |
 | **Themen** | Familie, Gesundheit, Finanzen, Recht, Personal/Arbeit, Ausweise, Firmeninterna, besonders geschützte Daten nach Art. 9 DSGVO ([Stichwörter](datenwaechter/kategorien.json)) |
 
@@ -176,7 +177,8 @@ eigene Aktionen und die Zuordnung liegen nur im Speicher des Handys. Die App lä
 
 - **Kann die Handy-App Uploads in der ChatGPT-App abfangen?** Nein. iOS und Android lassen keine App die Zwischenablage im Hintergrund lesen oder in fremde Apps eingreifen. Deshalb gilt auf dem Handy: erst *Teilen → Datenwächter*, dann *Geschützt teilen → ChatGPT*.
 - **Handy-App mit eigenem KI-Server?** Klappt, wenn der Server per **https** erreichbar ist und Zugriffe aus dem Browser erlaubt (CORS). Bei OpenAI, OpenRouter und Mistral ist das so. Für LM Studio, Ollama & Co. im Heimnetz brauchst du einen Reverse-Proxy mit https.
-- **Warum gibt es keinen Eintrag im Windows-Rechtsklick-Menü?** Fremde Programme lassen sich dort nicht erweitern. Deshalb gibt es das Tastenkürzel Strg+Alt+Leertaste.
+- **Warum gibt es keinen Eintrag im Windows-Rechtsklick-Menü?** Fremde Programme lassen sich dort nicht erweitern. Deshalb erscheint beim Markieren der ✨-Knopf (abschaltbar unter *KI-Aktionen bearbeiten*), zusätzlich gibt es Strg+Alt+Leertaste.
+- **Wie zuverlässig ist die Namenserkennung?** Häufige Vornamen (deutsch und international) und Namen an typischen Stellen findet sie zuverlässig. Seltene Namen ohne Zusammenhang („Wenzeslaus“) erkennt nur der eigene KI-Server. Wörter, die auch Namen sein können („Ernst“, „Rose“, „August“, „Claude“), zählen nur mit Nachnamen oder in eindeutigem Zusammenhang. Die Liste steht in [`datenwaechter/vornamen.txt`](datenwaechter/vornamen.txt) und lässt sich erweitern.
 - **Desktop-Apps wie die ChatGPT-App?** Deren eigener „Datei hinzufügen“-Dialog lässt sich nicht abfangen. Geschützt sind Kopieren/Einfügen sowie Dateien, die du erst ins Datenwächter-Fenster ziehst.
 - **Warum Entwicklermodus?** Die Erweiterung ist (noch) nicht im Chrome Web Store.
 - **Was wird nicht geschwärzt?** Gesundheitsangaben im Fließtext lösen eine Warnung aus, werden aber nicht geschwärzt. Handschrift erkennt die Texterkennung kaum. Bilder *in* Word-Dateien werden nicht geprüft.

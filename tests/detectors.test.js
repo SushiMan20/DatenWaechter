@@ -89,3 +89,18 @@ test("gleiche Person, gleicher Platzhalter", () => {
   const b = new DW.Anonymizer();
   assert.strictEqual(b.anonymize("Herr Thomas Schneider, Frau Mia Schneider, Herr Schneider"), "Herr [PERSON_1], Frau [PERSON_2], Herr [PERSON_3]");
 });
+
+test("Namen und Geburtsdaten wie in Python (tests/fixtures/namen.json)", () => {
+  const { beispiele } = JSON.parse(fs.readFileSync(path.join(__dirname, "fixtures", "namen.json"), "utf8"));
+  for (const b of beispiele) {
+    const found = DW.scan(b.text);
+    assert.deepStrictEqual(found.filter((f) => f.kind === "PERSON").map((f) => f.text), b.personen || [], b.text);
+    assert.deepStrictEqual(found.filter((f) => f.kind === "GEBURTSDATUM").map((f) => f.text), b.daten || [], b.text);
+  }
+});
+
+test("Vorname allein bekommt den Platzhalter der Person", () => {
+  const a = new DW.Anonymizer();
+  assert.strictEqual(a.anonymize("Mia Schneider ist 7. Mia geht in die Kita, Thomas Schneider zahlt. Schneider ist einverstanden."),
+    "[PERSON_1] ist 7. [PERSON_1] geht in die Kita, [PERSON_2] zahlt. [PERSON_3] ist einverstanden.");
+});

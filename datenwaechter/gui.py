@@ -21,12 +21,13 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from . import actions, autostart, browser_bridge, content_check, hotkey, llm, ocr, settings, winclip
+from . import actions, auswahl, autostart, browser_bridge, content_check, hotkey, llm, ocr, settings, winclip
 from .analysis import analyze, anonymize as anonymize_report
 from .anonymize import Anonymizer
 from .detectors import HOCH, SEVERITY_LABEL, scan_text
 from .faces import available as faces_available
 from .icons import FARBEN, shield
+from .knopf import Knopf
 from .palette import ActionPalette
 from .toast import TrayPopup
 from .stats import Stats
@@ -134,11 +135,14 @@ class App:
         self._last_popup = None
         self.bridge = hotkey.bridge()
         self.hotkey = None
+        self.auswahl = None        # ✨-Knopf beim Markieren (Maus-Hook)
+        self.knopf = None
 
         self._build()
         self.tray = Tray(lambda name: self.results.put(("ui", name)), self.watch.get, self.stats.summary)
         self.root.protocol("WM_DELETE_WINDOW", self._close)
         self._start_hotkey()
+        self._start_auswahl()
         self._refresh()
         self.root.after(POLL_MS, self._poll)
         threading.Thread(target=self._detect_llm, daemon=True).start()
@@ -253,7 +257,7 @@ class App:
             self.llm_box.state(["disabled"])
         ttk.Button(frm, text="KI-Server einrichten (API-Adresse + Token) …", command=self._llm_settings).pack(
             anchor="w", padx=22, pady=(0, 6))
-        hk = (f"Tastenkürzel {self.hotkey.combo}: markierten Text in jedem Programm bearbeiten"
+        hk = (f"In jedem Programm: Text markieren → ✨-Knopf oder {self.hotkey.combo}"
               if self.hotkey and self.hotkey.active else
               f"Tastenkürzel: {self.hotkey.error if self.hotkey else 'nur unter Windows'}")
         ttk.Button(frm, text="KI-Aktionen (Umformulieren …) bearbeiten …", command=self._actions_editor).pack(
@@ -363,6 +367,8 @@ class App:
     def _quit(self) -> None:
         if self.hotkey:
             self.hotkey.stop()
+        if self.auswahl:
+            self.auswahl.stop()
         self.tray.stop()
         self.root.destroy()
 
@@ -384,6 +390,26 @@ class App:
             self.hotkey = None
         if self.bridge is not None:
             self.hotkey = hotkey.Hotkey(actions.load_hotkey(), lambda hwnd: self.results.put(("ki-hotkey", hwnd)))
+
+    def _start_auswahl(self) -> None:
+        if self.auswahl:
+            self.auswahl.stop()
+            self.auswahl = None
+        if self.bridge is not None and auswahl.aktiv():
+            self.auswahl = auswahl.Waechter(lambda *ev: self.results.put(("auswahl", *ev)))
+
+    def _auswahl(self, art: str, x: int, y: int, hwnd) -> None:
+        """Maus-Hook meldet: Klick irgendwo (Knopf ggf. ausblenden) oder Text markiert (Knopf zeigen)."""
+        if art == "klick":
+            if self.knopf is not None and self.knopf.winfo_exists() and not self.knopf.enthaelt(x, y):
+                self.knopf.verstecken()
+            return
+        if self._suspend or self._ki_busy or (self._ki_palette is not None and self._ki_palette.winfo_exists()):
+            return
+        if self.knopf is None or not self.knopf.winfo_exists():
+            self.knopf = Knopf(self.root, dark=self.t is THEMES["dunkel"], font=FONT,
+                                       hotkey=actions.load_hotkey())
+        self.knopf.zeigen(x, y, lambda: self._ki_start(hwnd))
 
     def _pointer_note(self, text: str, ms: int = 3500):
         """Kleiner Hinweis am Mauszeiger (gibt das Fenster zurück, damit es vorzeitig geschlossen werden kann)."""
@@ -647,8 +673,12 @@ class App:
         ttk.Label(bottom, text="Tastenkürzel (Windows):").pack(side="left")
         combo = tk.StringVar(value=actions.load_hotkey())
         ttk.Entry(bottom, textvariable=combo, width=22).pack(side="left", padx=6)
-        status = ttk.Label(frm, text="Im Browser: Text markieren → Rechtsklick → „Mit KI bearbeiten …“.", foreground="#777")
-        status.grid(row=4, column=0, columnspan=2, sticky="w", pady=(6, 0))
+        knopf_an = tk.BooleanVar(value=auswahl.aktiv())
+        ttk.Checkbutton(frm, text="✨-Knopf zeigen, wenn ich Text markiere (Windows)", variable=knopf_an).grid(
+            row=4, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        status = ttk.Label(frm, text="Überall: Text markieren → ✨ KI. Im Browser auch: Rechtsklick → „Mit KI bearbeiten …“.",
+                           foreground="#777")
+        status.grid(row=5, column=0, columnspan=2, sticky="w", pady=(6, 0))
 
         def speichern():
             commit()
@@ -659,7 +689,9 @@ class App:
                 return
             actions.save(liste)
             actions.save_hotkey(combo.get().strip())
+            auswahl.speichern(knopf_an.get())
             self._start_hotkey()
+            self._start_auswahl()
             err = self.hotkey.error if self.hotkey else None
             status.configure(text=f"Gespeichert. {err or ''}".strip(), foreground="#c62828" if err else "#2e7d32")
 
@@ -668,7 +700,8 @@ class App:
         refresh_list()
         select(0 if liste else None)
         win.widgets = {"list": lb, "name": name, "anweisung": anweisung, "modus": modus, "neu": neu,
-                       "loeschen": loeschen, "speichern": speichern, "combo": combo, "status": status, "liste": liste}
+                       "loeschen": loeschen, "speichern": speichern, "combo": combo, "status": status, "liste": liste,
+                       "knopf": knopf_an}
         self._actions_win = win
 
     def _detect_llm(self) -> None:
@@ -796,6 +829,9 @@ class App:
             item = self.results.get()
             if item[0] == "ui":
                 self._ui(item[1])
+                continue
+            if item[0] == "auswahl":
+                self._auswahl(*item[1:])
                 continue
             if item[0].startswith("ki-"):
                 {"ki-hotkey": self._ki_start, "ki-captured": self._ki_captured, "ki-result": self._ki_result,

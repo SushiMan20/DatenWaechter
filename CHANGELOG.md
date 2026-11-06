@@ -1,5 +1,12 @@
 # Änderungen
 
+## 1.1.0
+
+- **Namen ohne KI:** Vornamenliste (~1.500, deutsch und international) plus typische Stellen: Anrede („Liebe Mia,“), Grußformel, Formularfelder („Name:“, „Kontoinhaber:“), „Familie Schneider“, „Sohn Lukas (5)“, „Schneider, Thomas“, „Fr./Hr./Dr.“, Großbuchstaben in Formularen. Ein erkannter Name wird überall im Text markiert; „Mia“ bekommt denselben Platzhalter wie „Mia Schneider“. Mehrdeutige Wörter („Ernst“, „Rose“, „Claude“) nur mit Nachnamen.
+- **Geburtsdatum:** viele Schreibweisen („12. März 1985“, „01/02/1975“, „Geburtsdatum“ in der Zeile darüber, „* 12.03.1985“, „Jahrgang 1962“, „geb. 1985“, DOB).
+- **✨-Knopf beim Markieren (Windows):** Text in einem beliebigen Programm markieren → Knopf daneben → KI-Aktionen. Nimmt keinen Fokus, abschaltbar.
+- Gleiche Regeln in Windows-Programm, Browser-Erweiterung und Handy-App; gemeinsame Testbeispiele für beide Sprachen.
+
 ## 1.0.0 – erste Veröffentlichung
 
 **Erkennen**

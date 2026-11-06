@@ -44,7 +44,7 @@ const ki = createServer((req, res) => {
       const inhalt = text.split("<<<\n")[1].split("\n>>>")[0];
       antwort = `„Kurz: ${inhalt.split(/[.!?]/)[0]}.“`;
     } else if (text.startsWith("Finde in dem Text")) {
-      antwort = JSON.stringify({ namen: text.includes("Mia Schneider") ? ["Mia Schneider"] : [], adressen: [], geburtsdaten: [] });
+      antwort = JSON.stringify({ namen: text.includes("Wenzeslaus Brummer") ? ["Wenzeslaus Brummer"] : [], adressen: [], geburtsdaten: [] });
     } else {
       antwort = "```json\n" + JSON.stringify({ beschreibung: "Ein Schreiben über das Sorgerecht für ein Kind", familie: true, kinder: true }) + "\n```";
     }
@@ -310,15 +310,15 @@ try {
   kiAnfragen.length = 0;
   await page.click('.tabs [data-gehe="pruefen"]');
   await page.click("#btn-leeren");
-  await page.fill("#eingabe", "Mia Schneider (7) wohnt beim Vater. Sorgerecht klären, Rückruf an 0171 2345678.");
+  await page.fill("#eingabe", "Wenzeslaus Brummer (7) wohnt beim Vater. Sorgerecht klären, Rückruf an 0171 2345678.");
   await page.waitForSelector(".fund .ki", { timeout: 15000 });
   assert.match(await textVon("#thema"), /Daten über Kinder/);
   assert.match(await textVon("#thema"), /Geprüft von: KI/);
   assert.ok(kiAnfragen.length >= 2);
   for (const a of kiAnfragen) assert.ok(!JSON.stringify(a).includes("0171 2345678"), "Server sieht keine Telefonnummer");
   anon = await textVon("#anon-text");
-  assert.ok(!anon.includes("Mia Schneider"), anon);
-  ok("„Mia Schneider“ von der KI gefunden, Telefonnummer ging nie an den Server");
+  assert.ok(!anon.includes("Wenzeslaus Brummer"), anon);
+  ok("seltener Name „Wenzeslaus Brummer“ von der KI gefunden, Telefonnummer ging nie an den Server");
 
   schritt("KI-Aktion „Kürzen“: anonym hin, echt zurück");
   kiAnfragen.length = 0;

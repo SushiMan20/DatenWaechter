@@ -120,6 +120,14 @@ SECRET_KINDS = {
     "PRIVATER_SCHLUESSEL", "API_SCHLUESSEL", "PASSWORT", "ZUGANGSDATEN_URL", "TOKEN",
 }
 
+_MONAT = (r"(?:januar|jänner|februar|märz|maerz|april|mai|juni|juli|august|september|oktober|november|dezember|"
+          r"january|february|march|may|june|july|october|december|jan|feb|mär|mrz|apr|jun|jul|aug|sept?|okt|oct|nov|"
+          r"dez|dec)\.?")
+_DATUM = (rf"(?:\d{{1,2}}\.[ ]?\d{{1,2}}\.[ ]?(?:\d{{4}}|\d{{2}})(?!\d)|\d{{1,2}}/\d{{1,2}}/(?:\d{{4}}|\d{{2}})(?!\d)"
+          rf"|\d{{1,2}}-\d{{1,2}}-\d{{4}}|\d{{4}}-\d{{2}}-\d{{2}}|\d{{1,2}}\.?[ ]?{_MONAT}[ ]?\d{{4}}|{_MONAT}[ ]\d{{1,2}},?[ ]\d{{4}})")
+_GEB = (r"(?:geburtsdatum(?:[ ]*(?:/|und)[ ]*-?[ ]*ort)?|geb\.?[ ]*-?[ ]*datum|geb\.[ ]*dat\.?|geburtstag|geboren|geb\.|geb\b|"
+        r"date of birth|birth ?date|d\.?o\.?b\.?|born(?: on)?)")
+
 RULES: list[Rule] = [
     # ---- Geheimnisse (immer "hoch")
     Rule("PRIVATER_SCHLUESSEL", "Privater Schlüssel",
@@ -154,9 +162,14 @@ RULES: list[Rule] = [
                     r"pass-?nr\.?|document no\.?|führerscheinnummer)\s*:?\s*(?P<v>(?=[A-Za-z]*\d)[A-Z0-9]{8,11})\b"), HOCH, group="v"),
     Rule("SOZIALVERSICHERUNG", "Sozialversicherungsnummer",
          re.compile(r"\b\d{2}[ ]?(?:0[1-9]|[12]\d|3[01])(?:0[1-9]|1[0-2])\d{2}[ ]?[A-Z][ ]?\d{3}\b"), HOCH),
+    # „geb. am 03.04.1985“, „Geburtsdatum:\n12. März 1985“, „geboren am Montag, dem 3.5.90“, „* 12.03.1985“, „Jahrgang 1985“
     Rule("GEBURTSDATUM", "Geburtsdatum",
-         re.compile(r"(?i)\b(?:geb(?:oren|\.)?(?:\s+am)?|geburtsdatum|geburtstag|date of birth|dob)\s*:?\s*"
-                    r"(?P<v>\d{1,2}\.\s?\d{1,2}\.\s?\d{2,4}|\d{4}-\d{2}-\d{2})"), MITTEL, group="v"),
+         re.compile(rf"(?i)\b{_GEB}[^\d\n.]{{0,40}}?(?:\n[^\d\n.]{{0,15}}?)?(?P<v>{_DATUM})"), MITTEL, group="v"),
+    Rule("GEBURTSDATUM", "Geburtsdatum",
+         re.compile(rf"(?i)(?:(?<![\w*])\*|(?<=[^\W\d_] )\*[ ]?)(?P<v>{_DATUM})"), MITTEL, group="v"),
+    Rule("GEBURTSDATUM", "Geburtsjahr",
+         re.compile(r"(?i)\b(?:geburtsjahr(?:gang)?|jahrgang|geb\.|geboren(?: im jahr?| in)?|born(?: in)?|year of birth)"
+                    r"[ ]*:?[ ]*(?P<v>(?:19|20)\d{2})(?![\d.])"), MITTEL, group="v"),
 
     # ---- Kontakt & Adresse
     Rule("EMAIL", "E-Mail-Adresse",
@@ -209,12 +222,15 @@ def resolve_overlaps(findings: Iterable[Finding]) -> list[Finding]:
 
 
 def scan_text(text: str, use_ki: bool = False) -> list[Finding]:
-    """Durchsucht Text nach sensiblen Daten. `use_ki=True` ergänzt das lokale KI-Modell (falls installiert)."""
-    found = list(_rule_findings(text))
+    """Durchsucht Text nach sensiblen Daten. `use_ki=True` ergänzt KI (eigener Server oder lokales Modell)."""
+    from . import namen
+    found = list(_rule_findings(text)) + namen.finde(text)
     if use_ki:
         from . import ner
         if ner.available():
             found.extend(ner.detect(text))
+    personen = [f for f in resolve_overlaps(found) if f.kind == "PERSON"]
+    found += namen.weitere_nennungen(text, personen)   # „Schneider“ allein, nachdem „Thomas Schneider“ erkannt ist
     return resolve_overlaps(found)
 
 

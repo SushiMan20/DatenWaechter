@@ -11,7 +11,7 @@ from datenwaechter.detectors import scan_text
 from datenwaechter.settings import LlmSettings
 
 TOKEN = "firmen-token"
-BRIEF = ("In der Familiensache betreffend das Sorgerecht für das Kind Mia Schneider, geb. 02.05.2019. "
+BRIEF = ("In der Familiensache betreffend das Sorgerecht für das Kind Wenzeslaus Brummer, geb. 02.05.2019. "
          "Rückfragen an 0171 2345678, IBAN DE89 3704 0044 0532 0130 00. Das Jugendamt ist informiert.")
 
 
@@ -41,7 +41,7 @@ def api():
             prompt = body["messages"][-1]["content"]
             if "namen" in prompt:
                 state["chats"].append(prompt)
-                antwort = {"namen": ["Mia Schneider", "Erika Nichtimtext", "[PERSON_1]"], "adressen": [],
+                antwort = {"namen": ["Wenzeslaus Brummer", "Erika Nichtimtext", "[PERSON_1]"], "adressen": [],
                            "geburtsdaten": ["02.05.2019"]}
             else:
                 antwort = {"beschreibung": "Brief", "familie": True}
@@ -59,15 +59,17 @@ def _api(url, **kw):
     llm._cache.clear()
 
 
-def test_ohne_ki_wird_kindername_nicht_gefunden():
-    assert not any(f.text == "Mia Schneider" for f in scan_text(BRIEF))
+def test_seltener_name_nur_mit_ki():
+    """Häufige Namen findet die Vornamenliste; seltene („Wenzeslaus“) nur die KI."""
+    assert not any(f.text == "Wenzeslaus Brummer" for f in scan_text(BRIEF))
+    assert any(f.text == "Mia Schneider" for f in scan_text(BRIEF.replace("Wenzeslaus Brummer", "Mia Schneider")))
 
 
 def test_namen_ueber_eigene_api(api):
     _api(api["url"])
     assert ner.available() and ner.source() == "pruef-modell@127.0.0.1"
     found = {(f.kind, f.text) for f in scan_text(BRIEF, use_ki=True)}
-    assert ("PERSON", "Mia Schneider") in found
+    assert ("PERSON", "Wenzeslaus Brummer") in found
     assert ("GEBURTSDATUM", "02.05.2019") in found
     assert not any("Nichtimtext" in t or t.startswith("[") for _, t in found), "nur was wirklich im Text steht"
 
@@ -77,7 +79,7 @@ def test_vor_dem_senden_anonymisiert(api):
     scan_text(BRIEF, use_ki=True)
     gesendet = api["chats"][0]
     assert "DE89" not in gesendet and "0171" not in gesendet, "bekannte Angaben gehen nur als Platzhalter raus"
-    assert "[IBAN_1]" in gesendet and "Mia Schneider" in gesendet
+    assert "[IBAN_1]" in gesendet and "Wenzeslaus Brummer" in gesendet
 
 
 def test_auch_externe_api_wenn_eingeschaltet(monkeypatch):
@@ -85,10 +87,10 @@ def test_auch_externe_api_wenn_eingeschaltet(monkeypatch):
     monkeypatch.setattr(llm.OpenAICompatible, "available", lambda self: True)
     calls = []
     monkeypatch.setattr(llm.OpenAICompatible, "complete",
-                        lambda self, messages, temperature=0.3: calls.append(messages) or '{"namen": ["Mia Schneider"]}')
+                        lambda self, messages, temperature=0.3: calls.append(messages) or '{"namen": ["Wenzeslaus Brummer"]}')
     _api("https://api.openai.com/v1")
     assert llm.backend().extern
-    assert ("PERSON", "Mia Schneider") in {(f.kind, f.text) for f in scan_text(BRIEF, use_ki=True)}
+    assert ("PERSON", "Wenzeslaus Brummer") in {(f.kind, f.text) for f in scan_text(BRIEF, use_ki=True)}
     assert "DE89" not in calls[0][-1]["content"], "externer Server: vorher anonymisiert (Standard)"
 
 

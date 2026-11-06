@@ -2,9 +2,9 @@ name: Handy-App
 
 on:
   push:
-    paths: ["mobile/**", "extension/detectors.js", "extension/kategorien.js", ".github/workflows/handy-app.yml"]
+    paths: ["mobile/**", "extension/detectors.js", "extension/kategorien.js", "extension/vornamen.js", ".github/workflows/handy-app.yml"]
   pull_request:
-    paths: ["mobile/**", "extension/detectors.js", "extension/kategorien.js", ".github/workflows/handy-app.yml"]
+    paths: ["mobile/**", "extension/detectors.js", "extension/kategorien.js", "extension/vornamen.js", ".github/workflows/handy-app.yml"]
   workflow_dispatch:
 
 permissions:

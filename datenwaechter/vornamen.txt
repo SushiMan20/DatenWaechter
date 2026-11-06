@@ -1,0 +1,131 @@
+# Vornamen für die Namenserkennung ohne KI (eine Zeile, mehrere Namen durch Leerzeichen getrennt).
+# Ein „?“ am Ende heißt: mehrdeutig (auch ein normales Wort, Monat, Ort, Marke …) – zählt nur zusammen mit
+# Nachnamen oder eindeutigem Zusammenhang („Liebe Rose,“, „Sohn Kai“), nie allein.
+# Nach Änderungen die Browser-Fassung neu erzeugen:  python -c "import datenwaechter.namen as n; n.write_extension_names()"
+
+# ---- Deutsch, weiblich
+Ada? Adelheid Adele Agathe Agnes Alexandra Alexia Alina Aline Alma Amalia Amalie Amelie Amelia Amy Ana Andrea Anette Angela
+Angelika Angelina Anika Anita Anja Anke Ann Anna Annabell Annabelle Annalena Anne Annegret Anneliese Annemarie Annette
+Annika Antje Antonia Antonie Ariane Astrid Aurelia Barbara Bärbel Beate Bella? Benita Berit Bernadette Berta Bertha
+Bettina Bianca Bianka Birgit Birte Brigitte Britta Carina Carla Carmen Carola Caroline Carolin Celina Celine Charlotte
+Chiara Christa Christel Christiane Christin Christina Christine Clara Claudia Constanze Cora Cordula Corinna Cornelia
+Dagmar Daniela Debora Denise Diana Dora Doreen Doris Dorothea Dorothee Edda Edeltraud Edith Elena Eleonore Elfriede
+Elina Elisa Elisabeth Elise Elke Ella Elli Elly Elsa Else Emely Emilia Emilie Emily Emma Erika Erna Esther Eva Evelyn
+Fabienne Felicitas Finja Franka Franziska Frauke Frida Frieda Friederike Gabi Gabriele Gerda Gerlinde Gertrud Gesa
+Gisela Grete Greta Gudrun Hanna Hannah Hannelore Hedwig Heidi Heike Helen Helena Helene Helga Henni Henriette Herta
+Hertha Hildegard Ida Ilka Ilona Ilse Imke Ina Ines Inga Inge Ingeborg Ingrid Irene Irina Irma Irmgard Isabel Isabell
+Isabella Isabelle Jacqueline Jana Janina Janine Jasmin? Jennifer Jessica Johanna Josefine Josephine Judith Julia Juliane
+Julie Jutta Karin Karla Karolin Karoline Katharina Kathrin Katja Katrin Kerstin Kim Kira Klara Klaudia Kristin Lara
+Larissa Laura Lea Leah Lena Leni Leonie Lia Liane Lieselotte Lilli Lilly Lily Lina Linda Lisa Lisbeth Lore Lotta Lotte
+Luisa Luise Luna Lydia Madeleine Magdalena Maike Maja Mareike Margarete Margit Margot Margret Maria Marianne Marie
+Marina Marion Marissa Marit Marla Marlene Marlies Martha Martina Mathilda Mathilde Maya Melanie Melina Melissa Merle Mia
+Michaela Milena Mira Miriam Monika Nadine Nadja Natalie Nathalie Nele Nicole Nina Nora Ottilie Paula Pauline Petra Pia
+Ramona Rebecca Rebekka Regina Regine Renate Ricarda Rita Romy Ronja Rosalie Rosemarie Roswitha Ruth Sabine Sabrina
+Sandra Sara Sarah Saskia Selina Silke Silvia Simone Sina Sofia Sofie Sonja Sophia Sophie Stefanie Stephanie Susanne Svenja
+Swantje Sybille Tabea Tamara Tanja Thea Theresa Therese Tina Ulla Ulrike Ursula Ute Uta Valentina Valerie Vanessa Vera
+Verena Veronika Victoria Viktoria Waltraud Wiebke Wilhelmine Yvonne Zoe Zoé Zoey
+
+# ---- Deutsch, männlich
+Achim Adam Adrian Albert Albrecht Alexander Alfons Alfred Alois Andreas Andre André Anton Armin Arne Arno Arnold Artur
+Arthur Axel Bastian Benedikt Benjamin Benno Bernd Bernhard Bertram Björn Bodo Bruno Burkhard Carl Carsten Christian
+Christoph Christopher Claus Clemens Constantin Conrad Cornelius Daniel David Dennis Detlef Detlev Dieter Dietmar Dietrich
+Dirk Dominik Edgar Eduard Egon Elias Elmar Emil Erhard Erich Erik Erwin Eugen Fabian Falk Felix Ferdinand Finn Florian
+Frank Franz Frederik Friedhelm Friedrich Fritz Gabriel Georg Gerald Gerd Gerhard Gernot Gert Gottfried Gregor Gunnar
+Gunter Günter Günther Gustav Hagen Hannes Hanno Hans Harald Hartmut Heiko Heinrich Heinz Helge Helmut Hendrik Henning
+Henri Henrik Henry Herbert Hermann Holger Horst Hubert Hugo Ingo Jakob Jan Jannik Jannis Jens Joachim Jochen Johann
+Johannes Jonas Jonathan Jörg Josef Joseph Julian Julius Jürgen Justus Kai? Karl Karsten Kay? Kevin Kilian Klaus Konrad
+Konstantin Kurt Lars Lasse Laurenz Laurin Leo Leon Leonard Leonhard Linus Lothar Louis Ludger Ludwig Luis Lukas Lutz
+Malte Manfred Marc Marcel Marco Marcus Mario Marius Mark? Markus Martin Mathias Matthias Mats Max Maximilian Michael
+Mirko Moritz Niklas Niko Nikolas Nils Norbert Olaf Ole Oliver Oskar Otto Pascal? Patrick Paul Peter Philipp Rainer
+Ralf Ralph Reinhard Reinhold René Richard Robert Robin Roland Rolf Roman Rudolf Rüdiger Rupert Sascha Sebastian
+Siegfried Simon Stefan Steffen Stephan Sven Theo Theodor Thilo Thomas Thorsten Till Tim Timo Tobias Tom Torsten Udo
+Ulf Ulrich Uwe Valentin Veit Viktor Vincent Volker Walter Werner Wilfried Wilhelm Willi Willy Wolf? Wolfgang Wolfram
+
+# ---- Kurz- und Kosenamen
+Alex Andi Basti Ben Benni Caro Chris Conny Dani Flo Gabi Hanni Heini Jo Jule Kathi Lene Lenny Lucy Lukas Mai? Manu
+Matze Maxi Micha Mike Nick Nico Olli Resi Rike Sabi Sandy Steffi Susi Toni? Uli Vroni
+
+# ---- Englisch / international
+Aaron Abby Abigail Adele Aidan Alan Albert Alice Alicia Allison Amanda Amber? Andrew Angelina Anthony Ashley Austin
+Barry Benedict Betty Beverly Bill? Billy Blake Bob? Bobby Bradley Brandon Brenda Brian Brittany Brooke Bryan Caleb
+Cameron Carol? Caroline Catherine Charles Charlie Chelsea Cheryl Chloe Chloé Christine Christopher Cindy Claire Colin
+Connor Courtney Craig Crystal? Cynthia Daisy? Dakota Danielle Dave Dean? Deborah Debra Dennis Derek Diane Donald Donna
+Dorothy Douglas Dylan Edward Eileen Eleanor Elijah Elizabeth Ellie Emily Emma Eric Ethan Evan Evelyn Frances Gary
+Gavin George Gloria? Grace? Greg Gregory Hailey Hannah Harold Harper Harry Hayden Heather Heidi Holly? Hope? Howard Ian
+Isaac Isabella Isaiah Jack? Jackson Jacob Jade? Jake James Jamie Jane Janet Jason Jayden Jeffrey Jenna Jennifer Jeremy
+Jerry Jesse Jessica Jill Joan Joe Joel John Jonathan Jordan? Joseph Joshua Joy? Joyce Judy Julia Julian Justin Kaitlyn
+Karen Katherine Kathleen Kathryn Katie Kayla Keith Kelly Kenneth Kevin Kimberly Kyle Larry Laura Lauren Leah Leslie
+Liam Lillian Lily Linda Logan Lori Lucas Lucy Luke Madison Marilyn Mark? Martha Mary Mason Matthew Megan Melissa
+Michelle Mila Molly Nancy Natalie Nathan Nicholas Nicole Noah Norman Olivia Owen Pamela Patricia Paul Peggy Penelope
+Philip Phillip Rachel Ralph Randy Rebecca Riley Robert Roger Ronald Rose? Ruby? Russell Ryan Samantha Samuel Sandra
+Sara Scott Sean Shane Shannon Sharon Shawn Shirley Sophia Stephanie Steve Steven Susan Sydney? Taylor Teresa Terry
+Theresa Thomas Tiffany Timothy Todd Tony Tracy Travis Tyler Valerie Vanessa Victoria Vincent Virginia Walter Wayne
+Wendy Will? William Wyatt Zachary
+
+# ---- Französisch
+Aimée Alain Amélie Anaïs Antoine Aurélie Bastien Benoît Brigitte Camille Céline Claude? Clément Colette Damien Denis
+Dominique Élodie Émile Étienne Fabrice Florence? François Françoise Frédéric Gaëlle Gérard Guillaume Hélène Hugo Inès
+Isabelle Jacques Jean Jeanne Jérôme Joëlle Julien Laëtitia Laure Laurent Léa Léon Louise Luc Lucas Manon Marcel
+Margaux Marianne Mathieu Maxime Michel Michèle Monique Nathalie Nicolas Noémie Océane Olivier Pascal? Patrice Pauline
+Philippe Pierre Rémi Sébastien Simone Sophie Stéphane Sylvie Thierry Valérie Vincent Yann Yannick Yves
+
+# ---- Italienisch, Spanisch, Portugiesisch
+Adriana Alberto Alejandro Alessandra Alessandro Alessia Alfonso Alicia Andrea Angelo Antonella Antonio Beatriz Bruna
+Camila Carlos Carmela Carolina Cristina Daniele Diego Domenico Elena Emanuele Enrico Enzo Fabio Federica Federico
+Fernando Francesca Francesco Gabriele Gianluca Gianni Giorgia Giorgio Giovanna Giovanni Giulia Giuliana Giuseppe
+Guadalupe Ignacio Isabel Javier Jesús Joana João Jorge José Josefa Juan Juana Laura Leonardo Lorenzo Luana Luca
+Lucia Lucía Luigi Luis Luisa Manuel Manuela Marco Marcos Margherita Mariana Marisol Marta Martina Massimo Mateo Matteo
+Mattia Mauro Mercedes? Miguel Nicola Paola Paolo Pablo Pedro Pietro Rafael Raffaele Raúl Ricardo Roberta Roberto
+Rocco Rosario Salvatore Santiago? Sergio Silvia Simona Stefano Teresa Tommaso Valentina Vincenzo Ximena
+
+# ---- Türkisch
+Abdullah Ahmet Ali Arda Asli Aslı Ayla Aylin Ayse Ayşe Aysel Baran Berat Berkay Betül Burak Burcu Büşra Can? Canan
+Cansu Cem Cemal Ceren Cihan Defne Derya Deniz Dilara Dilek Ebru Ece Ecem Efe Elif Emine Emir Emre Enes Erdem Eren
+Erkan Esra Fatih Fatma Ferhat Filiz Gamze Gizem Gökhan Gül Gülay Gülsüm Hakan Halil Hande Hatice Hülya Hüseyin
+Ibrahim İbrahim Ilay Irem İrem Kaan Kader Kemal Kerem Leyla Mehmet Melek Melike Merve Mert Metin Murat Mustafa
+Nesrin Nihal Nur Oğuz Okan Ömer Onur Orhan Osman Özge Özlem Recep Rabia Selin Selim Semra Serkan Sevgi Sibel Sinan
+Songül Tuba Tuğba Ufuk Ümit Volkan Yasemin Yasin Yavuz Yıldız Yusuf Zehra Zeynep
+
+# ---- Arabisch, persisch, kurdisch
+Abdel Abdul Adel Ahmad Ahmed Aisha Aischa Ali Amal Amin Amina Amir Amira Anas Aya Ayman Bilal Dalia Fadi Farah Faris
+Fatima Ghada Habib Hadi Hala Hamid Hamza Hana Hanan Hassan Hiba Hussein Ibrahim Imad Iman Ismail Jamal Jamila Karim
+Khaled Khalid Laila Layla Leila Lina Mahmoud Majid Malak Mariam Maryam Mohamed Mohammed Mohammad Muhammad Mona Mounir
+Mustafa Nabil Nadia Nour Noor Omar Osama Rami Rania Reza Saad Said Salah Salim Salma Samir Sami Samira Sara Shirin
+Tarek Tariq Walid Yara Yasmin Yasmina Yousef Youssef Yusuf Zainab Zaid Zara
+
+# ---- Polnisch, tschechisch, slawisch, baltisch
+Agata Agnieszka Aleksander Aleksandra Andrzej Anna Bartosz Beata Bogdan Bożena Dariusz Dawid Dominika Dorota Elżbieta
+Ewa Ewelina Grażyna Grzegorz Halina Hanna Iwona Jacek Jakub Jan Janusz Jarosław Jerzy Joanna Józef Justyna Kamil
+Karolina Katarzyna Kazimierz Krystyna Krzysztof Łukasz Maciej Magdalena Małgorzata Marcin Marek Mariusz Marta Mateusz
+Michał Mirosław Monika Natalia Paweł Piotr Przemysław Rafał Renata Robert Ryszard Sebastian Sławomir Stanisław Szymon
+Tadeusz Teresa Tomasz Urszula Wiesław Wiktor Wiktoria Wojciech Zbigniew Zofia Zuzanna Jiří Jana Petr Pavel Lucie
+Tereza Martin Ondřej Vojtěch Kateřina Zdeněk Miroslav Milan Lenka Dragan Goran Zoran Milica Jelena Ivana Ivan Marko
+Nikola Stefan Dejan Aleksandar Ana Mirela Edin Emir Amra Lejla Adnan Senad Arben Besnik Blerta Driton Fatmir Valon
+
+# ---- Russisch, ukrainisch, kasachisch (auch eingedeutschte Schreibweisen)
+Aleksej Alexej Alexei Alina Alla Anastasia Anastasija Andrej Andrei Anton Artem Artjom Boris Daria Darja Dmitri Dmitrij
+Dmitry Elena Galina Igor Ilja Ilya Inna Irina Iwan Jekaterina Jelena Jewgeni Jewgenij Juri Juri Kirill Ksenia Ksenija
+Larissa Ljudmila Ludmila Maxim Michail Nadeschda Natalja Nikita Nikolai Oksana Olga Oleg Pawel Pjotr Polina Roman
+Sergej Sergei Sergey Swetlana Tatjana Tatiana Valentin Valeria Waleri Wassili Wiktor Wladimir Vladimir Wjatscheslaw
+Xenia Jana Jaroslaw Bogdan Taras Mykola Olena Oleksandr Oleksandra Yulia Julija Wladislaw Vadim Wadim Denis Ruslan
+
+# ---- Griechisch, skandinavisch, niederländisch, ungarisch, rumänisch
+Alexandros Andreas Christos Dimitrios Eleni Georgios Ioannis Katerina Konstantinos Maria Nikolaos Panagiotis Sofia
+Vasilis Yiannis Anders Annika Astrid Bjarne Elin Erik Freya Frida Gunnar Ingrid Jens Karin Lars Linnea Magnus Malin
+Mette Nils Olaf Ole Pernille Rasmus Sigrid Sören Søren Sven Thor Tove Ulrik Daan Dirk Femke Floor Jaap Joost Lieke
+Maarten Niels Pieter Ruud Sander Sanne Sem Thijs Wouter Zsófia Ágnes Attila Balázs Bence Csaba Gábor István László
+Péter Tamás Zoltán Ioana Ion Mihai Andrei Alexandru Cristian Gheorghe Florin Elena Daniela Gabriela Raluca
+
+# ---- Moderne Babynamen (häufig 2010–2024)
+Aaliyah Ahmad Alessio Alva Amalia Amari Amaya Ariana Arian Aria Ayla Bennet Bent Carlo Carlotta Damian Davin Delia
+Elian Eliah Elio Eliana Elif Elisa Emilian Emilio Enno Ensar Ezra Fiete Finnja Fynn Frederick Hailey Hanne Hedi Ilvy
+Isa Jamie Janne Jaron Jasper Joel Jonte Josua Juna Juno Kalle Kian Lean Leano Leopold Levi Levin Liam Liana Lias Lio
+Liv Livia Lorena Lou Louisa Luan Luana Lucas Lucy Luka Luke Luna Lya Mailo Malia Malou Mattis Matti Maxim Mayla Melia
+Milan Milo Mina Mio Mira Moana Nael Nahla Neo Nila Noel Noemi Nomi Nuri Oskar Pepe Phil Quentin Rayan Rafael Rosalie
+Ruben Ruby? Samu Sami Selma Smilla Theo Thore Tilda Tjark Valentino Yaris Yara Yaron Yuna Yusuf Zayn Zoe
+
+# ---- Mehrdeutig: nur mit Nachnamen oder eindeutigem Zusammenhang
+Alexa? April? August? Autumn? Bert? Christ? Coco? Dawn? Destiny? Eden? Engel? Ernst? Faith? Fanny? Flora? Georgia?
+Gene? Guy? Harmony? Hazel? Heide? Hunter? Iris? Ivy? Joy? Juli? June? Linde? Lourdes? May? Melody? Nikolaus? Olive?
+Paris? Pat? Pearl? Poppy? Ray? Rich? River? Rocky? Rosa? Silvester? Siri? Sky? Sonny? Storm? Summer? Sunny? Viola?
+Adel? Austin? Chelsea? Floor? Hagen? Ion? Kader? Lore? Nur? Roman? Said? Tuba? Virginia? Yaris? Zara?

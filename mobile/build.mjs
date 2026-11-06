@@ -19,6 +19,7 @@ cpSync(join(HERE, "app"), DIST, { recursive: true });
 // 2. Gleiche Regeln wie Browser-Erweiterung und Windows-Programm
 copy(join(HERE, "../extension/detectors.js"), "shared/detectors.js");
 copy(join(HERE, "../extension/kategorien.js"), "shared/kategorien.js");
+copy(join(HERE, "../extension/vornamen.js"), "shared/vornamen.js");
 // 3. Bibliotheken
 const vendor = {
   "vendor/pdfjs/pdf.min.mjs": "pdfjs-dist/build/pdf.min.mjs",

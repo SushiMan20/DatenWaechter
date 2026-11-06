@@ -4,8 +4,8 @@
     python tests/windows_smoke.py --exe dist/Datenwaechter   # zusätzlich das fertige Programm
 
 Prüft, was sich unter Linux nicht testen lässt: Zwischenablage (Text, Dateien, Bilder), Windows-Texterkennung,
-globales Tastenkürzel, Benachrichtigung unten rechts (Platz, kein Fokus-Klau), Einsetzen in ein echtes Programm
-(Notepad), Browser-Brücke in der Registry und das gebaute Programm selbst.
+globales Tastenkürzel, ✨-Knopf beim Markieren, Benachrichtigung unten rechts (Platz, kein Fokus-Klau), Einsetzen in ein
+echtes Programm (Notepad), Browser-Brücke in der Registry und das gebaute Programm selbst.
 „✘“ = Pflicht-Test fehlgeschlagen (Exit-Code 1), „⚠“ = optional (z. B. hängt von der Desktop-Sitzung ab).
 """
 
@@ -194,6 +194,114 @@ def t_notepad_bridge():
         proc.kill()
 
 
+def _notepad_mit_text(text: str):
+    """Startet Notepad mit Text; gibt (Prozess, Fenster, Punkt mitten im ersten Wort) zurück."""
+    import ctypes
+    from ctypes import wintypes
+    from datenwaechter import hotkey, winclip
+    u = ctypes.windll.user32
+    proc = subprocess.Popen(["notepad.exe"])
+    hwnd = 0
+    for _ in range(50):
+        time.sleep(0.2)
+        hwnd = u.FindWindowW("Notepad", None)
+        if hwnd:
+            break
+    assert hwnd, "Notepad-Fenster nicht gefunden"
+    u.ShowWindow(hwnd, 5)
+    u.SetForegroundWindow(hwnd)
+    time.sleep(0.5)
+    b = hotkey.WindowsBridge()
+    winclip.set_text(text)
+    b._ctrl("V")
+    time.sleep(0.4)
+    edit = 0
+    for cls in ("Edit", "RichEditD2DPT", "NotepadTextBox"):
+        edit = u.FindWindowExW(hwnd, 0, cls, None) or edit
+    r = wintypes.RECT()
+    u.GetWindowRect(edit or hwnd, ctypes.byref(r))
+    oben = r.top + (8 if edit else 80)
+    return proc, hwnd, (r.left + 30, oben + 6)
+
+
+def _doppelklick(x: int, y: int) -> None:
+    import ctypes
+    u = ctypes.windll.user32
+    u.SetCursorPos(x, y)
+    u.mouse_event(0x0001, 1, 0, 0, 0)    # kleine Bewegung, damit der Text-Cursor gesetzt wird
+    time.sleep(0.2)
+    for _ in range(2):
+        u.mouse_event(0x0002, 0, 0, 0, 0)
+        u.mouse_event(0x0004, 0, 0, 0, 0)
+        time.sleep(0.05)
+
+
+def t_auswahl_hook():
+    from datenwaechter import auswahl
+    events = []
+    w = auswahl.Waechter(lambda *e: events.append(e))
+    assert w.active, w.error
+    proc, hwnd, (x, y) = _notepad_mit_text("hallo herr becker anbei die unterlagen")
+    try:
+        _doppelklick(x, y)
+        end = time.time() + 3
+        while not any(e[0] == "auswahl" for e in events) and time.time() < end:
+            time.sleep(0.05)
+        treffer = [e for e in events if e[0] == "auswahl"]
+        assert treffer, f"kein Markieren erkannt (Ereignisse: {[e[0] for e in events]})"
+        assert treffer[0][3] == hwnd, "gemeldetes Fenster ist nicht Notepad"
+        return "Doppelklick auf Text in Notepad erkannt"
+    finally:
+        w.stop()
+        proc.kill()
+
+
+def t_auswahl_knopf():
+    """Ganzer Ablauf: Wort in Notepad markieren → ✨-Knopf erscheint → Klick → KI-Leiste mit dem markierten Wort."""
+    import ctypes
+    from datenwaechter.gui import App
+    app = App(start_hidden=True)
+    out = {}
+    orig = app._ki_captured
+
+    def spy(hwnd, text, old):
+        out["text"] = text
+        out["fg"] = ctypes.windll.user32.GetForegroundWindow()
+        orig(hwnd, text, old)
+    app._ki_captured = spy
+
+    def start():
+        out["proc"], out["hwnd"], (x, y) = _notepad_mit_text("hallo herr becker anbei die unterlagen")
+        _doppelklick(x, y)
+        app.root.after(1200, klick)
+
+    def klick():
+        k = app.knopf
+        out["knopf"] = bool(k is not None and k.sichtbar())
+        if out["knopf"]:
+            u = ctypes.windll.user32
+            u.SetCursorPos(k.winfo_rootx() + 12, k.winfo_rooty() + 8)
+            time.sleep(0.15)
+            u.mouse_event(0x0002, 0, 0, 0, 0)
+            u.mouse_event(0x0004, 0, 0, 0, 0)
+        app.root.after(2500, ende)
+
+    def ende():
+        out["palette"] = app._ki_palette is not None and app._ki_palette.winfo_exists()
+        if out["palette"]:
+            app._ki_palette.destroy()
+        out["proc"].kill()
+        app._quit()
+
+    app.root.after(1500, start)
+    app.run()
+    assert out.get("knopf"), "✨-Knopf ist nach dem Markieren nicht erschienen"
+    assert out.get("text", "").strip(), "Klick auf den Knopf hat keinen markierten Text geholt"
+    assert out["fg"] == out["hwnd"], "Knopf hat Notepad den Fokus genommen"
+    assert out.get("palette"), "KI-Leiste ist nicht aufgegangen"
+    return f"Knopf erschienen, markierter Text „{out['text'].strip()}“ geholt, KI-Leiste offen, Fokus blieb in Notepad"
+
+
 def t_browser_bridge():
     import winreg
     from datenwaechter import browser_bridge
@@ -284,6 +392,8 @@ def main() -> int:
         run("Tastenkürzel Strg+Alt+Leertaste", t_hotkey)
         run("Benachrichtigung beim Kopieren", t_gui_popup)
         run("KI-Aktion: Text in Notepad holen und ersetzen", t_notepad_bridge, hard=False)
+        run("✨-Knopf: Markieren in Notepad erkennen", t_auswahl_hook, hard=False)
+        run("✨-Knopf: Klick öffnet KI-Leiste mit markiertem Text", t_auswahl_knopf, hard=False)
         run("Browser-Brücke einrichten/entfernen", t_browser_bridge)
     if args.exe:
         exe_tests(Path(args.exe))

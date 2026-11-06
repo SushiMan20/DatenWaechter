@@ -51,3 +51,36 @@ def test_tray_texte_ueberall_darstellbar(monkeypatch):
     t = _safe("Datenwächter – Schutz aktiv … · ok")
     t.encode("latin-1")  # darf nicht scheitern
     assert t.startswith("Datenwächter - Schutz aktiv")
+
+
+def test_auswahl_knopf_einstellung():
+    from datenwaechter import auswahl
+    assert auswahl.aktiv(), "standardmäßig an"
+    auswahl.speichern(False)
+    assert not auswahl.aktiv()
+    auswahl.speichern(True)
+    assert auswahl.aktiv()
+
+
+def test_auswahl_knopf_zeigen_und_klicken():
+    import pytest
+    tk = pytest.importorskip("tkinter")
+    try:
+        root = tk.Tk()
+    except tk.TclError:
+        pytest.skip("keine Anzeige")
+    from datenwaechter.knopf import Knopf
+    try:
+        root.withdraw()
+        klicks = []
+        k = Knopf(root, dark=False, font="Segoe UI", hotkey="Strg+Alt+Leertaste")
+        k.zeigen(200, 150, lambda: klicks.append(1))
+        root.update()
+        assert k.sichtbar() and k.enthaelt(k.winfo_rootx() + 5, k.winfo_rooty() + 5)
+        assert not k.enthaelt(5, 5)
+        assert "Strg+Alt+Leertaste" in k.tooltip
+        k._klick()
+        root.update()
+        assert klicks == [1] and not k.sichtbar(), "Klick startet KI-Aktionen und blendet den Knopf aus"
+    finally:
+        root.destroy()
