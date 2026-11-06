@@ -1,5 +1,12 @@
 # Änderungen
 
+## 1.2.0
+
+- **KI-Desktop-Apps geschützt (Windows):** ChatGPT, Claude, Copilot, Perplexity.
+  - *Drop-Schutz:* Zieht man eine Datei (Explorer, Desktop, Browser, Outlook …) über das App-Fenster, erscheint eine Auffangfläche. Die Datei wird geprüft und erst danach – Original oder geschwärzt – per Einfügen übergeben.
+  - *„Datei öffnen“-Schutz:* Im Windows-Dialog der App werden „Öffnen“, Enter und Doppelklick angehalten, bis die Datei geprüft ist; auf Wunsch wird die geschwärzte Kopie eingesetzt. Die App sieht das Original nie.
+- ✨-Knopf erscheint auch bei 125/150 % Bildschirmskalierung an der richtigen Stelle.
+
 ## 1.1.0
 
 - **Namen ohne KI:** Vornamenliste (~1.500, deutsch und international) plus typische Stellen: Anrede („Liebe Mia,“), Grußformel, Formularfelder („Name:“, „Kontoinhaber:“), „Familie Schneider“, „Sohn Lukas (5)“, „Schneider, Thomas“, „Fr./Hr./Dr.“, Großbuchstaben in Formularen. Ein erkannter Name wird überall im Text markiert; „Mia“ bekommt denselben Platzhalter wie „Mia Schneider“. Mehrdeutige Wörter („Ernst“, „Rose“, „Claude“) nur mit Nachnamen.

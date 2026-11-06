@@ -13,16 +13,19 @@ import datetime as dt
 import os
 from collections import deque
 import queue
+import shutil
 import subprocess
 import sys
 import tempfile
 import threading
 import tkinter as tk
+import uuid
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from . import actions, auswahl, autostart, browser_bridge, content_check, hotkey, llm, ocr, settings, winclip
+from . import actions, auswahl, autostart, browser_bridge, content_check, hotkey, llm, ocr, schutz, settings, winclip
 from .analysis import analyze, anonymize as anonymize_report
+from .auffang import Auffangflaeche
 from .anonymize import Anonymizer
 from .detectors import HOCH, SEVERITY_LABEL, scan_text
 from .faces import available as faces_available
@@ -137,12 +140,18 @@ class App:
         self.hotkey = None
         self.auswahl = None        # ✨-Knopf beim Markieren (Maus-Hook)
         self.knopf = None
+        self.schutz = None         # KI-Apps: Drop-Schutz und „Datei öffnen“-Schutz
+        self.auffang = None
+        self._auffang_ziel = None
+        self._schutz_ctx = None
+        self._schutz_hinweis = None
 
         self._build()
         self.tray = Tray(lambda name: self.results.put(("ui", name)), self.watch.get, self.stats.summary)
         self.root.protocol("WM_DELETE_WINDOW", self._close)
         self._start_hotkey()
         self._start_auswahl()
+        self._start_schutz()
         self._refresh()
         self.root.after(POLL_MS, self._poll)
         threading.Thread(target=self._detect_llm, daemon=True).start()
@@ -263,6 +272,13 @@ class App:
         ttk.Button(frm, text="KI-Aktionen (Umformulieren …) bearbeiten …", command=self._actions_editor).pack(
             anchor="w", padx=22)
         ttk.Label(frm, text=hk, foreground="#777").pack(anchor="w", padx=22, pady=(0, 6))
+        ki_apps = tk.BooleanVar(value=schutz.aktiv())
+
+        def ki_apps_schalten():
+            schutz.speichern(ki_apps.get())
+            self._start_schutz()
+        ttk.Checkbutton(frm, text="KI-Apps schützen (ChatGPT, Claude …): Dateien vor dem Hineinziehen und "
+                                  "„Datei öffnen“ prüfen", variable=ki_apps, command=ki_apps_schalten).pack(anchor="w", pady=2)
         ttk.Checkbutton(frm, text="Fenster immer im Vordergrund", variable=self.topmost,
                         command=lambda: self.root.attributes("-topmost", self.topmost.get())).pack(anchor="w", pady=2)
         auto = tk.BooleanVar(value=autostart.is_enabled())
@@ -369,6 +385,8 @@ class App:
             self.hotkey.stop()
         if self.auswahl:
             self.auswahl.stop()
+        if self.schutz:
+            self.schutz.stop()
         self.tray.stop()
         self.root.destroy()
 
@@ -410,6 +428,175 @@ class App:
             self.knopf = Knopf(self.root, dark=self.t is THEMES["dunkel"], font=FONT,
                                        hotkey=actions.load_hotkey())
         self.knopf.zeigen(x, y, lambda: self._ki_start(hwnd))
+
+    # ------------------------------------------------------------------ KI-Apps: Drop-Schutz und „Datei öffnen“
+    def _start_schutz(self) -> None:
+        if self.schutz:
+            self.schutz.stop()
+            self.schutz = None
+        if self.bridge is not None and schutz.aktiv():
+            self.schutz = schutz.Waechter(lambda *ev: self.results.put(("schutz", *ev)))
+
+    def _schutz_ereignis(self, art: str, hwnd, _extra=None) -> None:
+        if art == "drop-zeigen":
+            if TkinterDnD is None or self._schutz_ctx is not None:
+                return
+            if self.auffang is None or not self.auffang.winfo_exists():
+                self.auffang = Auffangflaeche(self.root, font=FONT, on_drop=self._auffang_drop)
+            self._auffang_ziel = hwnd
+            self.auffang.zeigen(schutz.rechteck(hwnd), schutz.app_name(schutz.prozessname(schutz.fenster_pid(hwnd))))
+        elif art == "drop-ende":
+            if self.auffang is not None:
+                self.root.after(700, lambda: self.auffang.aktiv and self.auffang.verstecken())
+        elif art in ("dialog", "dialog-doppelklick"):
+            self._dialog_pruefen(hwnd, art == "dialog-doppelklick")
+
+    def _auffang_drop(self, daten: str, art: str) -> None:
+        ziel = self._auffang_ziel
+        app = schutz.app_name(schutz.prozessname(schutz.fenster_pid(ziel)))
+        if art == "text":
+            findings = scan_text(daten)
+            self._schutz_ctx = {"art": "drop", "ziel": ziel, "app": app}
+            if not findings:
+                self._schutz_weiter(text=daten)
+                return
+            self._schutz_frage(f"Text → {app}: {anzahl(len(findings), 'sensible Angabe', 'sensible Angaben')}",
+                               self._summary([f.kind for f in findings]), "", True,
+                               lambda: self._schutz_weiter(text=self.anon.anonymize(daten, findings), geschwaerzt=True),
+                               lambda: self._schutz_weiter(text=daten))
+            return
+        pfade = [p for p in self.root.tk.splitlist(daten) if os.path.isfile(p)]
+        if not pfade:
+            self._pointer_note("Ordner kann der Datenwächter nicht prüfen – bitte einzelne Dateien ziehen.")
+            return
+        self._schutz_ctx = {"art": "drop", "ziel": ziel, "app": app, "pfade": pfade}
+        self._schutz_hinweis = self._pointer_note(f"🛡 Prüfe {Path(pfade[0]).name if len(pfade) == 1 else anzahl(len(pfade), 'Datei', 'Dateien')} …", ms=0)
+        self._check_files(pfade, "schutz-drop")
+
+    def _dialog_pruefen(self, hwnd, doppel: bool) -> None:
+        """„Öffnen“, Enter oder Doppelklick im Dateidialog einer KI-App wurde angehalten: erst prüfen."""
+        if self._schutz_ctx is not None:   # Prüfung läuft schon / Rückfrage offen
+            return
+        d = schutz.dateidialog(hwnd)
+        if d is None:
+            return
+        app = schutz.app_name(d.app)
+        ordner = d.ordner()
+        if doppel:
+            name = schutz.ausgewaehlt()
+            if not name:
+                self._schutz_unklar(d, app, "Was du doppelgeklickt hast, konnte der Datenwächter nicht erkennen. "
+                                            "Bitte die Datei markieren und auf „Öffnen“ klicken.", oeffnen=False)
+                return
+            ziel = schutz.aufloesen(ordner, name)
+            if ziel is not None and ziel.is_dir():
+                schutz.setze_text(d.feld, str(ziel))
+                d.oeffnen()
+                return
+            ziele = [ziel]
+        else:
+            namen = schutz.namen_aus_feld(d.feldtext())
+            if not namen or any(c in n for n in namen for c in "*?"):
+                d.oeffnen()   # leer oder Filter wie *.pdf: der Dialog macht seins
+                return
+            ziele = [schutz.aufloesen(ordner, n) for n in namen]
+            if len(ziele) == 1 and ziele[0] is not None and ziele[0].is_dir():
+                d.oeffnen()   # Ordner: hineinwechseln
+                return
+        if any(z is None or not z.is_file() for z in ziele):
+            self._schutz_unklar(d, app, "Die ausgewählte Datei konnte der Datenwächter nicht finden und daher "
+                                        "nicht prüfen.", oeffnen=not doppel)
+            return
+        pfade = [str(z) for z in ziele]
+        self._schutz_ctx = {"art": "dialog", "dialog": d, "app": app, "pfade": pfade}
+        self._schutz_hinweis = self._pointer_note(
+            f"🛡 Datenwächter prüft {Path(pfade[0]).name if len(pfade) == 1 else anzahl(len(pfade), 'Datei', 'Dateien')}"
+            f" – {app} bekommt sie erst danach …", ms=0)
+        self._check_files(pfade, "schutz-dialog")
+
+    def _schutz_unklar(self, d, app: str, grund: str, oeffnen: bool) -> None:
+        actions = ([("Trotzdem öffnen", d.oeffnen, False), ("Abbrechen", None, True)] if oeffnen
+                   else [("OK", None, True)])
+        self._popup(level="thema", title=f"Datei für {app}: nicht geprüft", summary=grund, actions=actions)
+
+    def _schutz_ergebnis(self, paths, reports, errors) -> None:
+        if self._schutz_hinweis is not None and self._schutz_hinweis.winfo_exists():
+            self._schutz_hinweis.destroy()
+        self._schutz_hinweis = None
+        ctx = self._schutz_ctx
+        if ctx is None:
+            return
+        if not errors and not any(r.needs_attention for r in reports):
+            self._schutz_weiter(pfade=list(paths))
+            return
+        rows = [(r.name, row) for r in reports for row in r.rows()]
+        verdicts = [r.verdict for r in reports if r.verdict.warning]
+        notes = errors + [f"{r.name}: {n}" for r in reports for n in r.doc.notes + r.info]
+        can_anon = any(r.can_anonymize for r in reports)
+        what = reports[0].name if len(reports) == 1 else anzahl(len(paths), "Datei", "Dateien")
+
+        def geschwaerzt():
+            ziel = TEMP_DIR / "geschuetzt" / uuid.uuid4().hex[:8]
+            ziel.mkdir(parents=True, exist_ok=True)
+            outs = []
+            for r in reports:
+                if r.can_anonymize:
+                    outs.append(str(anonymize_report(r, self.anon, ziel)))
+                elif not r.rows():
+                    outs.append(str(shutil.copy2(r.doc.path, ziel / r.doc.path.name)))
+            self._count("anonymisiert", sum(1 for r in reports if r.can_anonymize))
+            self._schutz_weiter(pfade=outs, geschwaerzt=True)
+
+        title = (f"{what} → {ctx['app']}: {anzahl(len(rows), 'sensible Angabe', 'sensible Angaben')}" if rows
+                 else f"{what} → {ctx['app']}: bitte prüfen")
+        topic = "; ".join(f"Thema: {', '.join(v.categories)}" for v in verdicts if v.categories)
+        self._schutz_frage(title, self._summary([row["kind"] for _, row in rows]), topic, can_anon, geschwaerzt,
+                           lambda: self._schutz_weiter(pfade=list(paths)),
+                           details=lambda ui: self._files_dialog(
+                               title, rows, verdicts, notes, can_anon, lambda: (ui["close"](), geschwaerzt()),
+                               lambda: (ui["close"](), self._schutz_weiter(pfade=list(paths))),
+                               lambda: (ui["close"](), self._schutz_abbrechen()), ui))
+
+    def _schutz_frage(self, title, summary, topic, can_anon, geschwaerzt, original, details=None) -> None:
+        app = self._schutz_ctx["app"]
+        actions = ([("Geschwärzt übergeben", geschwaerzt, True), ("Original", original, False)] if can_anon
+                   else [("Trotzdem übergeben", original, True), ("Abbrechen", self._schutz_abbrechen, False)])
+        ui = {"close": lambda: None}
+        self._popup(level="warnung", title=title, summary=summary, topic=topic,
+                    status=f"{app} hat noch nichts bekommen – du entscheidest.", actions=actions,
+                    on_details=(lambda: details(ui)) if details else None, on_close=self._schutz_abbrechen)
+
+    def _schutz_abbrechen(self) -> None:
+        ctx, self._schutz_ctx = self._schutz_ctx, None
+        if ctx and ctx["art"] == "dialog":
+            schutz.nach_vorne(ctx["dialog"].hwnd)   # Dialog bleibt offen: andere Datei wählen oder abbrechen
+
+    def _schutz_weiter(self, pfade=None, text=None, geschwaerzt: bool = False) -> None:
+        """Freigegeben: Datei(en) in den Dialog eintragen bzw. per Einfügen an die App übergeben."""
+        ctx, self._schutz_ctx = self._schutz_ctx, None
+        if ctx is None:
+            return
+        zusatz = " (geschwärzt)" if geschwaerzt else ""
+        if ctx["art"] == "dialog":
+            d = ctx["dialog"]
+            if len(pfade) == 1:
+                schutz.setze_text(d.feld, pfade[0])
+                d.oeffnen()
+            else:
+                ordner = str(Path(pfade[0]).parent)
+                schutz.setze_text(d.feld, ordner)     # erst in den Ordner wechseln, dann alle Namen auswählen
+                d.oeffnen()
+                namen = " ".join(f'"{Path(p).name}"' for p in pfade)
+                self.root.after(600, lambda: (schutz.setze_text(d.feld, namen), d.oeffnen()))
+            self._status(f"✔ geprüft – an {ctx['app']} übergeben{zusatz}", FARBEN["aktiv"])
+            return
+        if text is not None:
+            self._set_clipboard_text(text)
+        else:
+            self._set_clipboard_files(pfade)
+        ziel = ctx["ziel"]
+        threading.Thread(target=lambda: schutz.einfuegen(ziel), daemon=True).start()
+        self._status(f"✔ in {ctx['app']} eingefügt{zusatz} – falls nicht: Strg+V", FARBEN["aktiv"])
 
     def _pointer_note(self, text: str, ms: int = 3500):
         """Kleiner Hinweis am Mauszeiger (gibt das Fenster zurück, damit es vorzeitig geschlossen werden kann)."""
@@ -833,6 +1020,9 @@ class App:
             if item[0] == "auswahl":
                 self._auswahl(*item[1:])
                 continue
+            if item[0] == "schutz":
+                self._schutz_ereignis(*item[1:])
+                continue
             if item[0].startswith("ki-"):
                 {"ki-hotkey": self._ki_start, "ki-captured": self._ki_captured, "ki-result": self._ki_result,
                  "ki-done": self._ki_done}[item[0]](*item[1:])
@@ -864,7 +1054,9 @@ class App:
                     self._ok()
             else:
                 _, paths, reports, errors, origin, hold, original_image = item
-                if errors or any(r.needs_attention for r in reports):
+                if origin.startswith("schutz"):
+                    self._schutz_ergebnis(paths, reports, errors)
+                elif errors or any(r.needs_attention for r in reports):
                     self._warn_files(paths, reports, errors, origin, hold, original_image)
                 else:
                     self._release(paths, origin, hold, original_image)

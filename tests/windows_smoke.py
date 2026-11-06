@@ -18,6 +18,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -302,6 +303,284 @@ def t_auswahl_knopf():
     return f"Knopf erschienen, markierter Text „{out['text'].strip()}“ geholt, KI-Leiste offen, Fokus blieb in Notepad"
 
 
+DIALOG_KIND = r"""
+import sys, tkinter as tk
+from tkinter import filedialog
+r = tk.Tk(); r.withdraw()
+p = filedialog.askopenfilename(parent=r, initialdir=sys.argv[1], title="Datei für die KI")
+print("ERGEBNIS:" + (p or ""), flush=True)
+"""
+
+DRAG_KIND = r"""
+import sys, tkinter as tk
+import pythoncom, winerror, win32con
+from win32com.server.util import wrap
+sys.path.insert(0, sys.argv[2])
+from datenwaechter import winclip
+pythoncom.OleInitialize()
+winclip.set_files([sys.argv[1]])
+daten = pythoncom.OleGetClipboard()
+
+class Quelle:
+    _com_interfaces_ = [pythoncom.IID_IDropSource]
+    _public_methods_ = ["QueryContinueDrag", "GiveFeedback"]
+    def QueryContinueDrag(self, esc, tasten):
+        if esc:
+            return winerror.DRAGDROP_S_CANCEL
+        return winerror.S_OK if tasten & win32con.MK_LBUTTON else winerror.DRAGDROP_S_DROP
+    def GiveFeedback(self, wirkung):
+        return winerror.DRAGDROP_S_USEDEFAULTCURSORS
+
+r = tk.Tk(); r.geometry("240x140+40+40"); r.title("Quelle"); r.attributes("-topmost", True)
+lbl = tk.Label(r, text="Ziehen!", bg="yellow"); lbl.pack(fill="both", expand=True)
+def los(_e):
+    print("DRAG:", pythoncom.DoDragDrop(daten, wrap(Quelle(), pythoncom.IID_IDropSource), 1), flush=True)
+lbl.bind("<ButtonPress-1>", los)
+r.after(25000, r.destroy)
+r.mainloop()
+"""
+
+
+def _fenster_von(pid: int, klasse: str | None = None):
+    import ctypes
+    from ctypes import wintypes
+    from datenwaechter import schutz
+    gefunden = []
+    Proc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+
+    def cb(h, _l):
+        if (schutz.fenster_pid(h) == pid and ctypes.windll.user32.IsWindowVisible(h)
+                and (klasse is None or schutz.klasse(h) == klasse)):
+            gefunden.append(h)
+        return True
+    ctypes.windll.user32.EnumWindows(Proc(cb), 0)
+    return gefunden[0] if gefunden else None
+
+
+def _klick(x: int, y: int, doppel: bool = False) -> None:
+    import ctypes
+    u = ctypes.windll.user32
+    u.SetCursorPos(x, y)
+    u.mouse_event(0x0001, 1, 0, 0, 0)
+    time.sleep(0.15)
+    for _ in range(2 if doppel else 1):
+        u.mouse_event(0x0002, 0, 0, 0, 0)
+        u.mouse_event(0x0004, 0, 0, 0, 0)
+        time.sleep(0.05)
+
+
+def t_dialog_schutz():
+    """„Datei öffnen“ in einer KI-App (hier: Python-Testprogramm) – Öffnen, Enter und Doppelklick werden geprüft."""
+    import ctypes
+    from datenwaechter import schutz
+    from datenwaechter.gui import App
+    from datenwaechter.toast import TrayPopup
+    ordner = TMP / "dialog"
+    ordner.mkdir(exist_ok=True)
+    (ordner / "Vertrag.txt").write_text(SECRET + " Geboren am 12.03.1985, Mia Schneider.", encoding="utf-8")
+    (ordner / "Einkauf.txt").write_text("Milch, Brot, Äpfel", encoding="utf-8")
+    os.environ["DATENWAECHTER_SCHUTZ_APPS"] = "python.exe"
+    app = App(start_hidden=True)
+    app.watch.set(False)
+    out = {"schritte": []}
+    u = ctypes.windll.user32
+
+    def kind():
+        p = subprocess.Popen([sys.executable, "-c", DIALOG_KIND, str(ordner)], stdout=subprocess.PIPE, text=True,
+                             encoding="utf-8")
+        h = None
+        for _ in range(60):
+            time.sleep(0.2)
+            h = _fenster_von(p.pid, "#32770")
+            if h:
+                break
+        assert h, "Dateidialog des Testprogramms nicht gefunden"
+        time.sleep(0.6)
+        d = schutz.dateidialog(h, frozenset({"python.exe"}))
+        assert d, "Dateidialog nicht erkannt (Steuerelemente)"
+        return p, d
+
+    def ergebnis(p):
+        try:
+            text, _ = p.communicate(timeout=8)
+        except subprocess.TimeoutExpired:
+            p.kill()
+            return "(kein Ergebnis – Dialog noch offen)"
+        return next((z.split(":", 1)[1] for z in text.splitlines() if z.startswith("ERGEBNIS:")), "")
+
+    def popup_knopf(name):
+        pop = TrayPopup.current
+        if pop is None or name not in pop.buttons:
+            return f"keine Rückfrage mit „{name}“ (Popup: {pop.buttons.keys() if pop else None})"
+        out["schritte"].append(f"Rückfrage: {pop.title() if hasattr(pop, 'title') else ''}")
+        pop.buttons[name].event_generate("<Button-1>")
+        return None
+
+    def schritt1():   # Datei mit IBAN, Klick auf „Öffnen“ -> Rückfrage -> geschwärzt
+        try:
+            p, d = kind()
+            schutz.setze_text(d.feld, "Vertrag.txt")
+            l, t, r, b = schutz.rechteck(d.ok)
+            _klick((l + r) // 2, (t + b) // 2)
+            out["p"] = p
+            app.root.after(3500, schritt1b)
+        except Exception as e:  # noqa: BLE001
+            out["fehler"] = f"Schritt 1: {e}"
+            app._quit()
+
+    def schritt1b():
+        fehler = popup_knopf("Geschwärzt übergeben")
+        pfad = ergebnis(out["p"])
+        out["geschwaerzt"] = (fehler, pfad)
+        app.root.after(500, schritt2)
+
+    def schritt2():   # harmlose Datei per Enter -> geht ohne Rückfrage durch
+        try:
+            p, d = kind()
+            schutz.setze_text(d.feld, "Einkauf.txt")
+            schutz.nach_vorne(d.hwnd)
+            time.sleep(0.3)
+            u.keybd_event(0x0D, 0, 0, 0)
+            u.keybd_event(0x0D, 0, 2, 0)
+            out["p"] = p
+            app.root.after(3500, schritt2b)
+        except Exception as e:  # noqa: BLE001
+            out["fehler"] = f"Schritt 2: {e}"
+            app._quit()
+
+    def schritt2b():
+        out["harmlos"] = ergebnis(out["p"])
+        app.root.after(500, schritt3)
+
+    def schritt3():   # Doppelklick auf „Vertrag“ in der Liste -> Rückfrage -> Original
+        try:
+            import comtypes.client
+            p, d = kind()
+            uia = comtypes.client.GetModule("UIAutomationCore.dll")
+            auto = comtypes.client.CreateObject("{ff48dba4-60ef-4201-aa87-54103eef594e}", interface=uia.IUIAutomation)
+            liste = auto.ElementFromHandle(d.liste)
+            el = None
+            for name in ("Vertrag.txt", "Vertrag"):
+                el = liste.FindFirst(4, auto.CreatePropertyCondition(30005, name))
+                if el:
+                    break
+            assert el, "Eintrag „Vertrag“ in der Dateiliste nicht gefunden"
+            r = el.CurrentBoundingRectangle
+            _klick((r.left + r.right) // 2, (r.top + r.bottom) // 2, doppel=True)
+            out["p"] = p
+            app.root.after(3500, schritt3b)
+        except Exception as e:  # noqa: BLE001
+            out["doppel"] = (f"Schritt 3: {e}", "")
+            app.root.after(100, app._quit)
+
+    def schritt3b():
+        fehler = popup_knopf("Original")
+        out["doppel"] = (fehler, ergebnis(out["p"]))
+        app._quit()
+
+    app.root.after(1500, schritt1)
+    try:
+        app.run()
+    finally:
+        os.environ.pop("DATENWAECHTER_SCHUTZ_APPS", None)
+    assert "fehler" not in out, out.get("fehler")
+    fehler, pfad = out["geschwaerzt"]
+    assert not fehler, fehler
+    assert pfad.endswith("_anonymisiert.txt"), f"App bekam: {pfad!r}"
+    inhalt = Path(pfad).read_text(encoding="utf-8")
+    assert "DE89" not in inhalt and "[IBAN_1]" in inhalt, inhalt
+    assert Path(out["harmlos"]).name == "Einkauf.txt", f"harmlose Datei: {out['harmlos']!r}"
+    meldung = "„Öffnen“ → geschwärzte Kopie übergeben; Enter auf harmloser Datei → ohne Rückfrage"
+    fehler3, pfad3 = out.get("doppel", ("nicht gelaufen", ""))
+    if fehler3 or Path(pfad3).name != "Vertrag.txt":
+        raise AssertionError(f"{meldung}; Doppelklick: {fehler3 or pfad3!r}")
+    return meldung + "; Doppelklick → Rückfrage → Original"
+
+
+def t_drop_schutz():
+    """Echtes Ziehen (OLE Drag & Drop) einer Datei über eine KI-App (hier: Notepad) -> Auffangfläche -> geschwärzt."""
+    import ctypes
+    from datenwaechter import schutz, winclip
+    from datenwaechter.gui import App
+    from datenwaechter.toast import TrayPopup
+    datei = TMP / "Brief.txt"
+    datei.write_text(SECRET, encoding="utf-8")
+    os.environ["DATENWAECHTER_SCHUTZ_APPS"] = "notepad.exe"
+    os.environ["DATENWAECHTER_DRAG_QUELLEN"] = "python.exe"
+    app = App(start_hidden=True)
+    app.watch.set(False)
+    out = {"ereignisse": []}
+    orig = app._schutz_ereignis
+    app._schutz_ereignis = lambda art, h, x=None: (out["ereignisse"].append(art), orig(art, h, x))
+    u = ctypes.windll.user32
+    sw, sh = u.GetSystemMetrics(0), u.GetSystemMetrics(1)
+
+    def bewege(x, y):
+        u.mouse_event(0x8001, int(x * 65535 / sw), int(y * 65535 / sh), 0, 0)   # MOVE | ABSOLUTE
+
+    def ziehen():
+        try:
+            note = subprocess.Popen(["notepad.exe"])
+            quelle = subprocess.Popen([sys.executable, "-c", DRAG_KIND, str(datei), str(ROOT)],
+                                      stdout=subprocess.PIPE, text=True)
+            out["prozesse"] = (note, quelle)
+            hn = hq = None
+            for _ in range(50):
+                time.sleep(0.2)
+                hn = hn or u.FindWindowW("Notepad", None)
+                hq = hq or _fenster_von(quelle.pid)
+                if hn and hq:
+                    break
+            assert hn and hq, "Notepad oder Ziehquelle nicht gefunden"
+            u.MoveWindow(hn, 400, 200, 700, 500, True)
+            time.sleep(0.8)
+            ql, qt, qr, qb = schutz.rechteck(hq)
+            sx, sy = (ql + qr) // 2, (qt + qb) // 2 + 10
+            tx, ty = 750, 450
+            u.SetCursorPos(sx, sy)
+            bewege(sx, sy)
+            time.sleep(0.3)
+            u.mouse_event(0x0002, 0, 0, 0, 0)          # Maustaste runter in der Quelle -> DoDragDrop startet
+            time.sleep(0.4)
+            for i in range(1, 31):
+                bewege(sx + (tx - sx) * i // 30, sy + (ty - sy) * i // 30)
+                time.sleep(0.03)
+            for _ in range(15):                         # über dem Ziel etwas bewegen, bis die Auffangfläche da ist
+                bewege(tx + _ % 3, ty)
+                time.sleep(0.08)
+            u.mouse_event(0x0004, 0, 0, 0, 0)          # loslassen = ablegen
+        except Exception as e:  # noqa: BLE001
+            out["fehler"] = str(e)
+
+    def pruefen():
+        pop = TrayPopup.current
+        out["popup"] = bool(pop and "Geschwärzt übergeben" in pop.buttons)
+        if out["popup"]:
+            pop.buttons["Geschwärzt übergeben"].event_generate("<Button-1>")
+        app.root.after(2000, ende)
+
+    def ende():
+        out["zwischenablage"] = winclip.get_files()
+        for p in out.get("prozesse", ()):
+            p.kill()
+        app._quit()
+
+    app.root.after(1500, lambda: threading.Thread(target=ziehen, daemon=True).start())
+    app.root.after(12000, pruefen)
+    try:
+        app.run()
+    finally:
+        os.environ.pop("DATENWAECHTER_SCHUTZ_APPS", None)
+        os.environ.pop("DATENWAECHTER_DRAG_QUELLEN", None)
+    assert "fehler" not in out, out["fehler"]
+    assert "drop-zeigen" in out["ereignisse"], f"Auffangfläche nicht gezeigt (Ereignisse: {out['ereignisse']})"
+    assert out.get("popup"), f"keine Rückfrage nach dem Ablegen (Ereignisse: {out['ereignisse']})"
+    dateien = out.get("zwischenablage") or []
+    assert dateien and dateien[0].endswith("_anonymisiert.txt"), f"übergeben: {dateien}"
+    assert "DE89" not in Path(dateien[0]).read_text(encoding="utf-8")
+    return "Ziehen über Notepad → Auffangfläche → Rückfrage → geschwärzte Fassung übergeben"
+
+
 def t_browser_bridge():
     import winreg
     from datenwaechter import browser_bridge
@@ -394,6 +673,8 @@ def main() -> int:
         run("KI-Aktion: Text in Notepad holen und ersetzen", t_notepad_bridge, hard=False)
         run("✨-Knopf: Markieren in Notepad erkennen", t_auswahl_hook, hard=False)
         run("✨-Knopf: Klick öffnet KI-Leiste mit markiertem Text", t_auswahl_knopf, hard=False)
+        run("KI-App-Schutz: „Datei öffnen“ (Öffnen, Enter, Doppelklick)", t_dialog_schutz, hard=False)
+        run("KI-App-Schutz: Drag & Drop über das App-Fenster", t_drop_schutz, hard=False)
         run("Browser-Brücke einrichten/entfernen", t_browser_bridge)
     if args.exe:
         exe_tests(Path(args.exe))

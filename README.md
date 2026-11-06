@@ -25,6 +25,7 @@ eine anonymisierte Fassung hochladen, das Original verwenden oder abbrechen. Die
 ## Was er kann
 
 - **Prüft beim Hochladen, Einfügen und Kopieren.** Im Browser fängt er Drag & Drop, „Datei hinzufügen“ und Strg+V auf claude.ai, chatgpt.com, Gemini, Copilot, Mistral und Perplexity ab. Unter Windows prüft er alles, was du kopierst, auch Dateien und Screenshots.
+- **Schützt auch die Desktop-Apps** von ChatGPT, Claude, Copilot und Perplexity: Ziehst du eine Datei hinein oder wählst sie über „Datei öffnen“, prüft der Datenwächter sie *vorher* – die App bekommt auf Wunsch nur die geschwärzte Fassung.
 - **Erkennt sensible Daten:** IBAN, Kreditkarte und Steuer-ID (jeweils mit Prüfsumme), Sozialversicherungs-, Ausweis- und Passnummer, API-Schlüssel, Passwörter, E-Mail, Telefon, Adressen, Geburtsdaten, Namen und Gesichter auf Fotos.
 - **Liest Bilder und Scans** mit der Windows-Texterkennung, alternativ mit Tesseract.
 - **Schwärzt statt zu löschen.** PDFs und Bilder behalten ihr Layout, Funde bekommen einen Kasten mit Platzhalter wie `[IBAN_1]`, Gesichter werden verpixelt.
@@ -181,7 +182,7 @@ eigene Aktionen und die Zuordnung liegen nur im Speicher des Handys. Die App lä
 - **Handy-App mit eigenem KI-Server?** Klappt, wenn der Server per **https** erreichbar ist und Zugriffe aus dem Browser erlaubt (CORS). Bei OpenAI, OpenRouter und Mistral ist das so. Für LM Studio, Ollama & Co. im Heimnetz brauchst du einen Reverse-Proxy mit https.
 - **Warum gibt es keinen Eintrag im Windows-Rechtsklick-Menü?** Fremde Programme lassen sich dort nicht erweitern. Deshalb erscheint beim Markieren der ✨-Knopf (abschaltbar unter *KI-Aktionen bearbeiten*), zusätzlich gibt es Strg+Alt+Leertaste.
 - **Wie zuverlässig ist die Namenserkennung?** Häufige Vornamen (deutsch und international) und Namen an typischen Stellen findet sie zuverlässig. Seltene Namen ohne Zusammenhang („Wenzeslaus“) erkennt nur der eigene KI-Server. Wörter, die auch Namen sein können („Ernst“, „Rose“, „August“, „Claude“), zählen nur mit Nachnamen oder in eindeutigem Zusammenhang. Die Liste steht in [`datenwaechter/vornamen.txt`](datenwaechter/vornamen.txt) und lässt sich erweitern.
-- **Desktop-Apps wie die ChatGPT-App?** Deren eigener „Datei hinzufügen“-Dialog lässt sich nicht abfangen. Geschützt sind Kopieren/Einfügen sowie Dateien, die du erst ins Datenwächter-Fenster ziehst.
+- **Desktop-Apps wie die ChatGPT- oder Claude-App?** Geschützt (Windows): Ziehst du eine Datei über das App-Fenster, legt sich eine Auffangfläche darüber – die Datei landet erst beim Datenwächter. Im Fenster „Datei öffnen“ der App hält er „Öffnen“, Enter und Doppelklick kurz an und prüft. Die App bekommt auf Wunsch nur die geschwärzte Fassung. Grenzen: Apps mit eigenem (nicht Windows-)Auswahlfenster; die App muss Einfügen von Dateien (Strg+V) können. Abschaltbar in den Einstellungen.
 - **Warum Entwicklermodus?** Die Erweiterung ist (noch) nicht im Chrome Web Store.
 - **Was wird nicht geschwärzt?** Gesundheitsangaben im Fließtext lösen eine Warnung aus, werden aber nicht geschwärzt. Handschrift erkennt die Texterkennung kaum. Bilder *in* Word-Dateien werden nicht geprüft.
 - **Ist das eine Garantie?** Nein. Der Datenwächter ist eine Schutzschicht gegen Versehen. Regeln und KI haben Lücken.

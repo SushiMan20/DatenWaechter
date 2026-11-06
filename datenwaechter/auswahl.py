@@ -115,7 +115,11 @@ class Waechter:
             try:
                 if n_code >= 0 and w_param in (WM_LBUTTONDOWN, WM_LBUTTONUP):
                     info = ctypes.cast(l_param, ctypes.POINTER(MSLL)).contents
-                    x, y, t = info.pt.x, info.pt.y, info.time
+                    # GetCursorPos liefert logische Koordinaten (passen zu Tk, auch bei 125/150 % Skalierung);
+                    # info.pt wäre in physischen Pixeln
+                    p = wintypes.POINT()
+                    user32.GetCursorPos(ctypes.byref(p))
+                    x, y, t = p.x, p.y, info.time
                     if w_param == WM_LBUTTONDOWN:
                         last = self._last_down
                         nah = last and t - last[2] <= doppel_ms and math.hypot(x - last[0], y - last[1]) <= 4

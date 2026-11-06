@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "datenwaechter"
-version = "1.1.0"
+version = "1.2.0"
 description = "Lokaler Scanner, der persönliche und geheime Daten vor dem Hochladen in KI-Chats erkennt und anonymisiert."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -32,6 +32,7 @@ windows = [
     "keyring>=24",  # Token des KI-Servers in der Windows-Anmeldeinformationsverwaltung
     "tkinterdnd2>=0.4",
     "pystray>=0.19",  # Symbol im Infobereich
+    "comtypes>=1.4; sys_platform == 'win32'",  # UI Automation: Doppelklick im Dateidialog von KI-Apps erkennen
     "winrt-runtime; sys_platform == 'win32'",
     "winrt-Windows.Foundation; sys_platform == 'win32'",
     "winrt-Windows.Foundation.Collections; sys_platform == 'win32'",

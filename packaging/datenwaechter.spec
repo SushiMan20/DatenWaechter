@@ -14,8 +14,13 @@ datas += collect_data_files("cv2", includes=["data/haarcascade_*.xml"])   # Gesi
 datas += collect_data_files("pypdfium2_raw") + collect_data_files("pypdfium2")
 datas += copy_metadata("keyring")                                 # keyring findet seine Speicher über Metadaten
 binaries = collect_dynamic_libs("pypdfium2_raw")
+try:   # UI-Automation-Schnittstelle schon beim Bauen erzeugen, damit das Programm sie nicht erst anlegen muss
+    import comtypes.client
+    comtypes.client.GetModule("UIAutomationCore.dll")
+except Exception as e:  # noqa: BLE001
+    print("Hinweis: UIAutomationCore nicht vorbereitet:", e)
 hidden = (["pystray._win32", "keyring.backends.Windows", "win32timezone", "win32clipboard", "win32con"]
-          + collect_submodules("winrt") + collect_submodules("datenwaechter"))
+          + collect_submodules("winrt") + collect_submodules("datenwaechter") + collect_submodules("comtypes"))
 
 a = Analysis(
     [os.path.join(SPECPATH, "main.py")],
