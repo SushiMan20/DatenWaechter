@@ -134,6 +134,9 @@ RULES: list[Rule] = [
          re.compile(r"(?<![\d-])(?:\d[ -]?){12,18}\d(?![\d-])"), HOCH, validate=luhn_valid),
     Rule("STEUER_ID", "Steuer-ID",
          re.compile(r"(?<!\d)\d{2}[ ]?\d{3}[ ]?\d{3}[ ]?\d{3}(?!\d)"), HOCH, validate=steuer_id_valid),
+    Rule("AUSWEIS", "Ausweis-/Passnummer",
+         re.compile(r"(?i)\b(?:personalausweis-?nr\.?|ausweis-?nr\.?|ausweisnummer|personalausweisnummer|passnummer|"
+                    r"pass-?nr\.?|document no\.?|führerscheinnummer)\s*:?\s*(?P<v>(?=[A-Za-z]*\d)[A-Z0-9]{8,11})\b"), HOCH, group="v"),
     Rule("SOZIALVERSICHERUNG", "Sozialversicherungsnummer",
          re.compile(r"\b\d{2}[ ]?(?:0[1-9]|[12]\d|3[01])(?:0[1-9]|1[0-2])\d{2}[ ]?[A-Z][ ]?\d{3}\b"), HOCH),
     Rule("GEBURTSDATUM", "Geburtsdatum",

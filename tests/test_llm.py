@@ -10,8 +10,8 @@ from datenwaechter import content_check, llm, settings
 from datenwaechter.settings import LlmSettings
 
 TOKEN = "geheimes-token-123"
-ANTWORT = {"kategorien": ["familie"], "beschreibung": "Brief ans Jugendamt.",
-           "warnung": "Du lädst gerade einen Brief über das Sorgerecht deiner Tochter hoch.", "stufe": 2}
+ANTWORT = {"beschreibung": "Brief ans Jugendamt", "familie": True, "kinder": False, "personen": True}
+WARNUNG = "Du lädst gerade Familienunterlagen hoch."
 
 
 @pytest.fixture
@@ -74,7 +74,8 @@ def test_eigener_server_mit_token(server):
     _save(typ="openai", url=server["url"], token=TOKEN, modell="lokal-7b")
     v = content_check.check(TEXT)
     assert v.backend == "openai:lokal-7b@127.0.0.1"
-    assert v.warning == ANTWORT["warnung"] and v.description == "Brief ans Jugendamt."
+    assert v.warning == WARNUNG and v.description == "Brief ans Jugendamt."
+    assert "Fotos von Personen" not in v.categories, "„Menschen zu sehen“ zählt nur bei Bildern"
     req = server["requests"][0]
     assert req["model"] == "lokal-7b" and req["response_format"] == {"type": "json_object"}
     assert "DE89" in json.dumps(req, ensure_ascii=False), "lokaler Server: Text geht unverändert"
@@ -106,7 +107,7 @@ def test_server_ohne_json_modus_und_mit_codeblock(server):
     server["fence"] = True
     _save(typ="openai", url=server["url"], token=TOKEN, modell="lokal-7b")
     v = content_check.check(TEXT)
-    assert v.warning == ANTWORT["warnung"]
+    assert v.warning == WARNUNG
     assert "response_format" not in server["requests"][-1]
 
 
@@ -141,7 +142,7 @@ def test_browser_bruecke_meldet_server(server):
     _save(typ="openai", url=server["url"], token=TOKEN, modell="lokal-7b")
     assert handle({"action": "ping"})["llm"] == "openai:lokal-7b@127.0.0.1"
     reply = handle({"action": "check_text", "text": TEXT})
-    assert reply["content"]["warning"] == ANTWORT["warnung"]
+    assert reply["content"]["warning"] == WARNUNG
 
 
 @pytest.mark.parametrize("url,extern", [
@@ -161,3 +162,11 @@ def test_einstellungen_speichern_und_laden():
     assert loaded.url == "https://gw.firma.de/v1" and loaded.token == "t0k3n-abcdef" and loaded.modell == "m"
     assert json.loads(p.read_text())["llm"]["typ"] == "openai"
     assert settings.masked_token("t0k3n-abcdef") == "t0k…cdef"
+
+
+def test_aelteres_antwortformat_und_kleine_modelle(server, monkeypatch):
+    """Kleine Modelle liefern mal eine Kategorienliste, mal „intimes“ statt „intim“, mal "true" als Text."""
+    from datenwaechter.content_check import _llm_keys
+    assert _llm_keys({"kategorien": ["intimes", "Ausweis", "unkritisch"]}, has_image=True) == ["intim", "ausweis"]
+    assert _llm_keys({"ausweis": "true", "gesundheit": "false", "personen": True}, has_image=False) == ["ausweis"]
+    assert _llm_keys({"beschreibung": "eine Katze", "personen": False}, has_image=True) == []

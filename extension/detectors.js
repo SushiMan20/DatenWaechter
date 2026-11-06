@@ -64,6 +64,8 @@
     ["IBAN", "IBAN / Bankverbindung", /\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]{4}){2,7}(?:[ ]?[A-Z0-9]{1,4})?\b/g, HOCH, { validate: ibanValid }],
     ["KREDITKARTE", "Kreditkartennummer", /(?<![\d-])(?:\d[ -]?){12,18}\d(?![\d-])/g, HOCH, { validate: luhnValid }],
     ["STEUER_ID", "Steuer-ID", /(?<!\d)\d{2}[ ]?\d{3}[ ]?\d{3}[ ]?\d{3}(?!\d)/g, HOCH, { validate: steuerIdValid }],
+    ["AUSWEIS", "Ausweis-/Passnummer",
+      /\b(?:personalausweis-?nr\.?|ausweis-?nr\.?|ausweisnummer|personalausweisnummer|passnummer|pass-?nr\.?|document no\.?|führerscheinnummer)\s*:?\s*(?<v>(?=[A-Za-z]*\d)[A-Z0-9]{8,11})\b/gi, HOCH],
     ["SOZIALVERSICHERUNG", "Sozialversicherungsnummer",
       /\b\d{2}[ ]?(?:0[1-9]|[12]\d|3[01])(?:0[1-9]|1[0-2])\d{2}[ ]?[A-Z][ ]?\d{3}\b/g, HOCH],
     ["GEBURTSDATUM", "Geburtsdatum",

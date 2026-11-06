@@ -46,6 +46,11 @@ def test_findet_alles_im_beispiel():
     assert any(k == "API_SCHLUESSEL" and t.startswith("sk-ant-") for k, t in kinds(BEISPIEL))
 
 
+def test_ausweisnummer():
+    assert [(f.kind, f.text) for f in scan_text("Ausweisnummer: L01X00T47")] == [("AUSWEIS", "L01X00T47")]
+    assert scan_text("Ausweisnummer: unbekannt") == []
+
+
 @pytest.mark.parametrize("harmlos", [
     "Das Meeting ist am 01.02.2024 um 14:30 Uhr.",
     "Wir haben 12345 Euro Umsatz und 40000 Nutzer.",

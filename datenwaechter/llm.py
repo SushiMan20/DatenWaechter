@@ -29,20 +29,36 @@ KATEGORIEN = {
     "finanzen": "Finanzunterlagen", "recht": "rechtliche Unterlagen", "arbeit": "Personal- und Arbeitsunterlagen",
     "ausweis": "Ausweisdokumente", "vertraulich": "vertrauliche Firmeninterna", "zugangsdaten": "Zugangsdaten",
     "intim": "intime oder private Inhalte", "besonders": "besonders geschützte Daten (Religion, Politik, Sexualität)",
-    "personenfoto": "Fotos von Personen",
+    "personenfoto": "Fotos von Personen", "personen": "Fotos von Personen",
+}
+STUFE = {"kinder": 3, "ausweis": 3, "gesundheit": 3, "intim": 3, "zugangsdaten": 3, "besonders": 3}  # sonst 2
+
+# Ja/Nein-Fragen statt „wähle Kategorien“: Das beantworten auch kleine lokale Modelle zuverlässig.
+# Den Warnsatz baut der Datenwächter danach selbst (content_check.llm_check).
+FRAGEN = {
+    "personen": "Sind auf einem Bild Menschen zu sehen (Foto, Selfie, Gruppenbild)?",
+    "kinder": "Sind Kinder zu sehen oder geht es um ein bestimmtes Kind?",
+    "ausweis": "Ist es ein Ausweis, Pass, Führerschein, eine Bank-, Kredit- oder Versichertenkarte?",
+    "gesundheit": "Geht es um Krankheit, Diagnose, Therapie, Medikamente, Arztbrief oder ein medizinisches Bild?",
+    "finanzen": "Geht es um Kontoauszug, Gehalt, Steuer, Rechnung mit Bankdaten oder Schulden?",
+    "familie": "Geht es um Familienangelegenheiten wie Scheidung, Sorgerecht, Unterhalt oder Erbschaft?",
+    "recht": "Geht es um Gericht, Anwalt, Polizei, Strafsache oder einen Rechtsstreit?",
+    "arbeit": "Geht es um Personalakte, Kündigung, Abmahnung, Arbeitszeugnis oder Bewerbung?",
+    "vertraulich": "Ist es als vertraulich/intern markiert oder enthält es Firmengeheimnisse?",
+    "intim": "Enthält es Nacktheit, Sexualität oder sehr intime private Momente?",
+    "zugangsdaten": "Enthält es Passwörter, PINs, API-Schlüssel oder andere Zugangsdaten?",
+    "besonders": "Geht es um Religion, politische Meinung, Gewerkschaft oder sexuelle Orientierung einer Person?",
 }
 
-PROMPT = """Du bist ein Datenschutz-Assistent. Ein Nutzer will gleich den folgenden Inhalt in einen
-Cloud-KI-Chat (z. B. ChatGPT oder Claude) hochladen. Prüfe, ob der Inhalt private oder sensible Informationen enthält.
-Platzhalter wie [PERSON_1] oder [IBAN_1] stehen für bereits entfernte echte Daten.
+PROMPT = """Du bist ein Datenschutz-Assistent. Ein Nutzer will den folgenden Inhalt gleich in einen Cloud-KI-Chat
+hochladen. Platzhalter wie [PERSON_1] oder [IBAN_1] stehen für bereits entfernte echte Daten.
 
-Mögliche Kategorien: {kats}, unkritisch.
+Beschreibe zuerst in einem kurzen deutschen Satz, was zu sehen bzw. zu lesen ist. Beantworte dann jede Frage
+nur mit true oder false. Antworte im Zweifel mit false.
+{fragen}
 
 Antworte NUR mit JSON in genau diesem Format:
-{{"kategorien": ["..."], "beschreibung": "ein kurzer Satz, was das ist",
-  "warnung": "ein Satz an den Nutzer in Du-Form, z. B. 'Du lädst gerade die Scheidungsunterlagen deiner Familie hoch.' – leer lassen, wenn unkritisch",
-  "stufe": 0}}
-stufe: 0 = unkritisch, 1 = etwas privat, 2 = sensibel, 3 = hoch sensibel (Gesundheit, Ausweis, Kinder, Intimes).
+{{"beschreibung": "…", {felder}}}
 
 Dateiname: {name}
 Inhalt:
@@ -101,7 +117,8 @@ def _jpeg_b64(image) -> str:
 
 
 def _prompt(text: str, name: str) -> str:
-    return PROMPT.format(kats=", ".join(KATEGORIEN), name=name or "(eingefügter Text)",
+    return PROMPT.format(fragen="\n".join(f"- {k}: {q}" for k, q in FRAGEN.items()),
+                         felder=", ".join(f'"{k}": false' for k in FRAGEN), name=name or "(eingefügter Text)",
                          text=(text or "(kein Text – siehe Bild)")[:MAX_CHARS])
 
 

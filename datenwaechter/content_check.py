@@ -122,18 +122,32 @@ def llm_check(text: str, image=None, name: str = "") -> Verdict | None:
         a = b.ask(text, image, name)
     except llm.LlmError:
         return None
-    answer = a.data
-    keys = [k for k in answer.get("kategorien") or [] if k != "unkritisch"]
-    try:
-        stufe = int(answer.get("stufe") or 0)
-    except (TypeError, ValueError):
-        stufe = 0
-    warnung = (answer.get("warnung") or "").strip() or None
-    if stufe == 0 or not keys:
-        warnung = None
-    return Verdict(categories=[llm.KATEGORIEN.get(k, k) for k in keys], description=answer.get("beschreibung"),
-                   warning=warnung, severity=min(max(stufe, 0), 3), backend=a.backend, sent_to=a.sent_to,
-                   sent_anonymized=a.anonymized)
+    keys = _llm_keys(a.data, has_image=image is not None)
+    names = list(dict.fromkeys(llm.KATEGORIEN[k] for k in keys))
+    desc = a.data.get("beschreibung") or None
+    if isinstance(desc, str):
+        desc = desc.strip().rstrip(".") + "." if desc.strip() else None
+    return Verdict(categories=names, description=desc,
+                   warning=f"Du lädst gerade {_join(names)} hoch." if names else None,
+                   severity=max((llm.STUFE.get(k, 2) for k in keys), default=0), backend=a.backend,
+                   sent_to=a.sent_to, sent_anonymized=a.anonymized)
+
+
+def _truthy(v) -> bool:
+    return v is True or (isinstance(v, str) and v.strip().lower() in ("true", "ja", "yes", "1"))
+
+
+def _llm_keys(data: dict, has_image: bool) -> list[str]:
+    """Liest die Ja/Nein-Antworten (und zur Sicherheit das ältere Format mit Kategorienliste)."""
+    keys = [k for k in llm.FRAGEN if _truthy(data.get(k))]
+    for raw in data.get("kategorien") or []:            # älteres Format / Modelle, die eine Liste liefern
+        k = str(raw).strip().lower()
+        k = next((key for key in llm.KATEGORIEN if k.startswith(key[:5])), None)  # „intimes“ -> „intim“
+        if k and k not in keys:
+            keys.append(k)
+    if not has_image:  # „Menschen zu sehen“ ergibt nur bei Bildern Sinn
+        keys = [k for k in keys if k not in ("personen", "personenfoto")]
+    return keys
 
 
 # --------------------------------------------------------------------------- Kombiniert

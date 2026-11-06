@@ -80,8 +80,8 @@ def fake_ollama(monkeypatch):
         def do_POST(self):
             req = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             calls.append(req)
-            answer = {"kategorien": ["kinder", "personenfoto"], "beschreibung": "Foto eines Kindes am Strand.",
-                      "warnung": "Du lädst gerade ein Foto deines Kindes hoch.", "stufe": 3}
+            answer = {"beschreibung": "Foto eines Kindes am Strand", "personen": True, "kinder": "true",
+                      "ausweis": False, "gesundheit": False}
             self._json({"response": json.dumps(answer)})
 
     srv = HTTPServer(("127.0.0.1", 0), Handler)
@@ -96,9 +96,9 @@ def test_sprachmodell_ueber_ollama(fake_ollama):
     assert content_check.llm_status() == "ollama:gemma3:4b"
     v = content_check.check("", image=Image.new("RGB", (64, 64), "white"), name="IMG_2041.jpg")
     assert v.backend == "ollama:gemma3:4b"
-    assert v.warning == "Du lädst gerade ein Foto deines Kindes hoch."
+    assert v.warning == "Du lädst gerade Fotos von Personen und Daten über Kinder hoch."
     assert v.description == "Foto eines Kindes am Strand."
-    assert "Daten über Kinder" in v.categories and v.severity == 3
+    assert v.categories[:2] == ["Fotos von Personen", "Daten über Kinder"] and v.severity == 3
     assert fake_ollama[0]["images"], "Bild muss ans Modell gehen"
     assert fake_ollama[0]["format"] == "json"
 

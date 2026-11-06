@@ -52,7 +52,7 @@ samt Platzhalter überdeckt, Gesichter werden verpixelt. Der Originaltext ist da
 | **Fotos von Personen** | Gesichtserkennung (OpenCV) | Gesichter verpixelt |
 | **Motiv eines Fotos** („Ausweis“, „Kind am Strand“) | KI-Server mit Bildverständnis (optional) | Warnung mit Beschreibung |
 
-**Sensible Daten:** IBAN, Kreditkarte, Steuer-ID (jeweils mit Prüfsumme), Sozialversicherungsnummer, API-Schlüssel
+**Sensible Daten:** IBAN, Kreditkarte, Steuer-ID (jeweils mit Prüfsumme), Sozialversicherungsnummer, Ausweis-/Passnummer, API-Schlüssel
 (Anthropic, OpenAI, AWS, GitHub, Google, Slack, Stripe), private Schlüssel, Tokens, Passwörter, Datenbank-Zugänge,
 Namen (nach Anrede, mit KI-Modell auch ohne), E-Mail, Telefon, Adressen, Geburtsdatum, IP-Adressen.
 
@@ -75,6 +75,18 @@ Beispiele: LM Studio, vLLM, LocalAI, llama.cpp-Server, Ollama im OpenAI-Modus, e
 - **Token:** Mit `keyring` (im Paket `[windows]` enthalten) liegt es in der Windows-Anmeldeinformationsverwaltung, sonst in der Einstellungsdatei.
 - **Firmen-Rollout:** Die Umgebungsvariablen `DATENWAECHTER_LLM_URL`, `DATENWAECHTER_LLM_TOKEN` und `DATENWAECHTER_LLM_MODELL` haben Vorrang.
 - **Server ohne JSON-Modus oder ohne Bildverständnis** funktionieren auch, der Datenwächter fragt dann automatisch ohne diese Funktionen nach.
+- **Auch kleine lokale Modelle funktionieren.** Der Datenwächter stellt dem Modell einfache Ja/Nein-Fragen, z. B. „Sind Menschen zu sehen?“, „Ist es ein Ausweis?“, „Geht es um Gesundheit?“, statt es Kategorien auswählen zu lassen. Den Warnsatz baut er selbst. Die Stichwörter laufen immer zusätzlich mit, falls das Modell etwas übersieht.
+
+**Mit einem echten Bildmodell getestet** (Qwen2-VL-2B, nur CPU, 4 Kerne, etwa 20 bis 35 Sekunden pro Bild):
+
+| Bild | Ergebnis |
+|---|---|
+| Personenfoto (ohne Text) | „Du lädst gerade Fotos von Personen hoch“, dazu 1 Gesicht erkannt |
+| Personalausweis (Muster) | „Fotos von Personen und Ausweisdokumente“, dazu Ausweisnummer und Geburtsdatum per OCR |
+| Katze, Kaffeetasse | keine Warnung |
+| Abfotografierter Arztbrief | „Gesundheitsdaten“, Name, Geburtsdatum und Telefon per OCR |
+
+Mit einer Grafikkarte oder einem größeren Modell (z. B. `gemma3:4b` über Ollama) geht es schneller und genauer.
 
 **Datenschutz bei externen Servern:** Liegt der Server außerhalb deines Rechners oder Netzes (z. B. `api.openai.com`),
 zeigt der Datenwächter eine Warnung. Er stellt außerdem automatisch Folgendes ein:
@@ -176,6 +188,7 @@ datenwaechter anonymisieren Scan.pdf --zuordnung     # schreibt Scan_anonymisier
 ## Grenzen
 
 - Ohne KI-Server mit Bildverständnis bewertet der Datenwächter das *Motiv* eines Fotos nicht. Er findet dann nur Text im Bild und Gesichter.
+- Gesundheitsangaben im Text (z. B. „Diagnose: Depression“) lösen eine Warnung aus, werden beim Anonymisieren aber nicht geschwärzt. Geschwärzt werden Namen, Nummern, Kontakt- und Adressdaten.
 - Die Gesichtserkennung (OpenCV) findet vor allem frontale Gesichter. Bei Profilen, kleinen oder verdeckten Gesichtern kann sie etwas übersehen.
 - Handschrift erkennt die Texterkennung kaum.
 - Geschwärzte PDFs bestehen aus Seitenbildern, Text lässt sich darin nicht mehr markieren. Claude und ChatGPT lesen sie trotzdem.
