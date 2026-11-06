@@ -14,13 +14,15 @@ datas += collect_data_files("cv2", includes=["data/haarcascade_*.xml"])   # Gesi
 datas += collect_data_files("pypdfium2_raw") + collect_data_files("pypdfium2")
 datas += copy_metadata("keyring")                                 # keyring findet seine Speicher über Metadaten
 binaries = collect_dynamic_libs("pypdfium2_raw")
+binaries += collect_dynamic_libs("onnxruntime")                  # lokales KI-Modell (das Modell lädt man später)
 try:   # UI-Automation-Schnittstelle schon beim Bauen erzeugen, damit das Programm sie nicht erst anlegen muss
     import comtypes.client
     comtypes.client.GetModule("UIAutomationCore.dll")
 except Exception as e:  # noqa: BLE001
     print("Hinweis: UIAutomationCore nicht vorbereitet:", e)
 hidden = (["pystray._win32", "keyring.backends.Windows", "win32timezone", "win32clipboard", "win32con"]
-          + collect_submodules("winrt") + collect_submodules("datenwaechter") + collect_submodules("comtypes"))
+          + collect_submodules("winrt") + collect_submodules("datenwaechter") + collect_submodules("comtypes")
+          + ["onnxruntime", "onnxruntime.capi._pybind_state", "tokenizers"])
 
 a = Analysis(
     [os.path.join(SPECPATH, "main.py")],
@@ -28,7 +30,8 @@ a = Analysis(
     binaries=binaries,
     datas=datas,
     hiddenimports=hidden,
-    excludes=["torch", "transformers", "gliner", "pytest", "matplotlib", "IPython", "pandas", "scipy"],
+    excludes=["torch", "transformers", "gliner", "pytest", "matplotlib", "IPython", "pandas", "scipy", "sympy", "onnx",
+              "onnxruntime.quantization", "onnxruntime.transformers", "onnxruntime.tools", "coloredlogs"],
     noarchive=False,
 )
 pyz = PYZ(a.pure)

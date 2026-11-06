@@ -33,6 +33,7 @@ eine anonymisierte Fassung hochladen, das Original verwenden oder abbrechen. Die
 - **Sagt dir, *was* du hochlädst:** „Du lädst gerade Familienunterlagen hoch – willst du das?“
 - **Übersetzt KI-Antworten zurück:** Aus `[PERSON_1]` wird wieder der echte Name.
 - **Erkennt Namen auch ohne „Herr/Frau“** – ohne KI, mit einer Liste von rund 1.500 Vornamen und typischen Stellen wie „Liebe Mia,“, „Viele Grüße, Thomas“, „Name: …“ oder „Familie Schneider“. Ist ein Name einmal erkannt, wird er überall im Text markiert.
+- **Optional mit lokalem KI-Modell:** Ein Klick in den Einstellungen lädt einmalig ein Modell (180 MB), das danach ohne Internet auf deinem PC seltene Namen („Wenzeslaus Brummer“) und Orte findet.
 - **Optional mit eigenem KI-Server** (OpenAI-kompatible API mit Adresse und Token). Die KI bewertet dann Inhalte und Fotos genauer und findet auch seltene Namen.
 - **KI-Aktionen** wie „Umformulieren“, „Kürzen“, „Übersetzen“ oder eigene Anweisungen. Text markieren → **✨-Knopf** neben der Markierung (in jedem Windows-Programm), Strg+Alt+Leertaste oder im Browser Rechtsklick.
 - **Auch auf dem Handy:** In der Galerie, Mail- oder PDF-App auf *Teilen → Datenwächter* tippen, prüfen und schwärzen lassen, dann *Geschützt teilen → ChatGPT*. Die App läuft komplett auf dem Gerät, auch offline.
@@ -136,6 +137,22 @@ datenwaechter browser-bruecke          # Browser-Erweiterung mit dem Scanner ver
 
 Unter Linux/macOS: `pip install ".[tesseract,gesichter]"` und Tesseract mit Sprachpaket Deutsch installieren.
 
+## Lokales KI-Modell (optional)
+
+Unter *Einstellungen → Lokales KI-Modell → Laden* holt der Datenwächter einmalig ein kleines Sprachmodell (180 MB) von
+Hugging Face. Danach läuft es **ohne Internet und ohne Server** auf dem Prozessor: etwa eine Sekunde zum Starten, dann
+wenige Millisekunden pro Text, rund 300 MB Arbeitsspeicher. Es findet Namen und Orte, die keine Regel und keine
+Vornamenliste kennt.
+
+- Modell: [bert-base-multilingual-cased-ner-hrl](https://huggingface.co/Davlan/bert-base-multilingual-cased-ner-hrl)
+  von David Adelani (Lizenz AFL-3.0), als [ONNX-Fassung](https://huggingface.co/Xenova/bert-base-multilingual-cased-ner-hrl) mit 8-Bit-Gewichten.
+- Ausgeführt mit onnxruntime, ohne PyTorch und ohne Python-Pickles. Die Dateien enthalten nur Daten, haben einen festen
+  Stand und werden per SHA-256 geprüft. Ein abgebrochener Download wird beim nächsten Mal fortgesetzt.
+- Gemessen an GraSCCo (siehe unten): Orte 59 % → 81 %, Adressen 93 % → 96 %, Namen 97,5 % → 97,8 %. Dazu kommt
+  ein zusätzlicher Fehlalarm.
+- Kommandozeile: `datenwaechter modell laden`, `datenwaechter modell` (Status), `datenwaechter modell entfernen`.
+  Für eigene Spiegel im Firmennetz: `DATENWAECHTER_MODELL_QUELLE`.
+
 ## Eigener KI-Server (optional)
 
 Ohne KI arbeitet der Datenwächter mit Regeln und Stichwörtern. Mit einer KI wird er genauer. Unter *Einstellungen →
@@ -165,7 +182,7 @@ datenwaechter ki-server --url https://gateway.firma.de/v1 --token - --modell gpt
 
 | | Ohne KI-Server | Mit eigenem KI-Server |
 |---|---|---|
-| Erkennung von IBAN, Namen, Adressen … | lokal | lokal |
+| Erkennung von IBAN, Namen, Adressen … (auch mit lokalem KI-Modell) | lokal | lokal |
 | Texterkennung, Gesichter, Schwärzen | lokal | lokal |
 | Inhalts-Check | lokal (Stichwörter) | Text an deinen Server, standardmäßig anonymisiert |
 | Fotos bewerten | – | nur wenn eingeschaltet |
@@ -181,7 +198,7 @@ eigene Aktionen und die Zuordnung liegen nur im Speicher des Handys. Die App lä
 | Stufe | Daten |
 |---|---|
 | **hoch** | IBAN (auch mit OCR-Lesefehlern wie „O“ statt „0“), Kreditkarte, Steuer-ID, Sozialversicherungsnummer, Ausweis-/Passnummer, API-Schlüssel (Anthropic, OpenAI, AWS, GitHub, Google, Slack, Stripe), private Schlüssel, Tokens, Passwörter, Datenbank-Zugänge |
-| **mittel** | Namen (Vornamenliste, Anrede, Gruß, Formularfelder, Familie; mit KI auch seltene), E-Mail, Telefon, Straße + Hausnummer, PLZ + Ort, Geburtsdatum und -jahr (viele Schreibweisen), Gesichter |
+| **mittel** | Namen (Vornamenliste, Anrede, Gruß, Formularfelder, Familie; mit lokalem Modell oder KI-Server auch seltene), E-Mail, Telefon, Straße + Hausnummer, PLZ + Ort, Geburtsdatum und -jahr (viele Schreibweisen), Gesichter |
 | **niedrig** | IP-Adressen |
 | **Themen** | Familie, Gesundheit, Finanzen, Recht, Personal/Arbeit, Ausweise, Firmeninterna, besonders geschützte Daten nach Art. 9 DSGVO ([Stichwörter](datenwaechter/kategorien.json)) |
 
@@ -212,7 +229,7 @@ Fachleute jede personenbezogene Stelle markiert haben. Ein Treffer zählt, wenn 
 | Fall-, Patienten-, Befundnummern | 29 von 35 (83 %) |
 | **zusammen** | **495 von 520 (95 %)** |
 
-Schwächer sind Orte ohne Straße („in Graz“, 59 %) und Klinik-Namen (70 %). Fehlalarme: 6, alles Abteilungsnamen wie
+Schwächer sind Orte ohne Straße („in Graz“, 59 %, mit lokalem KI-Modell 81 %) und Klinik-Namen (70 %). Fehlalarme: 6, alles Abteilungsnamen wie
 „Universitätsklinik für Dermatologie“. Nachmessen: `python tests/benchmark_grascco.py` (lädt die Daten einmal herunter, sie
 landen nicht im Repository).
 
@@ -221,7 +238,7 @@ landen nicht im Repository).
 - **Kann die Handy-App Uploads in der ChatGPT-App abfangen?** Nein. iOS und Android lassen keine App die Zwischenablage im Hintergrund lesen oder in fremde Apps eingreifen. Deshalb gilt auf dem Handy: erst *Teilen → Datenwächter*, dann *Geschützt teilen → ChatGPT*.
 - **Handy-App mit eigenem KI-Server?** Klappt, wenn der Server per **https** erreichbar ist und Zugriffe aus dem Browser erlaubt (CORS). Bei OpenAI, OpenRouter und Mistral ist das so. Für LM Studio, Ollama & Co. im Heimnetz brauchst du einen Reverse-Proxy mit https.
 - **Warum gibt es keinen Eintrag im Windows-Rechtsklick-Menü?** Fremde Programme lassen sich dort nicht erweitern. Deshalb erscheint beim Markieren der ✨-Knopf (abschaltbar unter *KI-Aktionen bearbeiten*), zusätzlich gibt es Strg+Alt+Leertaste.
-- **Wie zuverlässig ist die Namenserkennung?** Häufige Vornamen (deutsch und international) und Namen an typischen Stellen findet sie zuverlässig. Seltene Namen ohne Zusammenhang („Wenzeslaus“) erkennt nur der eigene KI-Server. Wörter, die auch Namen sein können („Ernst“, „Rose“, „August“, „Claude“), zählen nur mit Nachnamen oder in eindeutigem Zusammenhang. Die Liste steht in [`datenwaechter/vornamen.txt`](datenwaechter/vornamen.txt) und lässt sich erweitern.
+- **Wie zuverlässig ist die Namenserkennung?** Häufige Vornamen (deutsch und international) und Namen an typischen Stellen findet sie zuverlässig. Seltene Namen ohne Zusammenhang („Wenzeslaus“) erkennen das lokale KI-Modell oder der eigene KI-Server. Wörter, die auch Namen sein können („Ernst“, „Rose“, „August“, „Claude“), zählen nur mit Nachnamen oder in eindeutigem Zusammenhang. Die Liste steht in [`datenwaechter/vornamen.txt`](datenwaechter/vornamen.txt) und lässt sich erweitern.
 - **Desktop-Apps wie die ChatGPT- oder Claude-App?** Geschützt (Windows): Ziehst du eine Datei über das App-Fenster, legt sich eine Auffangfläche darüber – die Datei landet erst beim Datenwächter. Im Fenster „Datei öffnen“ der App hält er „Öffnen“, Enter und Doppelklick kurz an und prüft. Die App bekommt auf Wunsch nur die geschwärzte Fassung. Grenzen: Apps mit eigenem (nicht Windows-)Auswahlfenster; die App muss Einfügen von Dateien (Strg+V) können. Abschaltbar in den Einstellungen.
 - **Warum Entwicklermodus?** Die Erweiterung ist (noch) nicht im Chrome Web Store.
 - **Was wird nicht geschwärzt?** Gesundheitsangaben im Fließtext (außer Diagnosen, ICD-Codes, Medikamenten und Laborwerten, wenn *Medizinische Inhalte* an ist) lösen nur eine Warnung aus. Handschrift erkennt die Texterkennung kaum. Bilder *in* Word-Dateien werden nicht geprüft.
@@ -243,7 +260,7 @@ pip install -e ".[dev]"
 pytest                                   # Regeln, Schwärzen, OCR, Gesichter, KI-Anbindung (simulierte Server), Oberfläche
 node --test tests/detectors.test.js      # Browser-Regeln = Python-Regeln
 python tests/korpus_bericht.py           # eigene Testdokumente: was gefunden, was verpasst wird
-python tests/benchmark_grascco.py        # Messung an 63 Arztbriefen (GraSCCo, wird heruntergeladen)
+python tests/benchmark_grascco.py        # Messung an 63 Arztbriefen (GraSCCo, wird heruntergeladen); --modell mit KI-Modell
 node tests/e2e_extension.js              # Erweiterung in echtem Chromium (SITE=chatgpt.com für ChatGPT)
 node tests/e2e_ki_aktionen.js            # KI-Aktionen im Browser
 python tests/windows_smoke.py            # nur Windows: Zwischenablage, OCR, Tastenkürzel, Benachrichtigung, Notepad
@@ -280,6 +297,7 @@ Wie du beiträgst, steht in [CONTRIBUTING.md](CONTRIBUTING.md), Änderungen im [
 [OpenCV](https://opencv.org), [Tesseract](https://github.com/tesseract-ocr/tesseract), [pystray](https://github.com/moses-palmer/pystray),
 [PyInstaller](https://pyinstaller.org), [Inno Setup](https://jrsoftware.org/isinfo.php), [pdf.js](https://mozilla.github.io/pdf.js/),
 [tesseract.js](https://tesseract.projectnaptha.com), [jsPDF](https://github.com/parallax/jsPDF), [JSZip](https://stuk.github.io/jszip/).
+Das lokale KI-Modell stammt von David Adelani (AFL-3.0), die ONNX-Fassung von Xenova.
 Gemessen wird mit GraSCCo_PII (Lohr et al., [Zenodo](https://zenodo.org/records/15747389), CC BY 4.0).
 Das Testfoto stammt aus einem gemeinfreien NASA-Foto (über [scikit-image](https://scikit-image.org)). Alle Personen,
 Adressen, Kontonummern und Firmen in Beispielen und Screenshots sind erfunden.

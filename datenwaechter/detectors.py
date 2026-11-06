@@ -309,11 +309,13 @@ def resolve_overlaps(findings: Iterable[Finding]) -> list[Finding]:
     return sorted(kept, key=lambda f: f.start)
 
 
-def scan_text(text: str, use_ki: bool = False, gruppen: dict | None = None) -> list[Finding]:
-    """Durchsucht Text nach sensiblen Daten. `use_ki=True` ergänzt KI (eigener Server oder lokales Modell).
+def scan_text(text: str, use_ki: bool = False, gruppen: dict | None = None, modell: bool | None = None) -> list[Finding]:
+    """Durchsucht Text nach sensiblen Daten.
 
+    use_ki:  zusätzlich Namen über den eingestellten KI-Server suchen.
     gruppen: welche einstellbaren Gruppen geschwärzt werden ({"firmen": True, "betraege": False, "medizin": False});
-    None = aus den Einstellungen. Angaben zur Person werden immer gesucht.
+             None = aus den Einstellungen. Angaben zur Person werden immer gesucht.
+    modell:  lokales KI-Modell für Namen und Orte; None = wenn geladen und eingeschaltet.
     """
     from . import inhalte, namen
     if gruppen is None:
@@ -321,6 +323,9 @@ def scan_text(text: str, use_ki: bool = False, gruppen: dict | None = None) -> l
         gruppen = schwaerzen()
     found = [f for f in list(_rule_findings(text)) + namen.finde(text) + inhalte.finde(text)
              if not f.gruppe or gruppen.get(f.gruppe)]
+    from . import lokales_modell
+    if modell or (modell is None and lokales_modell.aktiv()):
+        found.extend(lokales_modell.erkennen(text))
     if use_ki:
         from . import ner
         if ner.available():

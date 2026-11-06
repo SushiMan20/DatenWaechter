@@ -665,10 +665,28 @@ def exe_tests(dist: Path) -> None:
         assert "tray=True" in info and "hotkey=True" in info, info
         return f"Datenwaechter.exe startet im Infobereich ({info})"
 
+    def t_modell():
+        ordner = os.environ.get("DATENWAECHTER_TEST_MODELL")
+        if not ordner:
+            return "übersprungen (kein Modell geladen)"
+        e = dict(env, DATENWAECHTER_MODELL_ORDNER=ordner, DATENWAECHTER_EINSTELLUNGEN=str(TMP / "modell-einst.json"))
+        r = subprocess.run([str(cli), "modell"], capture_output=True, text=True, encoding="utf-8", errors="replace",
+                           timeout=120, env=e)
+        assert "geladen und eingeschaltet" in r.stdout, (r.stdout, r.stderr[-800:])
+        txt = TMP / "seltene-namen.txt"
+        txt.write_text("Gestern hat Wenzeslaus Brummer aus Klagenfurt angerufen, er wohnt jetzt bei Kowalczyk in Pirna.",
+                       encoding="utf-8")
+        r = subprocess.run([str(cli), "--kein-sprachmodell", "scan", str(txt)], capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", timeout=180, env=e)
+        for wort in ("Wenzeslaus Brummer", "Kowalczyk", "Klagenfurt", "Pirna"):
+            assert wort in r.stdout, (wort, r.stdout[-800:], r.stderr[-800:])
+        return "lokales KI-Modell läuft im fertigen Programm (onnxruntime): seltene Namen und Orte gefunden"
+
     run("Programm: Kommandozeile", t_help)
     run("Programm: Dateien prüfen und schwärzen", t_scan_files)
     run("Programm: Browser-Brücke (Native Messaging)", t_native_host)
     run("Programm: Datenwaechter.exe startet mit Tray + Tastenkürzel", t_gui_start)
+    run("Programm: lokales KI-Modell", t_modell)
 
 
 def main() -> int:

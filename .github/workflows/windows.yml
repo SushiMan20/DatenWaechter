@@ -29,9 +29,22 @@ jobs:
       - name: Abhängigkeiten installieren
         run: |
           python -m pip install --upgrade pip
-          pip install ".[windows,gesichter,dev,build]"
+          pip install ".[windows,gesichter,ki,dev,build]"
           $v = python -c "import datenwaechter; print(datenwaechter.__version__)"
           "VERSION=$v" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Lokales KI-Modell zwischenspeichern
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/ki-modell
+          key: ki-modell-${{ hashFiles('datenwaechter/lokales_modell.py') }}
+
+      - name: Lokales KI-Modell laden (prüft Prüfsummen, lädt nur bei Bedarf)
+        run: |
+          $env:DATENWAECHTER_MODELL_ORDNER = "${{ runner.temp }}\ki-modell"
+          python -m datenwaechter modell laden
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          "DATENWAECHTER_TEST_MODELL=${{ runner.temp }}\ki-modell" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: Tests (pytest)
         run: pytest -q

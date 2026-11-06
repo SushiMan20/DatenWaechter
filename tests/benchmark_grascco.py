@@ -6,6 +6,7 @@ Die Daten werden nur heruntergeladen, nicht im Repository gespeichert.
 
     python tests/benchmark_grascco.py              # Trefferquote je Kategorie + Beispiele für Verpasstes
     python tests/benchmark_grascco.py --alle       # alle verpassten Stellen anzeigen
+    python tests/benchmark_grascco.py --modell     # mit lokalem KI-Modell (muss geladen sein)
 """
 
 from __future__ import annotations
@@ -58,14 +59,14 @@ def laden() -> list[dict]:
     return docs
 
 
-def messen(docs: list[dict], gruppen: dict) -> tuple[dict, dict, collections.Counter, list]:
+def messen(docs: list[dict], gruppen: dict, modell: bool = False) -> tuple[dict, dict, collections.Counter, list]:
     treffer = collections.defaultdict(lambda: [0, 0])
     verpasst = collections.defaultdict(list)
     fremd = collections.Counter()
     fremd_bsp = []
     for d in docs:
         text = d["text"]
-        funde = scan_text(text, gruppen=gruppen)
+        funde = scan_text(text, gruppen=gruppen, modell=modell)
         for kind, b, e in d["anno"]:
             art = KATEGORIEN.get(kind)
             if kind == "ID" and STATION.search(text[max(0, b - 30):b]):
@@ -90,10 +91,15 @@ def messen(docs: list[dict], gruppen: dict) -> tuple[dict, dict, collections.Cou
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--alle", action="store_true")
+    ap.add_argument("--modell", action="store_true", help="lokales KI-Modell dazunehmen")
     args = ap.parse_args()
+    if args.modell:
+        from datenwaechter import lokales_modell
+        if not lokales_modell.bereit():
+            sys.exit("Lokales KI-Modell fehlt: in den Einstellungen laden oder python -m datenwaechter modell laden")
     docs = laden()
     gruppen = {"firmen": True, "betraege": False, "medizin": False}
-    treffer, verpasst, fremd, fremd_bsp = messen(docs, gruppen)
+    treffer, verpasst, fremd, fremd_bsp = messen(docs, gruppen, args.modell)
     print(f"GraSCCo: {len(docs)} Arztbriefe, {sum(len(d['anno']) for d in docs)} annotierte Stellen\n")
     alle = [0, 0]
     for art, (ok, n) in sorted(treffer.items()):

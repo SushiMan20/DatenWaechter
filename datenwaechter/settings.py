@@ -204,3 +204,24 @@ def schwaerzen_speichern(werte: dict) -> None:
     data["schwaerzen"] = {k: bool(werte.get(k, v)) for k, v in SCHWAERZEN_STANDARD.items()}
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+# --------------------------------------------------------------------------- Lokales KI-Modell
+
+def modell_nutzen() -> bool:
+    """Lokales KI-Modell verwenden, sobald es geladen ist (Standard: ja)."""
+    try:
+        return bool(json.loads(path().read_text(encoding="utf-8")).get("lokales_modell", True))
+    except (OSError, ValueError, AttributeError):
+        return True
+
+
+def modell_nutzen_speichern(an: bool) -> None:
+    p = path()
+    try:
+        data = json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+    except (OSError, ValueError):
+        data = {}
+    data["lokales_modell"] = bool(an)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")

@@ -23,7 +23,8 @@ import uuid
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from . import actions, auswahl, autostart, browser_bridge, content_check, hotkey, llm, ocr, schutz, settings, winclip
+from . import (actions, auswahl, autostart, browser_bridge, content_check, hotkey, llm, lokales_modell, ocr, schutz,
+               settings, winclip)
 from .analysis import analyze, anonymize as anonymize_report
 from .auffang import Auffangflaeche
 from .anonymize import Anonymizer
@@ -145,6 +146,7 @@ class App:
         self._auffang_ziel = None
         self._schutz_ctx = None
         self._schutz_hinweis = None
+        self._modell_stand: dict = {}   # Download des lokalen KI-Modells: {"n", "gesamt", "halt", "fehler", "fertig"}
 
         self._build()
         self.tray = Tray(lambda name: self.results.put(("ui", name)), self.watch.get, self.stats.summary)
@@ -155,6 +157,7 @@ class App:
         self._refresh()
         self.root.after(POLL_MS, self._poll)
         threading.Thread(target=self._detect_llm, daemon=True).start()
+        self.root.after(2000, lokales_modell.vorladen)   # erste Prüfung soll nicht aufs Modell warten
         if start_hidden and self.tray.available:
             self.root.withdraw()
 
@@ -292,6 +295,7 @@ class App:
                             "durch; ein Arztbrief mit Name nicht.", foreground="#777", wraplength=520).pack(anchor="w",
                                                                                                          pady=(4, 0))
         win.schwaerzen = schalter
+        win.modell = self._modell_box(frm)
         ki_apps = tk.BooleanVar(value=schutz.aktiv())
 
         def ki_apps_schalten():
@@ -329,6 +333,77 @@ class App:
         ttk.Label(frm, text="\n".join(caps), foreground="#777").pack(anchor="w", pady=(10, 0))
         ttk.Button(frm, text="Schließen", command=win.destroy).pack(anchor="e", pady=(10, 0))
         win.bind("<Destroy>", lambda e: setattr(self, "llm_box", None) if e.widget is win else None)
+
+    def _modell_box(self, frm) -> dict:
+        """Einstellungen: lokales KI-Modell laden, nutzen, entfernen."""
+        box = ttk.LabelFrame(frm, text="Lokales KI-Modell (Namen und Orte, ohne Internet)", padding=(10, 6))
+        box.pack(anchor="w", fill="x", pady=(0, 8))
+        text = tk.StringVar()
+        nutzen = tk.BooleanVar(value=settings.modell_nutzen())
+        ttk.Label(box, textvariable=text, wraplength=520).pack(anchor="w")
+        balken = ttk.Progressbar(box, maximum=lokales_modell.GROESSE, length=360)
+        zeile = ttk.Frame(box)
+        zeile.pack(anchor="w", fill="x", pady=(4, 0))
+        knopf = ttk.Button(zeile)
+        knopf.pack(side="left")
+        haken = ttk.Checkbutton(zeile, text="verwenden", variable=nutzen,
+                                command=lambda: (settings.modell_nutzen_speichern(nutzen.get()), lokales_modell.vorladen()))
+        haken.pack(side="left", padx=10)
+        ttk.Label(box, text="Findet auch seltene Namen („Wenzeslaus Brummer“) und Orte, die keine Liste kennt. Läuft auf "
+                            "diesem PC, braucht etwa 300 MB Arbeitsspeicher.\n" + lokales_modell.HINWEIS,
+                  foreground="#777", wraplength=520).pack(anchor="w", pady=(4, 0))
+        st = self._modell_stand
+
+        def laden():
+            halt = threading.Event()
+            st.clear()
+            st.update(n=0, gesamt=lokales_modell.GROESSE, halt=halt)
+
+            def job():
+                try:
+                    lokales_modell.laden(lambda n, g: st.update(n=n, gesamt=g), halt)
+                    settings.modell_nutzen_speichern(True)
+                    lokales_modell.vorladen()
+                    st["fertig"] = True
+                except lokales_modell.Abgebrochen:
+                    st["fehler"] = "Abgebrochen – beim nächsten Laden geht es dort weiter."
+                except Exception as e:  # noqa: BLE001 – Netzwerk, Platte voll …
+                    st["fehler"] = str(e)
+                st.pop("halt", None)
+            threading.Thread(target=job, daemon=True).start()
+            zeigen()
+
+        def entfernen():
+            if messagebox.askyesno("Datenwächter", "Lokales KI-Modell löschen?", parent=box):
+                lokales_modell.entfernen()
+                st.clear()
+                zeigen()
+
+        def zeigen():
+            if not box.winfo_exists():
+                return
+            laeuft = "halt" in st
+            if laeuft:
+                text.set(f"Lade … {st['n'] / 1e6:.0f} von {st['gesamt'] / 1e6:.0f} MB")
+                balken.pack(anchor="w", pady=(4, 0), before=zeile)
+                balken.configure(value=st["n"])
+                knopf.configure(text="Abbrechen", command=st["halt"].set)
+                box.after(250, zeigen)
+            else:
+                balken.pack_forget()
+                if lokales_modell.installiert():
+                    text.set("✔ Geladen. Namen und Orte werden zusätzlich vom Modell gesucht."
+                             if lokales_modell.laufzeit() else "Geladen, aber onnxruntime/tokenizers fehlen.")
+                    knopf.configure(text="Entfernen", command=entfernen)
+                else:
+                    text.set((f"⚠ {st['fehler']}\n" if st.get("fehler") else "")
+                             + f"Noch nicht geladen ({lokales_modell.GROESSE / 1e6:.0f} MB, einmalig).")
+                    knopf.configure(text="Laden", command=laden)
+                    if not lokales_modell.laufzeit():
+                        knopf.state(["disabled"])
+            haken.state(["!disabled"] if lokales_modell.installiert() and not laeuft else ["disabled"])
+        zeigen()
+        return {"text": text, "knopf": knopf, "nutzen": nutzen, "laden": laden, "zeigen": zeigen}
 
     # ------------------------------------------------------------------ Zustand, Tray, Zähler
     def _state(self) -> str:
@@ -981,11 +1056,14 @@ class App:
     # ------------------------------------------------------------------ Prüfen
     def _check_text(self, text: str) -> None:
         self._count("geprueft")
-        findings = scan_text(text)  # Regeln sind schnell -> sofort reagieren
+        # Regeln (und das lokale Modell, ein paar Millisekunden) sofort; sehr lange Texte prüft das Modell im Hintergrund
+        kurz = len(text) <= 5000
+        findings = scan_text(text, modell=None if kurz else False)
         if findings and self.safe.get():
             self._set_clipboard_text(self.anon.anonymize(text, findings))
         long_text = len(text) >= MIN_CONTENT_CHECK
-        if self.use_ki.get() or (long_text and self.use_llm.get()):
+        modell_spaeter = not kurz and lokales_modell.aktiv()
+        if self.use_ki.get() or modell_spaeter or (long_text and self.use_llm.get()):
             use_ki, use_llm = self.use_ki.get(), long_text and self.use_llm.get()
             self._run(lambda: ("text", text, scan_text(text, use_ki=use_ki),
                                content_check.check(text, use_llm=use_llm) if long_text else None))

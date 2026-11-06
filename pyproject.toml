@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "datenwaechter"
-version = "1.3.0"
+version = "1.4.0"
 description = "Lokaler Scanner, der persönliche und geheime Daten vor dem Hochladen in KI-Chats erkennt und anonymisiert."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -45,8 +45,8 @@ windows = [
 tesseract = ["pytesseract>=0.3.10"]
 # Gesichter auf Fotos finden und verpixeln (OpenCV 5 liefert die nötigen Modelle nicht mehr mit)
 gesichter = ["opencv-python-headless>=4.8,<5", "numpy"]
-# Lokales KI-Modell für Namen ohne Anrede (~600 MB, CPU)
-ki = ["gliner>=0.2.13"]
+# Lokales KI-Modell für Namen und Orte (das Modell selbst, ~180 MB, lädt man in den Einstellungen)
+ki = ["onnxruntime>=1.17", "tokenizers>=0.15", "numpy"]
 alles = ["datenwaechter[windows,tesseract,gesichter,ki]"]
 dev = ["pytest>=8", "reportlab", "pytesseract>=0.3.10", "opencv-python-headless>=4.8,<5", "numpy"]
 # Fertiges Windows-Programm bauen (siehe packaging/)

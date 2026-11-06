@@ -1,4 +1,4 @@
-"""Kommandozeile:  datenwaechter scan|anonymisieren|gui|native-host"""
+"""Kommandozeile:  datenwaechter scan|anonymisieren|modell|gui|native-host"""
 
 from __future__ import annotations
 
@@ -138,6 +138,38 @@ def _bruecke(args) -> int:
     return 0
 
 
+def _modell(args) -> int:
+    from . import lokales_modell as lm
+    from .settings import modell_nutzen
+    if args.aktion == "entfernen":
+        lm.entfernen()
+        print("Lokales KI-Modell entfernt.")
+        return 0
+    if args.aktion == "laden":
+        if not lm.laufzeit():
+            print('Es fehlen onnxruntime und tokenizers:  pip install "datenwaechter[ki]"', file=sys.stderr)
+            return 1
+        print(f"Lade {lm.MODELL} ({lm.GROESSE / 1e6:.0f} MB) nach {lm.ordner()} …")
+        letzte = [-1]
+
+        def fortschritt(n, gesamt):
+            prozent = int(100 * n / gesamt)
+            if prozent // 10 != letzte[0]:
+                letzte[0] = prozent // 10
+                print(f"  {prozent} %", flush=True)
+        try:
+            lm.laden(fortschritt)
+        except lm.LadeFehler as e:
+            print(f"Fehler: {e}", file=sys.stderr)
+            return 1
+    print(f"Lokales KI-Modell: {'geladen' if lm.installiert() else 'nicht geladen'}"
+          f"{' und eingeschaltet' if lm.installiert() and modell_nutzen() else ''} ({lm.ordner()})")
+    if lm.installiert() and not lm.laufzeit():
+        print('Es fehlen onnxruntime und tokenizers:  pip install "datenwaechter[ki]"')
+    print(lm.HINWEIS)
+    return 0
+
+
 def _utf8_output() -> None:
     """Windows schreibt umgeleitete Ausgaben (Datei, Pipe) sonst im alten Zeichensatz – „✔“ würde abstürzen."""
     for stream in (sys.stdout, sys.stderr):
@@ -157,7 +189,7 @@ def main(argv: list[str] | None = None) -> int:
     if not args_in or args_in == ["--minimiert"]:   # Doppelklick bzw. Autostart des fertigen Programms
         return _gui(bool(args_in))
     p = argparse.ArgumentParser(prog="datenwaechter", description="Sensible Daten vor dem KI-Upload finden.")
-    p.add_argument("--ki", action="store_true", help="zusätzlich lokales KI-Modell (GLiNER) für Namen nutzen")
+    p.add_argument("--ki", action="store_true", help="zusätzlich den KI-Server nach Namen fragen")
     p.add_argument("--kein-sprachmodell", action="store_true",
                    help="Inhalts-Check nur mit Stichwörtern, auch wenn Ollama läuft")
     sub = p.add_subparsers(dest="cmd")
@@ -206,6 +238,11 @@ def main(argv: list[str] | None = None) -> int:
     br.add_argument("--id", help="andere Erweiterungs-ID als die mitgelieferte")
     br.add_argument("--entfernen", action="store_true")
     br.set_defaults(func=_bruecke)
+
+    m = sub.add_parser("modell", help="lokales KI-Modell für Namen und Orte (laden, Status, entfernen)",
+                       description="Ohne Option: Status anzeigen.")
+    m.add_argument("aktion", nargs="?", choices=["laden", "entfernen", "status"], default="status")
+    m.set_defaults(func=_modell)
 
     g = sub.add_parser("gui", help="Wächter-Fenster starten")
     g.add_argument("--minimiert", action="store_true", help="nur als Symbol im Infobereich starten (für Autostart)")

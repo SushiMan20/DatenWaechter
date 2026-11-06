@@ -1,41 +1,15 @@
-"""KI-Erkennung von Namen, Adressen & Co. – auch ohne „Herr/Frau“ davor.
+"""Namen, Adressen und Geburtsdaten über den eingestellten KI-Server – auch ohne „Herr/Frau“ davor.
 
-Regeln finden Strukturiertes (IBAN, Schlüssel …). Namen wie „Mia Schneider“ ohne Anrede erkennt nur ein
-Sprachmodell. Zwei Wege:
-1. Der eingestellte KI-Server (OpenAI-kompatible API mit Adresse + Token) – funktioniert auch im fertigen
-   Windows-Programm. Einschalten unter „KI-Server“ → „Namen ohne Herr/Frau finden“. Bereits erkannte Angaben
-   (IBAN, Telefon …) werden vorher durch Platzhalter ersetzt, wenn „vor dem Senden anonymisieren“ aktiv ist.
-2. GLiNER: kleines Spezialmodell (~600 MB), läuft ohne Server in Python –  pip install "datenwaechter[ki]"
+Der KI-Server (OpenAI-kompatible API mit Adresse + Token) wird gefragt, wenn unter „KI-Server“ → „Namen ohne
+Herr/Frau finden“ eingeschaltet ist. Bereits erkannte Angaben (IBAN, Telefon …) werden vorher durch Platzhalter
+ersetzt, wenn „vor dem Senden anonymisieren“ aktiv ist.
+
+Ohne Server und offline sucht das lokale KI-Modell (lokales_modell.py) Namen und Orte.
 """
 
 from __future__ import annotations
 
-import os
-from functools import lru_cache
-
-from .detectors import HOCH, MITTEL, Finding
-
-MODEL_NAME = os.environ.get("DATENWAECHTER_MODELL", "urchade/gliner_multi_pii-v1")
-THRESHOLD = float(os.environ.get("DATENWAECHTER_SCHWELLE", "0.5"))
-CHUNK = 1500  # Zeichen pro Abschnitt; das Modell sieht nur ~384 Tokens auf einmal
-
-# GLiNER-Label  ->  (Typ, Anzeige, Stufe)
-LABELS = {
-    "person": ("PERSON", "Name einer Person", MITTEL),
-    "address": ("ADRESSE", "Adresse", MITTEL),
-    "date of birth": ("GEBURTSDATUM", "Geburtsdatum", MITTEL),
-    "passport number": ("AUSWEIS", "Ausweis-/Passnummer", HOCH),
-    "health insurance number": ("KRANKENVERSICHERUNG", "Krankenversicherungsnummer", HOCH),
-    "medical condition": ("GESUNDHEIT", "Gesundheitsdaten", HOCH),
-}
-
-
-def gliner_available() -> bool:
-    try:
-        import gliner  # noqa: F401
-        return True
-    except ImportError:
-        return False
+from .detectors import MITTEL, Finding
 
 
 def _llm():
@@ -44,45 +18,17 @@ def _llm():
 
 
 def available() -> bool:
-    return gliner_available() or _llm() is not None
+    return _llm() is not None
 
 
 def source() -> str | None:
     """Wer sucht die Namen? Für die Anzeige im Fenster."""
-    if gliner_available():
-        return "GLiNER"
     b = _llm()
     return b.label.partition(":")[2] if b else None
 
 
-@lru_cache(maxsize=1)
-def _model():
-    from gliner import GLiNER
-    return GLiNER.from_pretrained(MODEL_NAME)
-
-
-def _chunks(text: str):
-    pos = 0
-    while pos < len(text):
-        end = min(len(text), pos + CHUNK)
-        if end < len(text):
-            cut = text.rfind(" ", pos + CHUNK // 2, end)
-            end = cut if cut > pos else end
-        yield pos, text[pos:end]
-        pos = end
-
-
 def detect(text: str) -> list[Finding]:
-    if not gliner_available():
-        return _detect_llm(text)
-    model = _model()
-    out: list[Finding] = []
-    for offset, chunk in _chunks(text):
-        for ent in model.predict_entities(chunk, list(LABELS), threshold=THRESHOLD):
-            kind, label, sev = LABELS[ent["label"]]
-            start, end = offset + ent["start"], offset + ent["end"]
-            out.append(Finding(kind, label, text[start:end], start, end, sev, "ki", float(ent["score"])))
-    return out
+    return _detect_llm(text)
 
 
 _LLM_ARTEN = {"namen": ("PERSON", "Name einer Person", MITTEL), "adressen": ("ADRESSE", "Adresse", MITTEL),

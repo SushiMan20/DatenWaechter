@@ -1,5 +1,13 @@
 # Änderungen
 
+## 1.4.0
+
+- **Lokales KI-Modell:** *Einstellungen → Lokales KI-Modell → Laden* holt einmalig ein Modell (180 MB), das danach ohne Internet und ohne Server auf dem PC Namen und Orte findet, die keine Regel kennt („Wenzeslaus Brummer“, „Kowalczyk“, „Pirna“). Fester Modellstand, SHA-256-geprüft, Download wird fortgesetzt; läuft mit onnxruntime (im Windows-Programm enthalten), ohne PyTorch.
+  - Gemessen an GraSCCo: Orte 59 % → 81 %, Adressen 93 % → 96 %, Namen 97,5 % → 97,8 % bei einem zusätzlichen Fehlalarm. Organe, Medikamente, Überschriften und Wortstücke filtert der Datenwächter heraus.
+  - Gilt überall, wo der Windows-Scanner prüft: Zwischenablage, Dateien, KI-App-Schutz, Dateien aus der Browser-Erweiterung.
+  - Kommandozeile: `datenwaechter modell laden | entfernen`.
+- Ersetzt das bisherige GLiNER-Modell (600 MB, PyTorch, nur in der Python-Installation).
+
 ## 1.3.0
 
 - **Einstellbar, was geschwärzt wird** („Was soll geschwärzt werden?“ in Windows-Programm und Handy-App; die Browser-Erweiterung übernimmt die Einstellung des Windows-Programms):

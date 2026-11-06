@@ -55,7 +55,7 @@ Dresden Hannover Bremen Nürnberg Wien Zürich Unterhalt Sorgerecht Umgang Schei
 The A An And Or Of To On At For With From By Is Are Was Were Be Has Have Had Do Does Did Not No Yes Hello Dear Thanks
 Thank Regards Best Kind Cheers Mr Mrs Ms Miss Sir Madam Everyone
 Welt World Jungs Mädels Ladies Gentlemen Folks Guys Everybody All There Community Support Admin Kollegium Klasse Leser
-Leserinnen Abonnenten Fans Nutzer Nutzerinnen Interessierte Bewerber Bewerberinnen Studierende Kundinnen Gast Zusammen
+Leserinnen Abonnenten Fans Nutzer Nutzerinnen Interessierte Bewerber Bewerberinnen Studierende Kundinnen Gast Zusammen Gott
 """.split())
 
 ORG = frozenset("""
@@ -368,7 +368,8 @@ def weitere_nennungen(text: str, personen: list[Finding]) -> list[Finding]:
 
 KOERPER = frozenset("""Leber Niere Nieren Herz Lunge Magen Darm Milz Galle Blase Becken Schädel Knie Hüfte Schulter
 Rücken Haut Blut Hals Kopf Fuß Hand Arm Bein Auge Ohr Nase Mund Zahn Brust Bauch Knochen Muskel Nerv Gehirn Hirn Zunge
-Lippe Ferse Zehe Finger Daumen Wade Nacken Kiefer Rippe Wirbel Becker""".split()) - {"Becker"}
+Lippe Ferse Zehe Finger Daumen Wade Nacken Kiefer Rippe Wirbel Thorax Abdomen Pleura Wirbelbogen Wirbelsäule
+Sternum Pankreas Prostata Uterus Aorta Trachea Becker""".split()) - {"Becker"}
 
 _ARTIKEL_DAVOR = re.compile(r"(?i)(?<![\w])(?:der|die|das|den|dem|des|ein|eine|einen|einem|einer|eines|kein|keine|sein|seine|"
                             r"seinen|seinem|seiner|ihr|ihre|ihren|ihrem|ihrer|mein|meine|unser|unsere|zur|zum|im|am|vom|"
