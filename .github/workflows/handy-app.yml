@@ -1,0 +1,68 @@
+name: Handy-App
+
+on:
+  push:
+    paths: ["mobile/**", "extension/detectors.js", "extension/kategorien.js", ".github/workflows/handy-app.yml"]
+  pull_request:
+    paths: ["mobile/**", "extension/detectors.js", "extension/kategorien.js", ".github/workflows/handy-app.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: handy-app-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Bauen und testen (Chromium, Pixel 7)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - run: npm test
+      - name: Bildschirmfoto bei Fehler
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: handy-app-fehler
+          path: mobile/test-fehler.png
+          if-no-files-found: ignore
+      - name: App zum Herunterladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: Datenwaechter-Handy-App
+          path: mobile/dist
+      - name: Für GitHub Pages vorbereiten
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && !github.event.repository.private
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: mobile/dist
+
+  # Veröffentlicht die App unter https://<name>.github.io/<repo>/ – nur auf main und nur bei öffentlichem Repo.
+  # Einmalig nötig: Settings → Pages → Source: „GitHub Actions“.
+  pages:
+    name: Auf GitHub Pages veröffentlichen
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && !github.event.repository.private
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

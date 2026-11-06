@@ -20,6 +20,12 @@
 - Fängt Drag & Drop, „Datei hinzufügen“ und Strg+V auf KI-Chat-Seiten ab; Symbol in der Leiste mit Pause und Zählern
 - PDFs, Bilder und Word-Dateien über den lokalen Scanner (Native Messaging)
 
+**Handy-App** (Android, iPhone – installierbare Web-App)
+- „Teilen → Datenwächter“ aus jeder Android-App (PDF, Fotos, Text), danach „Geschützt teilen“ an ChatGPT, Claude & Co.
+- Text, PDF (auch gescannt), Word und Fotos prüfen; Texterkennung und Schwärzen auf dem Gerät, Bereiche per Finger nachschwärzen
+- Zurückübersetzen von KI-Antworten (auch per Teilen), KI-Aktionen und Inhalts-Check mit eigenem KI-Server
+- Offline nutzbar, alle Bibliotheken mitgeliefert, Veröffentlichung über GitHub Pages
+
 **KI (optional)**
 - Eigener KI-Server über OpenAI-kompatible API (Adresse + Token): Inhalt bewerten, Fotos bewerten, Namen ohne Anrede finden; bei externen Servern standardmäßig vorher anonymisiert
 - KI-Aktionen („Umformulieren“, „Kürzen“ … und eigene) – im Browser per Rechtsklick, unter Windows per Strg+Alt+Leertaste

@@ -1,0 +1,41 @@
+{
+  "name": "Datenwächter",
+  "short_name": "Datenwächter",
+  "description": "Prüft Texte, PDFs und Fotos auf persönliche Daten, bevor sie in ChatGPT, Claude & Co. landen – und schwärzt sie direkt auf dem Handy.",
+  "lang": "de",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f3f4f6",
+  "theme_color": "#2e7d32",
+  "categories": ["productivity", "utilities", "security"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "share_target": {
+    "action": "./teilen",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "titel",
+      "text": "text",
+      "url": "link",
+      "files": [
+        {
+          "name": "dateien",
+          "accept": ["application/pdf", ".pdf", "image/*", "text/*", ".txt", ".md", ".csv", ".json",
+                     "application/vnd.openxmlformats-officedocument.wordprocessingml.document", ".docx"]
+        }
+      ]
+    }
+  },
+  "shortcuts": [
+    { "name": "Text prüfen", "url": "./?tab=pruefen", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "KI-Antwort zurückübersetzen", "short_name": "Zurückübersetzen", "url": "./?tab=zurueck", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "KI-Aktionen", "url": "./?tab=ki", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

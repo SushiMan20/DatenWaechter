@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; worker-src 'self' blob:; connect-src 'self' blob: data: https: http:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta name="referrer" content="no-referrer">
+<title>Datenwächter</title>
+<meta name="description" content="Prüft Texte, PDFs und Fotos auf persönliche Daten, bevor sie in ChatGPT, Claude & Co. landen – und schwärzt sie direkt auf dem Handy.">
+<meta name="theme-color" content="#2e7d32" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111113" media="(prefers-color-scheme: dark)">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Datenwächter">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-schild" viewBox="0 0 24 24"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3Z" fill="currentColor"/><path d="m8.5 12 2.4 2.4 4.8-5" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-pruefen" viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 4.4 3 8.3 7 9.6 4-1.3 7-5.2 7-9.6V6l-7-3Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m9 12 2 2 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-ki" viewBox="0 0 24 24"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8L12 3Zm6 11 .9 2.1L21 17l-2.1.9L18 20l-.9-2.1L15 17l2.1-.9L18 14Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+  <symbol id="i-zurueck" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-einst" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+  <symbol id="i-einfuegen" viewBox="0 0 24 24"><rect x="6" y="4" width="12" height="17" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M9 4.5V3h6v1.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M9 10h6M9 14h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-datei" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M14 3v5h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+  <symbol id="i-kamera" viewBox="0 0 24 24"><path d="M4 8h3l1.5-2.5h7L17 8h3v11H4V8Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.5" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+  <symbol id="i-teilen" viewBox="0 0 24 24"><path d="M12 3v12M7.5 7.5 12 3l4.5 4.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-kopieren" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 3 2 20h20L12 3Z" fill="currentColor"/><path d="M12 10v4.5" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="17.3" r="1.3" fill="#fff"/></symbol>
+  <symbol id="i-ok" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="currentColor"/><path d="m7.5 12.3 3 3 6-6.3" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-ordner" viewBox="0 0 24 24"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5H9l2 2.5h8.5A1.5 1.5 0 0 1 21 9v9.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5v-12Z" fill="currentColor"/></symbol>
+  <symbol id="i-stift" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+  <symbol id="i-pfeil" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</svg>
+
+<header class="top">
+  <svg class="logo"><use href="#i-schild"/></svg>
+  <div class="titles">
+    <h1>Datenwächter</h1>
+    <div id="status" class="status"><span class="dot ok"></span><span id="status-text">Alles bleibt auf deinem Handy</span></div>
+  </div>
+  <button id="neue-sitzung" class="iconbtn" title="Neu anfangen" aria-label="Neu anfangen" hidden><svg><use href="#i-plus"/></svg></button>
+</header>
+
+<main>
+<!-- ============================================================ Prüfen -->
+<section id="tab-pruefen" class="tab" data-tab="pruefen">
+  <div class="card eingabe" id="eingabe-karte">
+    <textarea id="eingabe" rows="5" placeholder="Text einfügen – oder Datei, PDF oder Foto wählen. Geprüft wird nur hier auf dem Handy."></textarea>
+    <div id="dateiliste" class="chips" hidden></div>
+    <div class="btnrow">
+      <button id="btn-einfuegen" class="btn"><svg><use href="#i-einfuegen"/></svg>Einfügen</button>
+      <label class="btn"><svg><use href="#i-datei"/></svg>Datei<input id="datei" type="file" multiple hidden
+        accept="application/pdf,.pdf,image/*,text/*,.txt,.md,.csv,.json,.eml,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"></label>
+      <label class="btn"><svg><use href="#i-kamera"/></svg>Foto<input id="foto" type="file" accept="image/*" capture="environment" hidden></label>
+      <button id="btn-leeren" class="btn ghost square" aria-label="Leeren" title="Leeren"><svg><use href="#i-x"/></svg></button>
+    </div>
+  </div>
+
+  <div id="fortschritt" class="card fortschritt" hidden>
+    <div class="spinner"></div>
+    <div class="grow"><div id="fortschritt-text">Prüfe …</div><div class="bar"><span id="fortschritt-balken"></span></div></div>
+  </div>
+
+  <div id="ergebnis" hidden>
+    <div id="urteil" class="card urteil"></div>
+    <div id="thema" class="card thema" hidden></div>
+    <div id="funde-karte" class="card" hidden>
+      <div class="kopf"><h2>Gefundene Angaben</h2><span class="muted small">Antippen = nicht schwärzen</span></div>
+      <ul id="funde" class="funde"></ul>
+    </div>
+    <div id="vorschau-karte" class="card">
+      <div class="kopf">
+        <h2 id="vorschau-titel">So geht es weiter</h2>
+        <div id="ansicht" class="seg" hidden>
+          <button data-ansicht="datei" class="on">Geschwärzt</button><button data-ansicht="text">Text</button>
+        </div>
+      </div>
+      <div id="seiten" class="seiten"></div>
+      <p id="schwaerz-hinweis" class="muted small" hidden>Mit dem Finger über eine Stelle ziehen = zusätzlich schwärzen · Balken antippen = entfernen</p>
+      <div id="anon-text" class="anon-text"></div>
+    </div>
+  </div>
+
+  <div id="willkommen">
+    <div class="card hero">
+      <h2>Erst prüfen, dann teilen.</h2>
+      <p>Bevor du Texte, PDFs oder Fotos an ChatGPT, Claude &amp; Co. gibst: Der Datenwächter findet Namen, IBAN, Adressen, Ausweisnummern und mehr – und schwärzt sie.</p>
+      <ol class="schritte">
+        <li><b>Rein damit</b><span>Einfügen, Datei, Foto – oder in einer anderen App auf <em>Teilen → Datenwächter</em> tippen.</span></li>
+        <li><b>Prüfen &amp; schwärzen</b><span>Läuft komplett auf dem Handy, auch ohne Internet.</span></li>
+        <li><b>Weitergeben</b><span>Anonymisiert an die KI – die Antwort danach unter „Zurück“ wieder einsetzen.</span></li>
+      </ol>
+    </div>
+    <div class="kacheln">
+      <div class="kachel"><b id="stat-geprueft">0</b><span>geprüft</span></div>
+      <div class="kachel"><b id="stat-funde" class="rot">0</b><span>Funde</span></div>
+      <div class="kachel"><b id="stat-anonym" class="gruen">0</b><span>geschützt</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ KI-Aktionen -->
+<section id="tab-ki" class="tab" data-tab="ki" hidden>
+  <div id="ki-ohne-server" class="card hinweis" hidden>
+    <h2>Eigener KI-Server nötig</h2>
+    <p>KI-Aktionen wie „Umformulieren“ oder „Kürzen“ laufen über deinen eigenen OpenAI-kompatiblen Server (Adresse + Token).</p>
+    <button class="btn primary" data-gehe="einstellungen">KI-Server einrichten<svg><use href="#i-pfeil"/></svg></button>
+  </div>
+  <div class="card">
+    <textarea id="ki-eingabe" rows="6" placeholder="Text, mit dem die KI etwas machen soll …"></textarea>
+    <div class="btnrow">
+      <button id="ki-einfuegen" class="btn"><svg><use href="#i-einfuegen"/></svg>Einfügen</button>
+      <button id="ki-leeren" class="btn ghost square" aria-label="Leeren"><svg><use href="#i-x"/></svg></button>
+    </div>
+  </div>
+  <div class="kopf aussen"><h2>Was soll die KI tun?</h2><button id="aktionen-bearbeiten" class="link">Bearbeiten</button></div>
+  <div id="aktionen" class="aktionen"></div>
+  <div class="card eigene">
+    <input id="ki-anweisung" type="text" placeholder="Eigene Anweisung, z. B. „Als Stichpunkte“" enterkeyhint="go">
+    <button id="ki-los" class="btn primary square" aria-label="Ausführen"><svg><use href="#i-pfeil"/></svg></button>
+  </div>
+  <div id="ki-ergebnis" class="card" hidden>
+    <div class="kopf"><h2 id="ki-ergebnis-titel">Ergebnis</h2><span id="ki-info" class="muted small"></span></div>
+    <div id="ki-text" class="anon-text"></div>
+    <div class="btnrow">
+      <button id="ki-kopieren" class="btn"><svg><use href="#i-kopieren"/></svg>Kopieren</button>
+      <button id="ki-teilen" class="btn"><svg><use href="#i-teilen"/></svg>Teilen</button>
+      <button id="ki-uebernehmen" class="btn ghost">Weiter bearbeiten</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ Zurückübersetzen -->
+<section id="tab-zurueck" class="tab" data-tab="zurueck" hidden>
+  <div class="card">
+    <p class="muted">Füge hier die Antwort der KI ein. Platzhalter wie <code>[PERSON_1]</code> werden wieder zu den echten Angaben – die Zuordnung liegt nur auf diesem Handy.</p>
+    <textarea id="zurueck-eingabe" rows="6" placeholder="Antwort von ChatGPT, Claude … einfügen"></textarea>
+    <div class="btnrow">
+      <button id="zurueck-einfuegen" class="btn"><svg><use href="#i-einfuegen"/></svg>Einfügen</button>
+      <button id="zurueck-leeren" class="btn ghost square" aria-label="Leeren"><svg><use href="#i-x"/></svg></button>
+    </div>
+  </div>
+  <div id="zurueck-ergebnis" class="card" hidden>
+    <div class="kopf"><h2>Mit echten Angaben</h2><span id="zurueck-info" class="muted small"></span></div>
+    <div id="zurueck-text" class="anon-text"></div>
+    <div class="btnrow">
+      <button id="zurueck-kopieren" class="btn"><svg><use href="#i-kopieren"/></svg>Kopieren</button>
+      <button id="zurueck-teilen" class="btn"><svg><use href="#i-teilen"/></svg>Teilen</button>
+    </div>
+  </div>
+  <details class="card zuordnung" id="zuordnung-karte">
+    <summary><span>Zuordnung</span><span id="zuordnung-anzahl" class="pill">0</span></summary>
+    <table id="zuordnung"></table>
+    <button id="zuordnung-loeschen" class="btn ghost danger">Zuordnung löschen</button>
+  </details>
+</section>
+
+<!-- ============================================================ Einstellungen -->
+<section id="tab-einstellungen" class="tab" data-tab="einstellungen" hidden>
+  <div class="card">
+    <div class="kopf"><h2>Eigener KI-Server</h2><button id="ki-aktiv" class="switch" role="switch" aria-checked="false" aria-label="KI-Server nutzen"><span></span></button></div>
+    <p class="muted small">Optional. Jeder OpenAI-kompatible Dienst mit Adresse und Token: OpenAI, OpenRouter, Mistral, ein eigener Server mit LM Studio oder vLLM, ein Firmen-Gateway … Ohne Server läuft alles nur auf dem Handy.</p>
+    <div id="ki-felder">
+      <label class="feld">Adresse (URL)
+        <input id="ki-url" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://api.openai.com/v1">
+      </label>
+      <div class="chips vorlagen" id="vorlagen"></div>
+      <label class="feld">Token / API-Schlüssel
+        <input id="ki-token" type="password" autocomplete="off" spellcheck="false" placeholder="sk-…">
+      </label>
+      <label class="feld">Modell
+        <div class="zeile"><input id="ki-modell" type="text" list="modelle" autocomplete="off" spellcheck="false" placeholder="z. B. gpt-4o-mini"><button id="modelle-laden" class="btn ghost">Laden</button></div>
+        <datalist id="modelle"></datalist>
+      </label>
+      <div class="optionen">
+        <label class="option"><input type="checkbox" id="opt-anonym"><span><b>Vor dem Senden anonymisieren</b><small>Erkannte Angaben werden durch Platzhalter ersetzt, bevor etwas den Server erreicht.</small></span></label>
+        <label class="option"><input type="checkbox" id="opt-thema"><span><b>KI prüft das Thema</b><small>„Du lädst gerade Familienunterlagen hoch“ – genauer als nur Stichwörter.</small></span></label>
+        <label class="option"><input type="checkbox" id="opt-namen"><span><b>KI findet Namen ohne Herr/Frau</b><small>Auch „Mia Schneider“, Adressen und Geburtsdaten, die die Regeln nicht erkennen.</small></span></label>
+        <label class="option"><input type="checkbox" id="opt-bilder"><span><b>Fotos an den Server senden</b><small>Damit die KI auch sieht, was auf Bildern ist (Ausweis, Kinderfoto …).</small></span></label>
+      </div>
+      <div id="ki-warnung" class="warnbox" hidden></div>
+      <div class="btnrow">
+        <button id="ki-testen" class="btn">Verbindung testen</button>
+        <button id="ki-speichern" class="btn primary">Speichern</button>
+      </div>
+      <div id="ki-status" class="muted small" role="status"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Texterkennung (Fotos, gescannte PDFs)</h2>
+    <p class="muted small">Läuft auf dem Handy. Die Erkennungsdaten (ca. 5 MB) werden einmal geladen und dann offline genutzt.</p>
+    <div class="zeile"><span id="ocr-status" class="grow">Noch nicht geladen</span><button id="ocr-laden" class="btn ghost">Jetzt laden</button></div>
+  </div>
+
+  <div class="card">
+    <h2>App</h2>
+    <div class="zeile" id="installieren-zeile" hidden><span class="grow">Auf den Startbildschirm legen</span><button id="installieren" class="btn primary">Installieren</button></div>
+    <p id="ios-hinweis" class="muted small" hidden>iPhone/iPad: in Safari auf <b>Teilen</b> → <b>Zum Home-Bildschirm</b> tippen.</p>
+    <div class="zeile"><span class="grow">Zuordnung &amp; Ergebnisse löschen</span><button id="alles-loeschen" class="btn ghost danger">Löschen</button></div>
+    <p class="muted small">Datenwächter <span id="version">1.0.0</span> · Open Source · Keine Werbung, kein Tracking, keine Konten. Gespeichert wird nur auf diesem Gerät: Einstellungen, eigene Aktionen und die Platzhalter-Zuordnung.</p>
+  </div>
+</section>
+</main>
+
+<nav class="tabs" role="tablist">
+  <button data-gehe="pruefen" class="on" role="tab"><svg><use href="#i-pruefen"/></svg><span>Prüfen</span></button>
+  <button data-gehe="ki" role="tab"><svg><use href="#i-ki"/></svg><span>KI</span></button>
+  <button data-gehe="zurueck" role="tab"><svg><use href="#i-zurueck"/></svg><span>Zurück</span></button>
+  <button data-gehe="einstellungen" role="tab"><svg><use href="#i-einst"/></svg><span>Einstellungen</span></button>
+</nav>
+
+<div id="aktionsleiste" class="aktionsleiste" hidden>
+  <button id="teilen" class="btn primary grow"><svg><use href="#i-teilen"/></svg><span id="teilen-text">Geschützt teilen</span></button>
+  <button id="kopieren" class="btn square" aria-label="Kopieren" title="Kopieren"><svg><use href="#i-kopieren"/></svg></button>
+  <button id="oeffnen-chatgpt" class="btn chip-btn">ChatGPT</button>
+  <button id="oeffnen-claude" class="btn chip-btn">Claude</button>
+</div>
+
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+<dialog id="aktion-dialog">
+  <form method="dialog">
+    <h2 id="aktion-dialog-titel">Aktion</h2>
+    <label class="feld">Name<input id="aktion-name" required maxlength="40" placeholder="z. B. Als Stichpunkte"></label>
+    <label class="feld">Anweisung an die KI<textarea id="aktion-anweisung" rows="4" required placeholder="z. B. Fasse den Text in Stichpunkten zusammen."></textarea></label>
+    <div class="btnrow">
+      <button value="loeschen" id="aktion-loeschen" class="btn ghost danger" formnovalidate>Löschen</button>
+      <span class="grow"></span>
+      <button value="abbrechen" class="btn ghost" formnovalidate>Abbrechen</button>
+      <button value="ok" class="btn primary">Speichern</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="shared/kategorien.js"></script>
+<script src="shared/detectors.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>

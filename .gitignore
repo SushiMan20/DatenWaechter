@@ -6,3 +6,6 @@ build/
 dist/
 *_anonymisiert.*
 packaging/Output/
+mobile/node_modules/
+mobile/dist/
+mobile/test-fehler.png

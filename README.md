@@ -6,6 +6,7 @@
   <a href="https://github.com/SushiMan20/TestRepo/actions/workflows/windows.yml"><img src="https://github.com/SushiMan20/TestRepo/actions/workflows/windows.yml/badge.svg" alt="Windows-Build"></a>
   <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4" alt="Windows 10 | 11">
   <img src="https://img.shields.io/badge/Browser-Chrome%20%7C%20Edge%20%7C%20Brave-4285F4" alt="Chrome | Edge | Brave">
+  <img src="https://img.shields.io/badge/Handy-Android%20%7C%20iPhone-2e7d32" alt="Handy: Android | iPhone">
   <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/l%C3%A4uft-lokal-2e7d32" alt="läuft lokal">
 </p>
@@ -16,7 +17,8 @@ eine anonymisierte Fassung hochladen, das Original verwenden oder abbrechen. Die
 
 > 🇬🇧 *Datenwächter (“data guardian”) checks what you paste or upload into AI chats such as ChatGPT or Claude for personal
 > and confidential data (IBANs, names, addresses, API keys, faces) and offers an anonymized version instead. It runs
-> locally as a Windows app and a Chrome/Edge extension. The UI and documentation are in German.*
+> locally as a Windows app, a Chrome/Edge extension and an installable phone web app (Android share target, offline OCR).
+> The UI and documentation are in German.*
 
 <p align="center"><img src="docs/browser-warnung.png" alt="Warnung beim Hochladen eines Arbeitsvertrags in einen KI-Chat" width="860"></p>
 
@@ -30,6 +32,7 @@ eine anonymisierte Fassung hochladen, das Original verwenden oder abbrechen. Die
 - **Übersetzt KI-Antworten zurück:** Aus `[PERSON_1]` wird wieder der echte Name.
 - **Optional mit eigenem KI-Server** (OpenAI-kompatible API mit Adresse und Token). Die KI bewertet dann Inhalte und Fotos genauer und findet auch Namen ohne „Herr/Frau“.
 - **KI-Aktionen** wie „Umformulieren“, „Kürzen“, „Übersetzen“ oder eigene Anweisungen. Im Browser per Rechtsklick, in jedem Windows-Programm per Strg+Alt+Leertaste.
+- **Auch auf dem Handy:** In der Galerie, Mail- oder PDF-App auf *Teilen → Datenwächter* tippen, prüfen und schwärzen lassen, dann *Geschützt teilen → ChatGPT*. Die App läuft komplett auf dem Gerät, auch offline.
 
 ## So sieht es aus
 
@@ -53,6 +56,16 @@ Fassung in der Zwischenablage.
 | Hell | Dunkel (folgt der Windows-Einstellung) |
 |---|---|
 | ![Desktop hell](docs/desktop-hell.png) | ![Desktop dunkel](docs/desktop-dunkel.png) |
+
+### Auf dem Handy
+
+<p align="center"><img src="docs/handy-app.png" alt="Handy-App: prüfen, schwärzen, KI-Aktionen, zurückübersetzen" width="900"></p>
+
+```
+Galerie / PDF / Mail ──Teilen──▶ Datenwächter ──Geschützt teilen──▶ ChatGPT / Claude
+                                 (prüfen, schwärzen,                     │
+                                  Zuordnung merken)  ◀──Teilen (Antwort)──┘  → echte Namen wieder drin
+```
 
 ### Schwärzen statt hochladen
 
@@ -88,6 +101,17 @@ Eigene Aktionen legst du unter *Einstellungen → KI-Aktionen bearbeiten* an:
 1. `chrome://extensions` bzw. `edge://extensions` öffnen und den **Entwicklermodus** einschalten.
 2. **Entpackte Erweiterung laden** wählen und den Ordner *Datenwächter – Browser-Erweiterung* auswählen. Eine Verknüpfung dazu legt der Installer im Startmenü an.
 3. Die Verbindung zum Windows-Programm, die für PDFs, Bilder und KI-Aktionen nötig ist, richtet der Installer automatisch ein. Ohne das Programm prüft die Erweiterung nur Text.
+
+### 3. Handy-App (Android, iPhone)
+
+Die Handy-App ist eine installierbare Web-App. Sie braucht keinen App-Store, keine Anmeldung und keine Berechtigungen.
+
+1. Auf dem Handy die App-Adresse öffnen. Sobald das Repo öffentlich und GitHub Pages aktiv ist, lautet sie `https://<github-name>.github.io/<repo>/`.
+2. **Android (Chrome):** *Einstellungen → App installieren* oder Menü ⋮ → *Zum Startbildschirm hinzufügen*. Danach steht der Datenwächter im **Teilen-Menü** aller Apps.
+   **iPhone (Safari):** *Teilen → Zum Home-Bildschirm*. Apple lässt Web-Apps nicht ins Teilen-Menü. Dateien kommen deshalb über *Datei*, *Foto* oder *Einfügen* in die App, das Weiterteilen an ChatGPT klappt aber auch dort.
+3. Optional unter *Einstellungen → Texterkennung* die Erkennungsdaten (ca. 5 MB) für den Offline-Betrieb laden.
+
+Auf eigenem Server: `cd mobile && npm ci && npm run build` und den Ordner `mobile/dist/` per **https** ausliefern (z. B. nginx, Caddy, Netlify).
 
 ### Mit Python (für Entwickler und andere Systeme)
 
@@ -136,6 +160,8 @@ datenwaechter ki-server --url https://gateway.firma.de/v1 --token - --modell gpt
 | Statistik, Telemetrie | nur Tageszähler (Zahlen) auf deinem PC | dito |
 
 Die Zuordnung der Platzhalter (`[PERSON_1]` = …) bleibt auf deinem Rechner, damit du KI-Antworten zurückübersetzen kannst.
+Die Handy-App arbeitet genauso: Erkennung, Texterkennung und Schwärzen laufen im Browser auf dem Gerät. Einstellungen,
+eigene Aktionen und die Zuordnung liegen nur im Speicher des Handys. Die App lädt nichts von fremden Servern (keine CDNs, kein Tracking).
 
 ## Was erkannt wird
 
@@ -148,7 +174,8 @@ Die Zuordnung der Platzhalter (`[PERSON_1]` = …) bleibt auf deinem Rechner, da
 
 ## Grenzen und häufige Fragen
 
-- **Gibt es eine Handy-App?** Noch nicht. iOS und Android erlauben Apps nicht, die Zwischenablage im Hintergrund zu lesen oder Uploads in anderen Apps abzufangen. Möglich wäre „Teilen → Datenwächter → weiter an die KI“.
+- **Kann die Handy-App Uploads in der ChatGPT-App abfangen?** Nein. iOS und Android lassen keine App die Zwischenablage im Hintergrund lesen oder in fremde Apps eingreifen. Deshalb gilt auf dem Handy: erst *Teilen → Datenwächter*, dann *Geschützt teilen → ChatGPT*.
+- **Handy-App mit eigenem KI-Server?** Klappt, wenn der Server per **https** erreichbar ist und Zugriffe aus dem Browser erlaubt (CORS). Bei OpenAI, OpenRouter und Mistral ist das so. Für LM Studio, Ollama & Co. im Heimnetz brauchst du einen Reverse-Proxy mit https.
 - **Warum gibt es keinen Eintrag im Windows-Rechtsklick-Menü?** Fremde Programme lassen sich dort nicht erweitern. Deshalb gibt es das Tastenkürzel Strg+Alt+Leertaste.
 - **Desktop-Apps wie die ChatGPT-App?** Deren eigener „Datei hinzufügen“-Dialog lässt sich nicht abfangen. Geschützt sind Kopieren/Einfügen sowie Dateien, die du erst ins Datenwächter-Fenster ziehst.
 - **Warum Entwicklermodus?** Die Erweiterung ist (noch) nicht im Chrome Web Store.
@@ -173,21 +200,25 @@ node --test tests/detectors.test.js      # Browser-Regeln = Python-Regeln
 node tests/e2e_extension.js              # Erweiterung in echtem Chromium (SITE=chatgpt.com für ChatGPT)
 node tests/e2e_ki_aktionen.js            # KI-Aktionen im Browser
 python tests/windows_smoke.py            # nur Windows: Zwischenablage, OCR, Tastenkürzel, Benachrichtigung, Notepad
+cd mobile && npm ci && npm run build && npm test   # Handy-App in Chromium mit Pixel-7-Emulation
 ```
 
 Bei jedem Push baut [GitHub Actions](.github/workflows/windows.yml) auf echtem Windows. Der Lauf führt die Tests und
 den Windows-Praxistest aus, baut das Programm (PyInstaller) und den Installer (Inno Setup) und installiert ihn testweise
 still und wieder ab. Bei einem Tag `v*` entsteht ein Release. Selbst bauen kannst du mit `packaging\build_windows.ps1`.
+Die Handy-App testet [ein eigener Workflow](.github/workflows/handy-app.yml) bei jedem Push. Auf `main` veröffentlicht er
+sie zusätzlich auf GitHub Pages.
 
 ```
 datenwaechter/      Python-Paket: Regeln, OCR, Schwärzen, KI-Anbindung, Fenster, Tray, Browser-Brücke
 extension/          Browser-Erweiterung (Manifest V3)
+mobile/             Handy-App (installierbare Web-App): pdf.js, tesseract.js, jsPDF – alles mitgeliefert
 packaging/          PyInstaller-Rezept, Installer, Programm-Symbol
 tests/              pytest, Browser- und Windows-Tests
 ```
 
 Die Erkennungsregeln gibt es zweimal, in `datenwaechter/detectors.py` und `extension/detectors.js`. Die Tests prüfen
-beide mit denselben Beispielen. Ändern sich die Stichwörter, erzeugst du die Browser-Fassung so neu:
+beide mit denselben Beispielen. Die Handy-App nutzt dieselbe `extension/detectors.js`. Ändern sich die Stichwörter, erzeugst du die Browser-Fassung so neu:
 `python -c "import datenwaechter.content_check as c; c.write_extension_categories()"`.
 
 ## Mitmachen
@@ -199,6 +230,7 @@ Wie du beiträgst, steht in [CONTRIBUTING.md](CONTRIBUTING.md), Änderungen im [
 
 [pypdfium2](https://github.com/pypdfium2-team/pypdfium2), [pypdf](https://github.com/py-pdf/pypdf),
 [OpenCV](https://opencv.org), [Tesseract](https://github.com/tesseract-ocr/tesseract), [pystray](https://github.com/moses-palmer/pystray),
-[PyInstaller](https://pyinstaller.org), [Inno Setup](https://jrsoftware.org/isinfo.php).
+[PyInstaller](https://pyinstaller.org), [Inno Setup](https://jrsoftware.org/isinfo.php), [pdf.js](https://mozilla.github.io/pdf.js/),
+[tesseract.js](https://tesseract.projectnaptha.com), [jsPDF](https://github.com/parallax/jsPDF), [JSZip](https://stuk.github.io/jszip/).
 Das Testfoto stammt aus einem gemeinfreien NASA-Foto (über [scikit-image](https://scikit-image.org)). Alle Personen,
 Adressen, Kontonummern und Firmen in Beispielen und Screenshots sind erfunden.
