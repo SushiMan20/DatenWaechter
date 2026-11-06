@@ -64,12 +64,16 @@ jobs:
           Write-Host "Autostart: $($run.Datenwaechter)"
           $host_ = Get-ItemProperty "HKCU:\Software\Google\Chrome\NativeMessagingHosts\de.datenwaechter.host"
           Write-Host "Browser-Brücke: $($host_.'(default)')"
-          & "$app\datenwaechter-cli.exe" scan packaging\..\tests\fixtures\gesicht.jpg --kein-sprachmodell
+          & "$app\datenwaechter-cli.exe" scan tests\fixtures\gesicht.jpg --kein-sprachmodell
+          # Rückgabewert 1/2 = Fund (gewollt); alles andere ist ein Fehler
+          if ($LASTEXITCODE -notin 1, 2) { throw "Installiertes Programm: Scan fehlgeschlagen ($LASTEXITCODE)" }
+          $global:LASTEXITCODE = 0
           Start-Process "$app\unins000.exe" -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES' -Wait
           Start-Sleep -Seconds 3
           if (Test-Path "$app\Datenwaechter.exe") { throw "Deinstallation unvollständig" }
           if (Test-Path "HKCU:\Software\Google\Chrome\NativeMessagingHosts\de.datenwaechter.host") { throw "Browser-Brücke nicht entfernt" }
           "### Installer\n\n✔ still installiert (mit Autostart + Browser-Brücke), Programm geprüft, sauber deinstalliert" | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          exit 0
 
       - name: Pakete zusammenstellen
         run: |
