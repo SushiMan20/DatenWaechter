@@ -25,6 +25,8 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 SECRET = "Hallo Frau Becker, hier meine IBAN DE89 3704 0044 0532 0130 00 und Tel. 0171 2345678."
 RESULTS: list[tuple[str, str, str]] = []
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 TMP = Path(tempfile.mkdtemp(prefix="dw-smoke-"))
 os.environ.setdefault("DATENWAECHTER_EINSTELLUNGEN", str(TMP / "einstellungen.json"))
 os.environ.setdefault("DATENWAECHTER_KEIN_SCHLUESSELBUND", "1")
@@ -214,7 +216,7 @@ def exe_tests(dist: Path) -> None:
 
     def c(*args, **kw):
         return subprocess.run([str(cli), *args], capture_output=True, text=True, encoding="utf-8", errors="replace",
-                              timeout=180, env=env, **kw)
+                              timeout=180, env=env, **kw)   # Ausgabe umgeleitet: muss als UTF-8 kommen, ohne Absturz
 
     def t_help():
         r = c("--help")

@@ -85,7 +85,8 @@ def handle(msg: dict) -> dict:
         path = Path(tmp) / name
         path.write_bytes(base64.b64decode(msg["data_b64"]))
         try:
-            report = analyze(path, use_ki=bool(msg.get("ki")))
+            from .settings import load_llm
+            report = analyze(path, use_ki=bool(msg.get("ki")) or load_llm().ki_namen)
         except UnsupportedFile as e:
             return {"ok": False, "error": str(e)}
         reply = {"ok": True, **report.to_dict()}

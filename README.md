@@ -40,6 +40,14 @@ samt Platzhalter überdeckt, Gesichter werden verpixelt. Der Originaltext ist da
 
 ![Schwärzung](docs/schwaerzung.png)
 
+## Installation (Windows)
+
+1. **`Datenwaechter-Setup-1.0.0.exe`** herunterladen und starten. Die Datei liegt unter *Releases* bzw. im Ergebnis des Builds *Windows-Programm* unter *Actions*. Der Installer braucht keine Admin-Rechte und kein Python.
+2. Danach erscheint das grüne Schild im Infobereich. Der Schutz der Zwischenablage läuft ab jetzt, auf Wunsch auch automatisch nach der Windows-Anmeldung.
+3. **Browser-Erweiterung** einmalig laden: `chrome://extensions` bzw. `edge://extensions` öffnen, den **Entwicklermodus** einschalten, **Entpackte Erweiterung laden** wählen und den Ordner *Datenwächter – Browser-Erweiterung* aus dem Startmenü auswählen. Die Verbindung zum Scanner (für PDFs, Bilder und KI-Aktionen) richtet der Installer automatisch ein.
+
+Ohne Installer geht es auch mit Python, siehe *Die zwei Bausteine* unten. Den Installer baust du selbst mit `packaging\build_windows.ps1`.
+
 ## Was geprüft wird
 
 | | Wie | Ergebnis beim Anonymisieren |
@@ -60,6 +68,18 @@ Namen (nach Anrede, mit KI-Modell auch ohne), E-Mail, Telefon, Adressen, Geburts
 geschützte Daten nach Art. 9 DSGVO (Religion, Politik, Gewerkschaft, Sexualität). Ohne weitere Installation arbeitet
 der Check mit Stichwörtern ([`kategorien.json`](datenwaechter/kategorien.json), leicht erweiterbar). Mit einem
 **KI-Server** (siehe unten) liest ein Sprachmodell den Inhalt tatsächlich und bewertet auch Fotos.
+
+## KI: lokales Modell per Klick oder eigener KI-Server
+
+Unter *Einstellungen → KI-Server einrichten* gibt es zwei Wege, die sich auch kombinieren lassen:
+
+- **Lokales KI-Modell, läuft komplett auf deinem PC.** Der Datenwächter installiert auf Knopfdruck das kostenlose Programm Ollama (über winget) und lädt das gewählte Modell mit Fortschrittsanzeige herunter:
+  - *Empfohlen:* `gemma3:4b`, versteht Text und Bilder, 3,3 GB
+  - *Klein und schnell:* `gemma3:1b`, nur Text, 0,8 GB
+  - *Genauer:* `qwen2.5vl:7b`, 6 GB
+- **Eigener KI-Server** mit URL und Token, Details unten.
+
+**Die KI prüft mit.** Sie bewertet, was du hochlädst („Familienunterlagen“, „Foto eines Ausweises“). Auf Wunsch sucht sie zusätzlich **Namen ohne „Herr/Frau“**, Adressen und Geburtsdaten, z. B. den Kindernamen „Mia Schneider“ in einem Gerichtsbrief. Das schaltest du unter *Einstellungen* ein. Diese Namenssuche läuft nur mit einem lokalen Modell oder einem Server im eigenen Netz. An externe Anbieter müsste der Datenwächter dafür genau die Daten schicken, die geschützt werden sollen.
 
 ## KI-Server für den Inhalts-Check: Ollama oder eigener OpenAI-kompatibler Server
 

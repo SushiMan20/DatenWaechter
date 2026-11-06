@@ -41,6 +41,8 @@ class LlmSettings:
     modell: str = ""               # leer = erstes Modell, das der Server anbietet
     bilder_senden: bool | None = None   # None = automatisch: nur an Server im eigenen Netz
     anonymisieren: bool | None = None   # None = automatisch: vor dem Senden an externe Server
+    ollama_modell: str = ""        # lokales Modell in Ollama; leer = Standard (gemma3:4b)
+    ki_namen: bool = False         # KI sucht zusätzlich Namen/Adressen ohne „Herr/Frau“ (nur lokale Server)
 
     @property
     def base_url(self) -> str:

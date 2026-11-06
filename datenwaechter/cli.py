@@ -138,8 +138,19 @@ def _bruecke(args) -> int:
     return 0
 
 
+def _utf8_output() -> None:
+    """Windows schreibt umgeleitete Ausgaben (Datei, Pipe) sonst im alten Zeichensatz – „✔“ würde abstürzen."""
+    for stream in (sys.stdout, sys.stderr):
+        if stream is not None and hasattr(stream, "reconfigure") and not stream.isatty():
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except (ValueError, OSError):
+                pass
+
+
 def main(argv: list[str] | None = None) -> int:
     args_in = sys.argv[1:] if argv is None else argv
+    _utf8_output()
     # Chrome/Edge starten den Scanner mit der Herkunft der Erweiterung als erstem Argument
     if args_in and args_in[0].startswith("chrome-extension://"):
         return _native()
@@ -151,11 +162,17 @@ def main(argv: list[str] | None = None) -> int:
                    help="Inhalts-Check nur mit Stichwörtern, auch wenn Ollama läuft")
     sub = p.add_subparsers(dest="cmd")
 
+    def ki_flags(sp):  # auch hinter dem Befehl erlaubt: „scan datei.pdf --ki“
+        sp.add_argument("--ki", action="store_true", default=argparse.SUPPRESS)
+        sp.add_argument("--kein-sprachmodell", action="store_true", default=argparse.SUPPRESS)
+
     s = sub.add_parser("scan", help="Dateien prüfen (Exit-Code 2 = kritische Funde)")
+    ki_flags(s)
     s.add_argument("dateien", nargs="+")
     s.set_defaults(func=_scan)
 
     a = sub.add_parser("anonymisieren", help="anonymisierte Kopien erstellen")
+    ki_flags(a)
     a.add_argument("dateien", nargs="+")
     a.add_argument("--ziel", help="Ausgabeordner (Standard: neben dem Original)")
     a.add_argument("--zuordnung", action="store_true", help="Platzhalter-Zuordnung ausgeben")

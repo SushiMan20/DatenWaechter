@@ -106,7 +106,7 @@ class App:
         self.results: queue.Queue = queue.Queue()
         self.watch = tk.BooleanVar(value=True)
         self.safe = tk.BooleanVar(value=True)
-        self.use_ki = tk.BooleanVar(value=False)
+        self.use_ki = tk.BooleanVar(value=settings.load_llm().ki_namen)
         self.use_llm = tk.BooleanVar(value=False)
         self.topmost = tk.BooleanVar(value=False)
         self.llm_text = tk.StringVar(value="Inhalts-Check mit KI (Server wird gesucht …)")
@@ -242,11 +242,17 @@ class App:
         frm.pack(fill="both", expand=True)
         ttk.Checkbutton(frm, text="Sicherer Modus (Zwischenablage sofort anonymisieren)", variable=self.safe).pack(
             anchor="w", pady=2)
-        ki = ttk.Checkbutton(frm, text="Namen ohne Anrede finden (lokales KI-Modell)", variable=self.use_ki)
+        def save_ki():
+            s = settings.load_llm()
+            s.ki_namen = self.use_ki.get()
+            settings.save_llm(s)
+        quelle = ner.source()
+        ki = ttk.Checkbutton(frm, variable=self.use_ki, command=save_ki,
+                             text=f"KI sucht zusätzlich Namen ohne „Herr/Frau“ ({quelle})" if quelle else
+                             "KI sucht zusätzlich Namen ohne „Herr/Frau“ (braucht lokales Modell oder Server im eigenen Netz)")
         ki.pack(anchor="w", pady=2)
-        if not ner.available():
+        if not quelle:
             ki.state(["disabled"])
-            ki.configure(text="Namen ohne Anrede finden (pip install datenwaechter[ki])")
         self.llm_box = ttk.Checkbutton(frm, textvariable=self.llm_text, variable=self.use_llm)
         self.llm_box.pack(anchor="w", pady=2)
         if not self.llm_ok:
@@ -1085,15 +1091,15 @@ class App:
         """Einstellungen für den KI-Server: Ollama oder eigener OpenAI-kompatibler Server mit URL + Token."""
         s = settings.load_llm()
         win = tk.Toplevel(self.root)
-        win.title("KI-Server für den Inhalts-Check")
+        win.title("KI für den Datenwächter")
         win.attributes("-topmost", True)
-        win.geometry("660x420")
+        win.geometry("660x640")
         frm = ttk.Frame(win, padding=12)
         frm.pack(fill="both", expand=True)
         frm.columnconfigure(1, weight=1)
 
-        arten = {"auto": "Automatisch (eigener Server, sonst Ollama)", "openai": "Eigener Server (OpenAI-kompatibel)",
-                 "ollama": "Nur Ollama (lokal)", "aus": "Aus – nur Stichwörter"}
+        arten = {"auto": "Automatisch (eigener Server, sonst lokales Modell)", "openai": "Eigener KI-Server (URL + Token)",
+                 "ollama": "Lokales KI-Modell auf diesem PC (Ollama)", "aus": "Aus – nur Regeln und Stichwörter"}
         art = tk.StringVar(value=arten.get(s.typ, arten["auto"]))
         url, token, modell = tk.StringVar(value=s.url), tk.StringVar(value=s.token), tk.StringVar(value=s.modell)
         bilder, anon = tk.BooleanVar(value=s.send_images), tk.BooleanVar(value=s.anonymize_first)
@@ -1118,9 +1124,94 @@ class App:
 
         status = ttk.Label(frm, text="", wraplength=520, justify="left")
 
+        # ---- Lokales KI-Modell (Ollama): installieren, Modell wählen, herunterladen
+        lokal = ttk.LabelFrame(frm, text="Lokales KI-Modell – läuft komplett auf diesem PC", padding=10)
+        lokal.grid(row=10, column=0, columnspan=3, sticky="ew", pady=(14, 0))
+        lokal.columnconfigure(1, weight=1)
+        presets = {f"{d} ({g}) – {n}": n for n, d, g in llm.LOKALE_MODELLE}
+        start = next((k for k, v in presets.items() if v == (s.ollama_modell or llm.OLLAMA_MODEL)), next(iter(presets)))
+        lokal_var = tk.StringVar(value=start)
+
+        def lokal_name() -> str:
+            return presets.get(lokal_var.get(), lokal_var.get().strip())
+        ttk.Label(lokal, text="Modell").grid(row=0, column=0, sticky="w")
+        ttk.Combobox(lokal, textvariable=lokal_var, values=list(presets), state="readonly").grid(
+            row=0, column=1, columnspan=2, sticky="ew", padx=(8, 0))
+        lokal_status = ttk.Label(lokal, text="Prüfe, ob Ollama läuft …", foreground="#555", wraplength=560,
+                                 justify="left")
+        lokal_status.grid(row=1, column=0, columnspan=3, sticky="w", pady=(6, 0))
+        bar = ttk.Progressbar(lokal, mode="determinate", maximum=1.0)
+        bar.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(6, 0))
+        lokal_btns = ttk.Frame(lokal)
+        lokal_btns.grid(row=3, column=0, columnspan=3, sticky="w", pady=(8, 0))
+
+        def lokal_refresh():
+            def fetch():
+                return llm.ollama_status()
+
+            def done(st):
+                if not win.winfo_exists():
+                    return
+                name = lokal_name()
+                if not st["laeuft"]:
+                    lokal_status.configure(text="Ollama ist nicht installiert oder läuft nicht. Ollama ist ein kostenloses "
+                                                "Programm, das KI-Modelle auf deinem PC ausführt.", foreground="#b45309")
+                elif any(m == name or m.split(":")[0] == name for m in st["modelle"]):
+                    lokal_status.configure(text=f"✔ Ollama läuft, {name} ist bereit.", foreground="#2e7d32")
+                    bar.configure(value=1.0)
+                else:
+                    lokal_status.configure(text=f"Ollama läuft. {name} ist noch nicht heruntergeladen.", foreground="#555")
+            in_thread(fetch, done)
+
+        def lokal_install():
+            cmd = llm.install_ollama_command()
+            if cmd:
+                subprocess.Popen(cmd, creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0))
+                lokal_status.configure(text="Ollama wird installiert (eigenes Fenster). Danach „Erneut prüfen“.",
+                                       foreground="#555")
+            else:
+                import webbrowser
+                webbrowser.open("https://ollama.com/download")
+                lokal_status.configure(text="Download-Seite von Ollama geöffnet. Nach der Installation „Erneut prüfen“.",
+                                       foreground="#555")
+
+        def lokal_pull():
+            name = lokal_name()
+            lokal_status.configure(text=f"Lade {name} herunter …", foreground="#555")
+            bar.configure(value=0)
+
+            def progress(text, frac):
+                win.after(0, lambda: win.winfo_exists() and (
+                    lokal_status.configure(text=f"{name}: {text}" + (f" – {frac:.0%}" if frac is not None else "")),
+                    frac is not None and bar.configure(value=frac)))
+
+            def work():
+                try:
+                    llm.ollama_pull(name, progress)
+                    return None
+                except llm.LlmError as e:
+                    return str(e)
+
+            def done(err):
+                if not win.winfo_exists():
+                    return
+                if err:
+                    lokal_status.configure(text=f"Download fehlgeschlagen: {err}", foreground="#c62828")
+                    return
+                if art.get() == arten["aus"]:
+                    art.set(arten["auto"])
+                lokal_status.configure(text=f"✔ {name} ist bereit. „Speichern“ nicht vergessen.", foreground="#2e7d32")
+                bar.configure(value=1.0)
+            in_thread(work, done)
+        ttk.Button(lokal_btns, text="Ollama installieren", command=lokal_install).pack(side="left")
+        ttk.Button(lokal_btns, text="Modell herunterladen", command=lokal_pull).pack(side="left", padx=6)
+        ttk.Button(lokal_btns, text="Erneut prüfen", command=lokal_refresh).pack(side="left")
+        lokal_var.trace_add("write", lambda *_: lokal_refresh())
+
         def current() -> settings.LlmSettings:
             typ = next(k for k, v in arten.items() if v == art.get())
             return settings.LlmSettings(typ=typ, url=url.get().strip(), token=token.get().strip(),
+                                        ollama_modell=lokal_name(), ki_namen=s.ki_namen,
                                         modell=modell.get().strip(), bilder_senden=bilder.get(),
                                         anonymisieren=anon.get())
 
@@ -1186,11 +1277,14 @@ class App:
             win.after(700, win.destroy)
 
         btns = ttk.Frame(frm)
-        btns.grid(row=9, column=0, columnspan=3, sticky="w", pady=(12, 0))
+        btns.grid(row=11, column=0, columnspan=3, sticky="w", pady=(12, 0))
         ttk.Button(btns, text="Verbindung testen", command=test).pack(side="left")
         ttk.Button(btns, text="Speichern", command=save).pack(side="left", padx=6)
         ttk.Button(btns, text="Abbrechen", command=win.destroy).pack(side="left")
-        win.widgets = {"art": art, "url": url, "token": token, "modell": modell, "bilder": bilder, "anon": anon,
+        lokal_refresh()
+        win.widgets = {"lokal_var": lokal_var, "lokal_status": lokal_status, "lokal_pull": lokal_pull, "bar": bar,
+                       "lokal_refresh": lokal_refresh,
+                       "art": art, "url": url, "token": token, "modell": modell, "bilder": bilder, "anon": anon,
                        "status": status, "test": test, "save": save, "load_models": load_models, "warn": warn}
 
     def _show_mapping(self) -> None:

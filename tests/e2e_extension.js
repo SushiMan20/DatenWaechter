@@ -52,7 +52,12 @@ img = Image.new("RGB", (900, 220), "white"); d = ImageDraw.Draw(img)
 d.text((30, 30), "Überweisung an Frau Anna Müller", font=f, fill="black")
 d.text((30, 80), "IBAN: DE89 3704 0044 0532 0130 00", font=f, fill="black")
 d.text((30, 130), "Betreff: Unterhalt für unsere Tochter", font=f, fill="black")
-img.save(${JSON.stringify(path.join(dir, "Screenshot.png"))})`);
+img.save(${JSON.stringify(path.join(dir, "Screenshot.png"))})
+scan = Image.new("RGB", (1240, 700), "white"); d = ImageDraw.Draw(scan)
+for i, t in enumerate(["Amtsgericht Musterstadt - Familiengericht", "In der Familiensache betreffend das Sorgerecht",
+                       "Herrn Thomas Schneider, Hauptstraße 12, 10115 Berlin", "IBAN DE89 3704 0044 0532 0130 00"]):
+    d.text((80, 80 + i * 70), t, font=f, fill="black")
+scan.rotate(0.8, fillcolor="white").save(${JSON.stringify(path.join(dir, "Scan.pdf"))}, "PDF", resolution=150)`);
 }
 
 // Simulierter OpenAI-kompatibler Server: prüft das Token, meldet „private Details“
@@ -203,14 +208,26 @@ print(load(${JSON.stringify(f)}).text)`);
   assert.ok(!text.includes("Müller") && !text.includes("3704"), text);
   step("Bild mit Text -> OCR -> Funde geschwärzt");
 
+  // 6b) Eingescanntes PDF (nur Bild, kein Text) per Drag & Drop -> OCR -> geschwärztes PDF
+  await drop("Scan.pdf", "application/pdf");
+  await waitDialog();
+  if (shotDir) await shot("browser-scan-pdf.png");
+  await page.keyboard.press("Enter");
+  await waitLog(5);
+  e = (await log())[4];
+  assert.deepStrictEqual(e.names, ["Scan_anonymisiert.pdf"]);
+  text = ocrB64(e.b64, ".pdf");
+  assert.ok(!text.includes("Schneider") && !text.includes("3704") && text.includes("Sorgerecht"), text);
+  step("eingescanntes PDF per Drag & Drop -> OCR -> geschwärzt (Name, Adresse, IBAN weg)");
+
   // 7) Foto über versteckten „Datei hinzufügen“-Knopf -> Gesicht erkannt -> verpixelt
   const chooser = page.waitForEvent("filechooser");
   await page.click("#add");
   await (await chooser).setFiles(path.join(REPO, "tests", "fixtures", "gesicht.jpg"));
   await waitDialog();
   await page.keyboard.press("Enter");
-  await waitLog(5);
-  e = (await log())[4];
+  await waitLog(6);
+  e = (await log())[5];
   assert.strictEqual(e.how, "hidden-input");
   assert.deepStrictEqual(e.names, ["gesicht_anonymisiert.jpg"]);
   const faces = py(`
@@ -245,8 +262,8 @@ print(len(detect(Image.open(io.BytesIO(base64.b64decode(${JSON.stringify(e.b64)}
   await page.bringToFront();
   await page.waitForTimeout(300);
   await paste("IBAN DE89 3704 0044 0532 0130 00");
-  await waitLog(6);
-  assert.strictEqual((await log())[5].text, "IBAN DE89 3704 0044 0532 0130 00");
+  await waitLog(7);
+  assert.strictEqual((await log())[6].text, "IBAN DE89 3704 0044 0532 0130 00");
   await popup.bringToFront();
   await popup.click("#switch");
   await popup.waitForFunction(() => document.getElementById("title").textContent === "Schutz aktiv");
