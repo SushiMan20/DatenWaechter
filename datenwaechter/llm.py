@@ -250,60 +250,11 @@ def backend(settings: LlmSettings | None = None, fresh: bool = False):
     if s.typ in ("openai", "auto") and s.base_url:
         b = OpenAICompatible(s)
         chosen = b if b.available() else None
-    if chosen is None and s.typ in ("ollama", "auto"):
+    if chosen is None and s.typ == "ollama":   # nur auf ausdrücklichen Wunsch (ki-server --art ollama)
         b = Ollama(model=s.ollama_modell or None)
         chosen = b if b.available() else None
     _cache[key] = (time.time(), chosen)
     return chosen
-
-
-# --------------------------------------------------------------------------- Lokales Modell einrichten (Ollama)
-
-LOKALE_MODELLE = [  # (Ollama-Name, Beschreibung, Download-Größe)
-    ("gemma3:4b", "Empfohlen – versteht Text und Bilder", "3,3 GB"),
-    ("gemma3:1b", "Klein und schnell – nur Text", "0,8 GB"),
-    ("qwen2.5vl:7b", "Genauer – Text und Bilder, ab 16 GB Arbeitsspeicher", "6 GB"),
-]
-
-
-def ollama_status(url: str | None = None) -> dict:
-    """Läuft Ollama, und welche Modelle sind schon da?"""
-    base = (url or OLLAMA_URL).rstrip("/")
-    try:
-        data = _request(f"{base}/api/tags", timeout=1.5)
-    except LlmError:
-        return {"laeuft": False, "modelle": []}
-    return {"laeuft": True, "modelle": [m.get("name", "") for m in data.get("models", [])]}
-
-
-def ollama_pull(model: str, progress=None, url: str | None = None) -> None:
-    """Lädt ein Modell in Ollama herunter; progress(text, anteil 0..1 oder None) wird laufend aufgerufen."""
-    base = (url or OLLAMA_URL).rstrip("/")
-    req = urllib.request.Request(f"{base}/api/pull", data=json.dumps({"model": model, "stream": True}).encode(),
-                                 headers={"Content-Type": "application/json"})
-    try:
-        with urllib.request.urlopen(req, timeout=60) as r:
-            for line in r:
-                if not line.strip():
-                    continue
-                msg = json.loads(line)
-                if msg.get("error"):
-                    raise LlmError(msg["error"])
-                total, done = msg.get("total"), msg.get("completed")
-                if progress:
-                    progress(msg.get("status", ""), (done / total) if total and done is not None else None)
-    except (OSError, ValueError) as e:
-        raise LlmError(f"Download fehlgeschlagen: {e}") from e
-
-
-def install_ollama_command() -> list[str] | None:
-    """Befehl, um Ollama unter Windows ohne Admin-Rechte zu installieren (winget), sonst None."""
-    import shutil
-    import sys as _sys
-    if _sys.platform == "win32" and shutil.which("winget"):
-        return ["winget", "install", "--id", "Ollama.Ollama", "-e", "--accept-source-agreements",
-                "--accept-package-agreements"]
-    return None
 
 
 # --------------------------------------------------------------------------- Personendaten per KI
@@ -322,12 +273,17 @@ Text:
 
 
 def find_personal_data(text: str, backend_=None) -> dict:
-    """Fragt den KI-Server nach Namen/Adressen/Geburtsdaten. Nur für Server auf diesem PC oder im eigenen Netz."""
+    """Fragt den KI-Server nach Namen/Adressen/Geburtsdaten, die die Regeln nicht finden.
+
+    Ist „vor dem Senden anonymisieren“ aktiv, werden bereits erkannte Angaben (IBAN, Telefon, Namen mit Anrede …)
+    vorher durch Platzhalter ersetzt – der Server sieht dann nur noch, was er finden soll.
+    """
     b = backend_ or backend()
     if b is None:
         raise LlmError("Kein KI-Server eingerichtet")
-    if b.extern:
-        raise LlmError("Externer Server – Personendaten werden nicht zur Prüfung verschickt")
+    if b.anonymize_first:
+        from .anonymize import Anonymizer
+        text = Anonymizer().anonymize(text)
     reply = b.complete([{"role": "system", "content": "Du antwortest ausschließlich mit gültigem JSON."},
                         {"role": "user", "content": NAMEN_PROMPT.format(text=text[:MAX_CHARS])}], temperature=0)
     return _parse_json(reply)

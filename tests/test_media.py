@@ -87,6 +87,9 @@ def fake_ollama(monkeypatch):
     srv = HTTPServer(("127.0.0.1", 0), Handler)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     monkeypatch.setattr(llm, "OLLAMA_URL", f"http://127.0.0.1:{srv.server_port}")
+    from datenwaechter import settings as _s
+    _s.save_llm(_s.LlmSettings(typ="ollama"))   # Ollama nur noch auf ausdrücklichen Wunsch
+    llm._cache.clear()
     yield calls
     srv.shutdown()
 

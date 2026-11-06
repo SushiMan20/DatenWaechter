@@ -21,7 +21,7 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from . import actions, autostart, browser_bridge, content_check, hotkey, llm, ner, ocr, settings, winclip
+from . import actions, autostart, browser_bridge, content_check, hotkey, llm, ocr, settings, winclip
 from .analysis import analyze, anonymize as anonymize_report
 from .anonymize import Anonymizer
 from .detectors import HOCH, SEVERITY_LABEL, scan_text
@@ -242,22 +242,12 @@ class App:
         frm.pack(fill="both", expand=True)
         ttk.Checkbutton(frm, text="Sicherer Modus (Zwischenablage sofort anonymisieren)", variable=self.safe).pack(
             anchor="w", pady=2)
-        def save_ki():
-            s = settings.load_llm()
-            s.ki_namen = self.use_ki.get()
-            settings.save_llm(s)
-        quelle = ner.source()
-        ki = ttk.Checkbutton(frm, variable=self.use_ki, command=save_ki,
-                             text=f"KI sucht zusätzlich Namen ohne „Herr/Frau“ ({quelle})" if quelle else
-                             "KI sucht zusätzlich Namen ohne „Herr/Frau“ (braucht lokales Modell oder Server im eigenen Netz)")
-        ki.pack(anchor="w", pady=2)
-        if not quelle:
-            ki.state(["disabled"])
         self.llm_box = ttk.Checkbutton(frm, textvariable=self.llm_text, variable=self.use_llm)
         self.llm_box.pack(anchor="w", pady=2)
         if not self.llm_ok:
             self.llm_box.state(["disabled"])
-        ttk.Button(frm, text="KI-Server einrichten …", command=self._llm_settings).pack(anchor="w", padx=22, pady=(0, 6))
+        ttk.Button(frm, text="KI-Server einrichten (API-Adresse + Token) …", command=self._llm_settings).pack(
+            anchor="w", padx=22, pady=(0, 6))
         hk = (f"Tastenkürzel {self.hotkey.combo}: markierten Text in jedem Programm bearbeiten"
               if self.hotkey and self.hotkey.active else
               f"Tastenkürzel: {self.hotkey.error if self.hotkey else 'nur unter Windows'}")
@@ -815,7 +805,7 @@ class App:
                     self.use_llm.set(True)
                 else:
                     self.use_llm.set(False)
-                    self.llm_text.set("Inhalts-Check mit KI (kein Server – unten einrichten)")
+                    self.llm_text.set("Inhalts-Check mit KI (kein KI-Server eingerichtet)")
                 if self.llm_box is not None:
                     self.llm_box.state(["!disabled"] if self.llm_ok else ["disabled"])
                 continue
@@ -1088,29 +1078,27 @@ class App:
                                             "Zwischenablage.")
 
     def _llm_settings(self) -> None:
-        """Einstellungen für den KI-Server: Ollama oder eigener OpenAI-kompatibler Server mit URL + Token."""
+        """KI-Server einrichten: OpenAI-kompatible API mit Adresse + Token (OpenAI, Azure, Firmen-Gateway, LM Studio …)."""
         s = settings.load_llm()
         win = tk.Toplevel(self.root)
-        win.title("KI für den Datenwächter")
+        win.title("Datenwächter – KI-Server")
         win.attributes("-topmost", True)
-        win.geometry("660x640")
-        frm = ttk.Frame(win, padding=12)
+        win.minsize(600, 0)
+        frm = ttk.Frame(win, padding=14)
         frm.pack(fill="both", expand=True)
         frm.columnconfigure(1, weight=1)
 
-        arten = {"auto": "Automatisch (eigener Server, sonst lokales Modell)", "openai": "Eigener KI-Server (URL + Token)",
-                 "ollama": "Lokales KI-Modell auf diesem PC (Ollama)", "aus": "Aus – nur Regeln und Stichwörter"}
-        art = tk.StringVar(value=arten.get(s.typ, arten["auto"]))
+        aktiv = tk.BooleanVar(value=s.typ != "aus" and bool(s.url))
         url, token, modell = tk.StringVar(value=s.url), tk.StringVar(value=s.token), tk.StringVar(value=s.modell)
         bilder, anon = tk.BooleanVar(value=s.send_images), tk.BooleanVar(value=s.anonymize_first)
+        namen = tk.BooleanVar(value=s.ki_namen)
 
-        ttk.Label(frm, text="Art").grid(row=0, column=0, sticky="w", pady=3)
-        ttk.Combobox(frm, textvariable=art, values=list(arten.values()), state="readonly").grid(
-            row=0, column=1, columnspan=2, sticky="ew")
-        ttk.Label(frm, text="Basis-URL").grid(row=1, column=0, sticky="w", pady=3)
+        ttk.Checkbutton(frm, text="KI-Server benutzen (OpenAI-kompatible API)", variable=aktiv).grid(
+            row=0, column=0, columnspan=3, sticky="w", pady=(0, 8))
+        ttk.Label(frm, text="API-Adresse").grid(row=1, column=0, sticky="w", pady=3)
         ttk.Combobox(frm, textvariable=url, values=[u for _, u in settings.URL_VORLAGEN]).grid(
             row=1, column=1, columnspan=2, sticky="ew")
-        ttk.Label(frm, text="z. B. http://localhost:1234/v1 (LM Studio) oder Firmen-Gateway",
+        ttk.Label(frm, text="Basis-Adresse mit /v1, z. B. von OpenAI oder deinem Firmen-Gateway",
                   foreground="#777").grid(row=2, column=1, columnspan=2, sticky="w")
         ttk.Label(frm, text="Token / API-Schlüssel").grid(row=3, column=0, sticky="w", pady=3)
         tok_entry = ttk.Entry(frm, textvariable=token, show="•")
@@ -1122,101 +1110,30 @@ class App:
         model_box = ttk.Combobox(frm, textvariable=modell)
         model_box.grid(row=4, column=1, sticky="ew")
 
-        status = ttk.Label(frm, text="", wraplength=520, justify="left")
+        pruef = ttk.LabelFrame(frm, text="Was die KI prüfen soll", padding=10)
+        pruef.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(14, 0))
+        ttk.Label(pruef, text="✔ Inhalt bewerten („Du lädst gerade Familienunterlagen hoch“) – immer aktiv").pack(
+            anchor="w")
+        ttk.Checkbutton(pruef, text="Namen ohne „Herr/Frau“ finden (z. B. den Kindernamen „Mia Schneider“)",
+                        variable=namen).pack(anchor="w", pady=(4, 0))
+        ttk.Checkbutton(pruef, text="Fotos und Screenshots bewerten („Foto eines Ausweises“)",
+                        variable=bilder).pack(anchor="w")
+        ttk.Checkbutton(pruef, text="Vor dem Senden anonymisieren (IBAN, Telefon, bekannte Namen → Platzhalter)",
+                        variable=anon).pack(anchor="w")
 
-        # ---- Lokales KI-Modell (Ollama): installieren, Modell wählen, herunterladen
-        lokal = ttk.LabelFrame(frm, text="Lokales KI-Modell – läuft komplett auf diesem PC", padding=10)
-        lokal.grid(row=10, column=0, columnspan=3, sticky="ew", pady=(14, 0))
-        lokal.columnconfigure(1, weight=1)
-        presets = {f"{d} ({g}) – {n}": n for n, d, g in llm.LOKALE_MODELLE}
-        start = next((k for k, v in presets.items() if v == (s.ollama_modell or llm.OLLAMA_MODEL)), next(iter(presets)))
-        lokal_var = tk.StringVar(value=start)
-
-        def lokal_name() -> str:
-            return presets.get(lokal_var.get(), lokal_var.get().strip())
-        ttk.Label(lokal, text="Modell").grid(row=0, column=0, sticky="w")
-        ttk.Combobox(lokal, textvariable=lokal_var, values=list(presets), state="readonly").grid(
-            row=0, column=1, columnspan=2, sticky="ew", padx=(8, 0))
-        lokal_status = ttk.Label(lokal, text="Prüfe, ob Ollama läuft …", foreground="#555", wraplength=560,
-                                 justify="left")
-        lokal_status.grid(row=1, column=0, columnspan=3, sticky="w", pady=(6, 0))
-        bar = ttk.Progressbar(lokal, mode="determinate", maximum=1.0)
-        bar.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(6, 0))
-        lokal_btns = ttk.Frame(lokal)
-        lokal_btns.grid(row=3, column=0, columnspan=3, sticky="w", pady=(8, 0))
-
-        def lokal_refresh():
-            def fetch():
-                return llm.ollama_status()
-
-            def done(st):
-                if not win.winfo_exists():
-                    return
-                name = lokal_name()
-                if not st["laeuft"]:
-                    lokal_status.configure(text="Ollama ist nicht installiert oder läuft nicht. Ollama ist ein kostenloses "
-                                                "Programm, das KI-Modelle auf deinem PC ausführt.", foreground="#b45309")
-                elif any(m == name or m.split(":")[0] == name for m in st["modelle"]):
-                    lokal_status.configure(text=f"✔ Ollama läuft, {name} ist bereit.", foreground="#2e7d32")
-                    bar.configure(value=1.0)
-                else:
-                    lokal_status.configure(text=f"Ollama läuft. {name} ist noch nicht heruntergeladen.", foreground="#555")
-            in_thread(fetch, done)
-
-        def lokal_install():
-            cmd = llm.install_ollama_command()
-            if cmd:
-                subprocess.Popen(cmd, creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0))
-                lokal_status.configure(text="Ollama wird installiert (eigenes Fenster). Danach „Erneut prüfen“.",
-                                       foreground="#555")
-            else:
-                import webbrowser
-                webbrowser.open("https://ollama.com/download")
-                lokal_status.configure(text="Download-Seite von Ollama geöffnet. Nach der Installation „Erneut prüfen“.",
-                                       foreground="#555")
-
-        def lokal_pull():
-            name = lokal_name()
-            lokal_status.configure(text=f"Lade {name} herunter …", foreground="#555")
-            bar.configure(value=0)
-
-            def progress(text, frac):
-                win.after(0, lambda: win.winfo_exists() and (
-                    lokal_status.configure(text=f"{name}: {text}" + (f" – {frac:.0%}" if frac is not None else "")),
-                    frac is not None and bar.configure(value=frac)))
-
-            def work():
-                try:
-                    llm.ollama_pull(name, progress)
-                    return None
-                except llm.LlmError as e:
-                    return str(e)
-
-            def done(err):
-                if not win.winfo_exists():
-                    return
-                if err:
-                    lokal_status.configure(text=f"Download fehlgeschlagen: {err}", foreground="#c62828")
-                    return
-                if art.get() == arten["aus"]:
-                    art.set(arten["auto"])
-                lokal_status.configure(text=f"✔ {name} ist bereit. „Speichern“ nicht vergessen.", foreground="#2e7d32")
-                bar.configure(value=1.0)
-            in_thread(work, done)
-        ttk.Button(lokal_btns, text="Ollama installieren", command=lokal_install).pack(side="left")
-        ttk.Button(lokal_btns, text="Modell herunterladen", command=lokal_pull).pack(side="left", padx=6)
-        ttk.Button(lokal_btns, text="Erneut prüfen", command=lokal_refresh).pack(side="left")
-        lokal_var.trace_add("write", lambda *_: lokal_refresh())
+        warn = ttk.Label(frm, text="", foreground="#b45309", wraplength=580, justify="left")
+        warn.grid(row=6, column=0, columnspan=3, sticky="w", pady=(10, 0))
+        status = ttk.Label(frm, text="", wraplength=580, justify="left")
+        status.grid(row=7, column=0, columnspan=3, sticky="w", pady=(6, 0))
 
         def current() -> settings.LlmSettings:
-            typ = next(k for k, v in arten.items() if v == art.get())
-            return settings.LlmSettings(typ=typ, url=url.get().strip(), token=token.get().strip(),
-                                        ollama_modell=lokal_name(), ki_namen=s.ki_namen,
-                                        modell=modell.get().strip(), bilder_senden=bilder.get(),
-                                        anonymisieren=anon.get())
+            return settings.LlmSettings(typ="openai" if aktiv.get() else "aus", url=url.get().strip(),
+                                        token=token.get().strip(), modell=modell.get().strip(),
+                                        bilder_senden=bilder.get(), anonymisieren=anon.get(), ki_namen=namen.get())
 
         def in_thread(fn, done):
-            threading.Thread(target=lambda: (lambda r: win.after(0, lambda: done(r)))(fn()), daemon=True).start()
+            threading.Thread(target=lambda: (lambda r: win.after(0, lambda: win.winfo_exists() and done(r)))(fn()),
+                             daemon=True).start()
 
         def load_models():
             status.configure(text="Lade Modelle …", foreground="#555")
@@ -1238,30 +1155,31 @@ class App:
             in_thread(fetch, done)
         ttk.Button(frm, text="Modelle laden", command=load_models).grid(row=4, column=2, padx=(6, 0))
 
-        ttk.Checkbutton(frm, text="Bilder/Fotos zur Bewertung mitsenden", variable=bilder).grid(
-            row=5, column=1, columnspan=2, sticky="w", pady=(8, 0))
-        ttk.Checkbutton(frm, text="Text vorher anonymisieren (Namen, IBAN … → Platzhalter)",
-                        variable=anon).grid(row=6, column=1, columnspan=2, sticky="w")
-        warn = ttk.Label(frm, text="", foreground="#c62828", wraplength=520, justify="left")
-        warn.grid(row=7, column=0, columnspan=3, sticky="w", pady=(8, 0))
-        status.grid(row=8, column=0, columnspan=3, sticky="w", pady=(6, 0))
+        last_extern = [settings.is_external(s.url)]
 
-        last_extern = [None]
-
-        def on_url(*_):
+        def update_warn(*_):
             extern = settings.is_external(url.get())
             if extern != last_extern[0]:  # Voreinstellungen passend zur Art des Servers
                 last_extern[0] = extern
                 if extern:
                     bilder.set(False)
                     anon.set(True)
+            if not extern or not url.get().strip():
+                warn.configure(text="")
+                return
             host = settings.LlmSettings(url=url.get()).host
-            warn.configure(text=(f"⚠ Externer Server ({host}): Inhalte verlassen deinen PC bzw. dein Netz. "
-                                 "Nur nutzen, wenn du dem Anbieter vertraust (z. B. Firmenvertrag/AV-Vertrag).")
-                           if extern else "")
-        url.trace_add("write", on_url)
-        last_extern[0] = settings.is_external(s.url)
-        on_url()
+            parts = [f"⚠ Externer Server ({host}): Inhalte verlassen deinen PC bzw. dein Netz – nur mit einem Anbieter, "
+                     "dem du vertraust (z. B. Firmenvertrag/AV-Vertrag)."]
+            if namen.get():
+                parts.append("Für die Namenssuche gehen Namen, die der Datenwächter noch nicht kennt, an den Server.")
+            if bilder.get():
+                parts.append("Fotos und Screenshots gehen unverändert an den Server.")
+            if not anon.get():
+                parts.append("Texte werden ohne Anonymisierung gesendet.")
+            warn.configure(text=" ".join(parts))
+        for var in (url, namen, bilder, anon):
+            var.trace_add("write", update_warn)
+        update_warn()
 
         def test():
             status.configure(text="Teste Verbindung …", foreground="#555")
@@ -1269,23 +1187,23 @@ class App:
                       lambda r: status.configure(text=r[1], foreground="#2e7d32" if r[0] else "#c62828"))
 
         def save():
-            p = settings.save_llm(current())
+            new = current()
+            p = settings.save_llm(new)
             llm._cache.clear()
+            self.use_ki.set(new.ki_namen)
             self.llm_text.set("Inhalts-Check mit KI (Server wird gesucht …)")
             threading.Thread(target=self._detect_llm, daemon=True).start()
             status.configure(text=f"Gespeichert in {p}", foreground="#2e7d32")
             win.after(700, win.destroy)
 
         btns = ttk.Frame(frm)
-        btns.grid(row=11, column=0, columnspan=3, sticky="w", pady=(12, 0))
+        btns.grid(row=8, column=0, columnspan=3, sticky="w", pady=(14, 0))
         ttk.Button(btns, text="Verbindung testen", command=test).pack(side="left")
         ttk.Button(btns, text="Speichern", command=save).pack(side="left", padx=6)
         ttk.Button(btns, text="Abbrechen", command=win.destroy).pack(side="left")
-        lokal_refresh()
-        win.widgets = {"lokal_var": lokal_var, "lokal_status": lokal_status, "lokal_pull": lokal_pull, "bar": bar,
-                       "lokal_refresh": lokal_refresh,
-                       "art": art, "url": url, "token": token, "modell": modell, "bilder": bilder, "anon": anon,
-                       "status": status, "test": test, "save": save, "load_models": load_models, "warn": warn}
+        win.widgets = {"aktiv": aktiv, "url": url, "token": token, "modell": modell, "bilder": bilder, "anon": anon,
+                       "namen": namen, "status": status, "test": test, "save": save, "load_models": load_models,
+                       "warn": warn}
 
     def _show_mapping(self) -> None:
         win = tk.Toplevel(self.root)

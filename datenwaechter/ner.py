@@ -1,11 +1,11 @@
 """KI-Erkennung von Namen, Adressen & Co. – auch ohne „Herr/Frau“ davor.
 
 Regeln finden Strukturiertes (IBAN, Schlüssel …). Namen wie „Mia Schneider“ ohne Anrede erkennt nur ein
-Sprachmodell. Zwei Wege, beide lokal:
-1. GLiNER: kleines Spezialmodell (~600 MB) in Python –  pip install "datenwaechter[ki]"
-2. Der eingestellte KI-Server (lokales Modell über Ollama oder eigener Server im eigenen Netz).
-   Funktioniert auch im fertigen Windows-Programm. Externe Server werden dafür NICHT benutzt –
-   sonst müssten genau die Daten verschickt werden, die geschützt werden sollen.
+Sprachmodell. Zwei Wege:
+1. Der eingestellte KI-Server (OpenAI-kompatible API mit Adresse + Token) – funktioniert auch im fertigen
+   Windows-Programm. Einschalten unter „KI-Server“ → „Namen ohne Herr/Frau finden“. Bereits erkannte Angaben
+   (IBAN, Telefon …) werden vorher durch Platzhalter ersetzt, wenn „vor dem Senden anonymisieren“ aktiv ist.
+2. GLiNER: kleines Spezialmodell (~600 MB), läuft ohne Server in Python –  pip install "datenwaechter[ki]"
 """
 
 from __future__ import annotations
@@ -38,21 +38,20 @@ def gliner_available() -> bool:
         return False
 
 
-def _local_llm():
+def _llm():
     from . import llm
-    b = llm.backend()
-    return b if b is not None and not b.extern else None
+    return llm.backend()
 
 
 def available() -> bool:
-    return gliner_available() or _local_llm() is not None
+    return gliner_available() or _llm() is not None
 
 
 def source() -> str | None:
     """Wer sucht die Namen? Für die Anzeige im Fenster."""
     if gliner_available():
         return "GLiNER"
-    b = _local_llm()
+    b = _llm()
     return b.label.partition(":")[2] if b else None
 
 
@@ -91,10 +90,10 @@ _LLM_ARTEN = {"namen": ("PERSON", "Name einer Person", MITTEL), "adressen": ("AD
 
 
 def _detect_llm(text: str) -> list[Finding]:
-    """Fragt den lokalen KI-Server und sucht die genannten Angaben im Text (die KI liefert keine Positionen)."""
+    """Fragt den KI-Server und sucht die genannten Angaben im Text (die KI liefert keine Positionen)."""
     import re as _re
     from . import llm
-    b = _local_llm()
+    b = _llm()
     if b is None or not text.strip():
         return []
     try:
@@ -106,6 +105,8 @@ def _detect_llm(text: str) -> list[Finding]:
         for value in data.get(key) or []:
             value = str(value).strip()
             if len(value) < 3 or len(value) > 120:
+                continue
+            if _re.fullmatch(r"\[[A-Z_]+_\d+\]", value):   # Platzhalter = schon gefunden
                 continue
             for m in _re.finditer(_re.escape(value), text):   # nur, was wirklich im Text steht
                 out.append(Finding(kind, label, m.group(0), m.start(), m.end(), sev, "ki", 0.8))
