@@ -1142,7 +1142,10 @@ class App:
         def gone(e):
             if e.widget is pop:
                 self._alerts = max(0, self._alerts - 1)
-                self._refresh()
+                try:
+                    self._refresh()
+                except tk.TclError:   # Programm wird gerade beendet
+                    pass
         pop.bind("<Destroy>", gone)
         self._last_popup = pop
         return pop

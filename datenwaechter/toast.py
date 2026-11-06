@@ -19,12 +19,14 @@ _IMAGES: dict = {}   # Tk-Bilder einmal anlegen und behalten (nie in fremden Thr
 
 
 def _image(master, state: str, size: int) -> tk.PhotoImage:
-    key = (str(master), state, size)
-    if key not in _IMAGES:
+    # je Tk-Interpreter zwischenspeichern (ein neues Fenster-Programm im selben Prozess hat einen neuen)
+    cache = _IMAGES.setdefault(id(master.tk), {})
+    key = (state, size)
+    if key not in cache:
         buf = io.BytesIO()
         shield(state, size).save(buf, "PNG")
-        _IMAGES[key] = tk.PhotoImage(master=master, data=base64.b64encode(buf.getvalue()).decode())
-    return _IMAGES[key]
+        cache[key] = tk.PhotoImage(master=master, data=base64.b64encode(buf.getvalue()).decode())
+    return cache[key]
 
 WIDTH = 368
 MARGIN = 14
@@ -66,8 +68,14 @@ class TrayPopup(tk.Toplevel):
     def __init__(self, master, *, dark: bool, font: str, level: str, title: str, summary: str = "",
                  topic: str = "", status: str = "", actions=(), on_details=None, timeout_ms: int | None = None,
                  on_timeout=None, on_close=None):
-        if TrayPopup.current is not None and TrayPopup.current.winfo_exists():
-            TrayPopup.current.close(silent=True)
+        alt = TrayPopup.current
+        if alt is not None:
+            try:
+                if alt.winfo_exists():
+                    alt.close(silent=True)
+            except tk.TclError:   # gehört zu einem schon beendeten Fenster-Programm
+                pass
+            TrayPopup.current = None
         super().__init__(master)
         TrayPopup.current = self
         c = FARBEN["dunkel" if dark else "hell"]

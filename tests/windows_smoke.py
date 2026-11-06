@@ -380,6 +380,7 @@ def t_dialog_schutz():
     (ordner / "Vertrag.txt").write_text(SECRET + " Geboren am 12.03.1985, Mia Schneider.", encoding="utf-8")
     (ordner / "Einkauf.txt").write_text("Milch, Brot, Äpfel", encoding="utf-8")
     os.environ["DATENWAECHTER_SCHUTZ_APPS"] = "python.exe"
+    TrayPopup.current = None
     app = App(start_hidden=True)
     app.watch.set(False)
     out = {"schritte": []}
@@ -410,7 +411,7 @@ def t_dialog_schutz():
 
     def popup_knopf(name):
         pop = TrayPopup.current
-        if pop is None or name not in pop.buttons:
+        if pop is None or not pop.winfo_exists() or name not in pop.buttons:
             return f"keine Rückfrage mit „{name}“ (Popup: {pop.buttons.keys() if pop else None})"
         out["schritte"].append(f"Rückfrage: {pop.title() if hasattr(pop, 'title') else ''}")
         pop.buttons[name].event_generate("<Button-1>")
@@ -517,6 +518,7 @@ def t_drop_schutz():
     datei.write_text(SECRET, encoding="utf-8")
     os.environ["DATENWAECHTER_SCHUTZ_APPS"] = "notepad.exe"
     os.environ["DATENWAECHTER_DRAG_QUELLEN"] = "python.exe"
+    TrayPopup.current = None
     app = App(start_hidden=True)
     app.watch.set(False)
     out = {"ereignisse": []}
@@ -564,7 +566,7 @@ def t_drop_schutz():
 
     def pruefen():
         pop = TrayPopup.current
-        out["popup"] = bool(pop and "Geschwärzt übergeben" in pop.buttons)
+        out["popup"] = bool(pop and pop.winfo_exists() and "Geschwärzt übergeben" in pop.buttons)
         if out["popup"]:
             pop.buttons["Geschwärzt übergeben"].event_generate("<Button-1>")
         app.root.after(2000, ende)
