@@ -24,24 +24,19 @@ KEYRING_USER = "llm-token"
 
 # Vorschläge für das Eingabefeld (Anzeige, Basis-URL)
 URL_VORLAGEN = [
-    ("Datenwächter KI", "https://ki.firma.example/v1"),
-    ("LM Studio (lokal)", "http://localhost:1234/v1"),
-    ("Ollama, OpenAI-Modus (lokal)", "http://localhost:11434/v1"),
-    ("vLLM / LocalAI (lokal)", "http://localhost:8000/v1"),
     ("OpenAI", "https://api.openai.com/v1"),
     ("OpenRouter", "https://openrouter.ai/api/v1"),
     ("Mistral", "https://api.mistral.ai/v1"),
+    ("LM Studio (lokal)", "http://localhost:1234/v1"),
+    ("Ollama, OpenAI-Modus (lokal)", "http://localhost:11434/v1"),
+    ("vLLM / LocalAI (lokal)", "http://localhost:8000/v1"),
 ]
 
-# Feste Angaben je Vorlage: Standardmodell, Zusatzangaben für jede Anfrage (nur mit diesem Modell), Schlüssel Pflicht
-VORLAGE_DETAILS = {
-    "https://ki.firma.example/v1": {
-        "name": "Datenwächter KI",
-        "modell": "qwen3-chat",
-        "extra": {"chat_template_kwargs": {"enable_thinking": False}},   # ohne „Nachdenken“: 1 s statt mehrerer
-        "schluessel": True,
-    },
-}
+# Feste Angaben für einen eigenen Dienst (Basis-URL → Angaben), z. B.:
+#   "https://ki.example.org/v1": {"name": "Mein Dienst", "modell": "qwen3-…",
+#                                 "extra": {"chat_template_kwargs": {"enable_thinking": False}}, "schluessel": True}
+# modell = Standardmodell, extra = Zusatzangaben je Anfrage (nur für dieses Modell), schluessel = Token ist Pflicht
+VORLAGE_DETAILS: dict[str, dict] = {}
 
 
 @dataclass
@@ -240,3 +235,40 @@ def modell_nutzen_speichern(an: bool) -> None:
     data["lokales_modell"] = bool(an)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+# --------------------------------------------------------------------------- Kleine Schalter
+
+def _schalter(name: str, standard: bool) -> bool:
+    try:
+        return bool(json.loads(path().read_text(encoding="utf-8")).get(name, standard))
+    except (OSError, ValueError, AttributeError):
+        return standard
+
+
+def _schalter_speichern(name: str, an: bool) -> None:
+    p = path()
+    try:
+        data = json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+    except (OSError, ValueError):
+        data = {}
+    data[name] = bool(an)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def inhalts_check_ki() -> bool:
+    """Inhalts-Check („Du lädst gerade …“) mit dem KI-Server, sobald einer eingerichtet ist (Standard: ja)."""
+    return _schalter("inhalts_check_ki", True)
+
+
+def inhalts_check_ki_speichern(an: bool) -> None:
+    _schalter_speichern("inhalts_check_ki", an)
+
+
+def ki_server_schalten(an: bool) -> LlmSettings:
+    """KI-Server an/aus (z. B. aus dem Tray-Menü) – Adresse, Token und Modell bleiben gespeichert."""
+    s = load_llm()
+    s.typ = "openai" if an else "aus"
+    save_llm(s)
+    return s

@@ -8,7 +8,6 @@ const MAX_AKTION = 12000;
 const TIMEOUT = 120000;
 
 export const VORLAGEN = [
-  ["Datenwächter KI", "https://ki.firma.example/v1"],
   ["OpenAI", "https://api.openai.com/v1"],
   ["OpenRouter", "https://openrouter.ai/api/v1"],
   ["Mistral", "https://api.mistral.ai/v1"],
@@ -16,10 +15,8 @@ export const VORLAGEN = [
 ];
 
 // Feste Angaben je Vorlage (wie settings.VORLAGE_DETAILS): Standardmodell, Zusatzangaben nur für dieses Modell, Schlüssel Pflicht
-const VORLAGE_DETAILS = {
-  "https://ki.firma.example/v1": { name: "Datenwächter KI", modell: "qwen3-chat",
-    extra: { chat_template_kwargs: { enable_thinking: false } }, schluessel: true },
-};
+// Format: { "https://ki.example.org/v1": { name, modell, extra: { chat_template_kwargs: { enable_thinking: false } }, schluessel: true } }
+const VORLAGE_DETAILS = {};
 export const vorlage = (url) => VORLAGE_DETAILS[baseUrl(url)] || {};
 
 const STANDARD = { aktiv: false, url: "", token: "", modell: "", anonymisieren: null, bilder: null, thema: true, namen: false };
@@ -98,7 +95,7 @@ async function anfrage(s, pfad, body, timeout = TIMEOUT) {
 }
 
 // Gateways wie LiteLLM listen auch Sprach-, Vorlese-, Embedding- und OCR-Modelle – die können keinen Chat (wie llm.py)
-const KEIN_CHAT = /(?:^|[/_.:-])(?:stt|tts|whisper|embed\w*|embedding\w*|ocr|rerank\w*|moderation|dall-e|image|transcri\w*|speech|audio)(?:$|[/_.:-])|\*/i;
+const KEIN_CHAT = /(?:^|[/_.:-])(?:stt|tts|whisper|embed\w*|embedding\w*|ocr|rerank\w*|moderation|dall-e|image|transcri\w*|speech|audio|realtime|instruct|davinci|babbage)(?:$|[/_.:-])|\*/i;
 export const chatZuerst = (liste) => [...liste.filter((m) => !KEIN_CHAT.test(m)), ...liste.filter((m) => KEIN_CHAT.test(m))];
 
 export async function modelle(s) {

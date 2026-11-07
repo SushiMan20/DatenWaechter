@@ -73,7 +73,7 @@ class LlmError(Exception):
 
 # Gateways wie LiteLLM listen auch Sprach-, Vorlese-, Embedding- und OCR-Modelle – die können keinen Chat
 _KEIN_CHAT = re.compile(r"(?i)(?:^|[/_.:-])(?:stt|tts|whisper|embed\w*|embedding\w*|ocr|rerank\w*|moderation|dall-e"
-                        r"|image|transcri\w*|speech|audio)(?:$|[/_.:-])|\*")
+                        r"|image|transcri\w*|speech|audio|realtime|instruct|davinci|babbage)(?:$|[/_.:-])|\*")
 
 
 def chat_zuerst(models: list[str]) -> list[str]:

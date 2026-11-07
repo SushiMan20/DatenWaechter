@@ -1,5 +1,12 @@
 # Änderungen
 
+## 1.5.0
+
+- **KI-Server an/aus im Tray-Menü:** „KI-Server benutzen“ schaltet alle Anfragen an den KI-Server ab (Inhalts-Check, Namenssuche, KI-Aktionen). Adresse, Token und Modell bleiben gespeichert.
+- Der Haken **„Inhalts-Check mit KI“** bleibt jetzt auch nach einem Neustart so, wie du ihn gesetzt hast.
+- Kein fest eingebauter KI-Dienst mehr: Adresse (z. B. `https://api.openai.com/v1`) und Token trägst du selbst ein; OpenAI steht oben in der Liste. Die Vorlage „Datenwächter KI“ aus 1.4.1/1.4.2 ist wieder entfernt.
+- Modelle, die keinen Chat können (Realtime, Instruct, ältere Completion-Modelle), werden nicht mehr als Standard gewählt.
+
 ## 1.4.2
 
 - „Datenwächter KI“ nutzt standardmäßig **qwen3-chat ohne Nachdenken**: Inhalts-Check in rund 2 s, Namenssuche und Umformulieren in unter 1 s; kann auch Bilder lesen.

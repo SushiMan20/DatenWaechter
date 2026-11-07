@@ -28,7 +28,8 @@ def _safe(text: str) -> str:
 
 
 class Tray:
-    def __init__(self, send: Callable[[str], None], is_active: Callable[[], bool], summary: Callable[[], str]):
+    def __init__(self, send: Callable[[str], None], is_active: Callable[[], bool], summary: Callable[[], str],
+                 ki_status: Callable[[], bool | None] = lambda: None):
         self.icon = None
         self.state = "aktiv"
         self.error: str | None = None
@@ -47,6 +48,8 @@ class Tray:
             Item("Datenwächter öffnen", cmd("show"), default=True),
             Item("Schutz aktiv", cmd("toggle"), checked=lambda item: is_active()),
             Item("15 Minuten pausieren", cmd("pause15"), visible=lambda item: is_active()),
+            Item("KI-Server benutzen", cmd("ki"), checked=lambda item: bool(ki_status()),
+                 visible=lambda item: ki_status() is not None),   # nur, wenn ein Server eingetragen ist
             Item("Datei prüfen …", cmd("pick")),
             Item("KI-Antwort zurückübersetzen", cmd("restore")),
             Item("Einstellungen …", cmd("settings")),

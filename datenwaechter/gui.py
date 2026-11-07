@@ -149,7 +149,9 @@ class App:
         self._modell_stand: dict = {}   # Download des lokalen KI-Modells: {"n", "gesamt", "halt", "fehler", "fertig"}
 
         self._build()
-        self.tray = Tray(lambda name: self.results.put(("ui", name)), self.watch.get, self.stats.summary)
+        self._ki_status = self._ki_server_status()
+        self.tray = Tray(lambda name: self.results.put(("ui", name)), self.watch.get, self.stats.summary,
+                         lambda: self._ki_status)
         self.root.protocol("WM_DELETE_WINDOW", self._close)
         self._start_hotkey()
         self._start_auswahl()
@@ -263,7 +265,8 @@ class App:
         frm.pack(fill="both", expand=True)
         ttk.Checkbutton(frm, text="Sicherer Modus (Zwischenablage sofort anonymisieren)", variable=self.safe).pack(
             anchor="w", pady=2)
-        self.llm_box = ttk.Checkbutton(frm, textvariable=self.llm_text, variable=self.use_llm)
+        self.llm_box = ttk.Checkbutton(frm, textvariable=self.llm_text, variable=self.use_llm,
+                                       command=lambda: settings.inhalts_check_ki_speichern(self.use_llm.get()))
         self.llm_box.pack(anchor="w", pady=2)
         if not self.llm_ok:
             self.llm_box.state(["disabled"])
@@ -492,9 +495,30 @@ class App:
             "settings": lambda: (self._show(), self._settings_window()), "pause15": self._pause, "quit": self._quit,
             "toggle": lambda: (self.watch.set(not self.watch.get()), self._toggle()),
             "autostart": lambda: (autostart.set_enabled(not autostart.is_enabled()), self._refresh()),
+            "ki": self._ki_umschalten,
         }
         if name in actions:
             actions[name]()
+
+    @staticmethod
+    def _ki_server_status() -> bool | None:
+        """None = kein KI-Server eingetragen, sonst an/aus."""
+        s = settings.load_llm()
+        return (s.typ != "aus") if s.base_url else None
+
+    def _ki_umschalten(self) -> None:
+        an = not self._ki_status
+        settings.ki_server_schalten(an)
+        self._ki_status = an
+        llm._cache.clear()
+        self.llm_text.set("Inhalts-Check mit KI (Server wird gesucht …)" if an else "Inhalts-Check mit KI (KI-Server ausgeschaltet)")
+        threading.Thread(target=self._detect_llm, daemon=True).start()
+        self._status("KI-Server eingeschaltet" if an else "KI-Server ausgeschaltet – nichts geht mehr an den Server")
+        if self.tray.icon is not None:
+            try:
+                self.tray.icon.update_menu()
+            except Exception:  # noqa: BLE001 – Menü aktualisiert sich spätestens beim nächsten Öffnen
+                pass
 
     # ------------------------------------------------------------------ KI-Aktionen per Tastenkürzel
     def _start_hotkey(self) -> None:
@@ -1133,10 +1157,11 @@ class App:
                 if item[1]:
                     label, extern = item[1]
                     self.llm_text.set(f"Inhalts-Check mit KI ({label.partition(':')[2]})" + (" – extern" if extern else ""))
-                    self.use_llm.set(True)
+                    self.use_llm.set(settings.inhalts_check_ki())
                 else:
                     self.use_llm.set(False)
-                    self.llm_text.set("Inhalts-Check mit KI (kein KI-Server eingerichtet)")
+                    self.llm_text.set("Inhalts-Check mit KI (KI-Server ausgeschaltet)" if self._ki_status is False
+                                      else "Inhalts-Check mit KI (kein KI-Server eingerichtet)")
                 if self.llm_box is not None:
                     self.llm_box.state(["!disabled"] if self.llm_ok else ["disabled"])
                 continue
@@ -1531,6 +1556,7 @@ class App:
             new = current()
             p = settings.save_llm(new)
             llm._cache.clear()
+            self._ki_status = self._ki_server_status()
             self.use_ki.set(new.ki_namen)
             self.llm_text.set("Inhalts-Check mit KI (Server wird gesucht …)")
             threading.Thread(target=self._detect_llm, daemon=True).start()

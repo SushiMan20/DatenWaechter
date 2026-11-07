@@ -169,6 +169,9 @@ Du legst fest, was die KI prüfen soll:
 - **Fotos und Screenshots bewerten**, z. B. „Foto eines Ausweises“.
 - **Vor dem Senden anonymisieren:** IBAN, Telefon und bekannte Namen gehen nur als Platzhalter raus.
 
+Ein- und ausschalten geht jederzeit im Tray-Menü mit **„KI-Server benutzen“**: Ausgeschaltet geht nichts mehr an den
+Server, Adresse und Token bleiben gespeichert.
+
 Bei einem **externen Server** sagt der Dialog genau, was deinen Rechner verlässt. Standardmäßig wird vorher
 anonymisiert, und Fotos werden nicht gesendet. Das Token liegt in der Windows-Anmeldeinformationsverwaltung. Für
 Firmen-Rollouts gibt es zusätzlich die Umgebungsvariablen `DATENWAECHTER_LLM_URL`, `DATENWAECHTER_LLM_TOKEN` und
