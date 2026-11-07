@@ -21,18 +21,16 @@
 
 - **KI-Server an/aus im Tray-Menü:** „KI-Server benutzen“ schaltet alle Anfragen an den KI-Server ab (Inhalts-Check, Namenssuche, KI-Aktionen). Adresse, Token und Modell bleiben gespeichert.
 - Der Haken **„Inhalts-Check mit KI“** bleibt jetzt auch nach einem Neustart so, wie du ihn gesetzt hast.
-- Kein fest eingebauter KI-Dienst mehr: Adresse (z. B. `https://api.openai.com/v1`) und Token trägst du selbst ein; OpenAI steht oben in der Liste. Die Vorlage „Datenwächter KI“ aus 1.4.1/1.4.2 ist wieder entfernt.
+- Kein fest eingebauter KI-Dienst: Adresse und Token deines KI-Servers trägst du selbst ein.
 - Modelle, die keinen Chat können (Realtime, Instruct, ältere Completion-Modelle), werden nicht mehr als Standard gewählt.
 
 ## 1.4.2
 
-- „Datenwächter KI“ nutzt standardmäßig **qwen3-chat ohne Nachdenken**: Inhalts-Check in rund 2 s, Namenssuche und Umformulieren in unter 1 s; kann auch Bilder lesen.
-- Für „Datenwächter KI“ ist ein **Schlüssel Pflicht**: ohne Schlüssel geht nichts raus, „Verbindung testen“ sagt das klar.
+- Feste Angaben je KI-Dienst möglich: Standardmodell, Zusatzangaben (z. B. „ohne Nachdenken“ für schnellere Antworten) und Schlüssel als Pflicht – ohne Schlüssel geht dann nichts raus.
 - Antworten von Modellen, die „laut nachdenken“ (`<think>…</think>`), werden bereinigt – auch bei anderen Servern.
 
 ## 1.4.1
 
-- Vorlage **„Datenwächter KI“** (`https://ki.firma.example/v1`) im Windows-Programm und in der Handy-App: Adresse auswählen, Schlüssel einfügen.
 - Server wie LiteLLM listen auch Sprach-, Vorlese-, Embedding- und OCR-Modelle. Ist kein Modell eingestellt, nimmt der Datenwächter jetzt das erste Chat-Modell statt z. B. „stt“.
 
 ## 1.4.0
