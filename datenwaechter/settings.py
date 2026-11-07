@@ -14,6 +14,7 @@ from __future__ import annotations
 import ipaddress
 import json
 import os
+import re
 import sys
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
@@ -52,11 +53,7 @@ class LlmSettings:
 
     @property
     def base_url(self) -> str:
-        u = self.url.strip().rstrip("/")
-        for suffix in ("/chat/completions", "/completions", "/models"):
-            if u.endswith(suffix):
-                u = u[: -len(suffix)]
-        return u
+        return normalize_url(self.url)
 
     @property
     def host(self) -> str:
@@ -79,9 +76,34 @@ class LlmSettings:
         return self.extern if self.anonymisieren is None else self.anonymisieren
 
 
+_LOKAL = re.compile(r"(?i)^(?:localhost|127\.|10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.|\[?::1\]?$|[^./]+\.(?:local|lan)$|[^.]+$)")   # ohne Punkt = Rechner im eigenen Netz
+
+
+def normalize_url(url: str) -> str:
+    """Adresse so, wie sie eingetippt wurde → saubere Basis-URL.
+
+    „https:\\ki.firma.de\\v1“ (Backslashes wie im Explorer), „ki.firma.de/v1“ (ohne https://) und
+    „…/v1/chat/completions“ (ganze Endpunkt-Adresse) werden zu „https://ki.firma.de/v1“.
+    """
+    u = (url or "").strip().replace("\\", "/")
+    if not u:
+        return ""
+    m = re.match(r"(?i)^(https?):/*", u)
+    if m:
+        u = f"{m.group(1).lower()}://{u[m.end():]}"
+    else:
+        rechner = re.split(r"[/:]", u, maxsplit=1)[0]
+        u = ("http://" if _LOKAL.match(rechner) else "https://") + u
+    u = u.rstrip("/")
+    for suffix in ("/chat/completions", "/completions", "/models"):
+        if u.endswith(suffix):
+            u = u[: -len(suffix)]
+    return u
+
+
 def is_external(url: str) -> bool:
     """True, wenn der Server (vermutlich) außerhalb des eigenen Rechners/Netzes liegt."""
-    host = (urlparse(url).hostname or "").lower()
+    host = (urlparse(normalize_url(url)).hostname or "").lower()
     if not host:
         return False
     if host == "localhost" or host.endswith((".local", ".lan", ".internal", ".intranet", ".home.arpa", ".localhost")):
@@ -129,6 +151,8 @@ def load_llm() -> LlmSettings:
         for k, v in data.items():
             if k in known:
                 setattr(s, k, v)
+        if "\\" in s.url:   # früher mit Backslashes gespeichert: Server galt als „lokal“ – Vorgaben neu bestimmen
+            s.url, s.anonymisieren, s.bilder_senden = normalize_url(s.url), None, None
         if data.get("token_im_schluesselbund") and (kr := _keyring()):
             try:
                 s.token = kr.get_password(KEYRING_SERVICE, KEYRING_USER) or ""

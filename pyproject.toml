@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "datenwaechter"
-version = "1.5.0"
+version = "1.5.1"
 description = "Lokaler Scanner, der persönliche und geheime Daten vor dem Hochladen in KI-Chats erkennt und anonymisiert."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -21,6 +21,8 @@ classifiers = [
     "Topic :: Security",
 ]
 dependencies = [
+    "truststore>=0.9",   # HTTPS-Zertifikate wie im Browser prüfen (Windows-Zertifikatspeicher)
+    "certifi",
     "pypdf>=4.0",
     "pypdfium2>=4.30",
     "python-docx>=1.1",

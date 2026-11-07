@@ -1,5 +1,11 @@
 # Änderungen
 
+## 1.5.1
+
+- **KI-Server-Adresse wird aufgeräumt:** `https:\\server\v1` (Backslashes), `server/v1` (ohne https://) oder die ganze Endpunkt-Adresse funktionieren jetzt. Vorher hieß es „no host given“, und der Server galt fälschlich als lokal (Fotos an, Anonymisieren aus). Gespeicherte Einstellungen mit Backslashes werden beim Start korrigiert.
+- **HTTPS wie im Browser:** Zertifikate prüft jetzt Windows selbst. Behebt „CERTIFICATE_VERIFY_FAILED … unable to get issuer certificate“ bei Servern mit neuen Let's-Encrypt-Zertifikaten und gilt auch für Firmen-Zertifikate.
+- Klare Meldung bei ungültiger Adresse; „Verbindung testen“ nennt das verwendete Modell.
+
 ## 1.5.0
 
 - **KI-Server an/aus im Tray-Menü:** „KI-Server benutzen“ schaltet alle Anfragen an den KI-Server ab (Inhalts-Check, Namenssuche, KI-Aktionen). Adresse, Token und Modell bleiben gespeichert.

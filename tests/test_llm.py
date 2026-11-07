@@ -1,6 +1,7 @@
 """Eigener OpenAI-kompatibler KI-Server (URL + Token) für den Inhalts-Check."""
 
 import json
+import os
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
@@ -239,3 +240,45 @@ def test_ki_server_aus_und_wieder_an_behaelt_adresse():
     settings.ki_server_schalten(True)
     s = settings.load_llm()
     assert s.typ == "openai" and s.token == "sk-test"
+
+
+@pytest.mark.parametrize("eingabe, sauber, extern", [
+    (r"https:\\ki.example.org\v1", "https://ki.example.org/v1", True),     # Backslashes wie im Explorer
+    ("ki.example.org/v1/", "https://ki.example.org/v1", True),             # ohne https://
+    ("HTTPS:/ki.example.org/v1/chat/completions", "https://ki.example.org/v1", True),
+    ("localhost:1234/v1", "http://localhost:1234/v1", False),
+    ("192.168.1.20:8000/v1", "http://192.168.1.20:8000/v1", False),
+    ("ki-server:8000/v1", "http://ki-server:8000/v1", False),               # Rechnername ohne Punkt = eigenes Netz
+])
+def test_adresse_wird_aufgeraeumt(eingabe, sauber, extern):
+    s = LlmSettings(typ="openai", url=eingabe)
+    assert s.base_url == sauber and s.extern is extern
+    assert s.anonymize_first is extern and s.send_images is not extern, "externe Server: anonymisieren, keine Fotos"
+
+
+def test_alte_adresse_mit_backslashes_bekommt_sichere_vorgaben():
+    """Mit „https:\\server\\v1“ galt der Server früher als lokal: Fotos an, Anonymisieren aus – das wird zurückgesetzt."""
+    p = settings.path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps({"llm": {"typ": "openai", "url": "https:\\\\ki.example.org\\v1",
+                                     "anonymisieren": False, "bilder_senden": True}}), encoding="utf-8")
+    s = settings.load_llm()
+    assert s.url == "https://ki.example.org/v1" and s.anonymize_first and not s.send_images
+
+
+def test_ungueltige_adresse_klare_meldung():
+    ok, meldung = llm.test_connection(LlmSettings(typ="openai", url="https://", token="t"))
+    assert not ok and "ungültig" in meldung
+
+
+def test_https_zertifikate_wie_im_browser():
+    import ssl
+    from datenwaechter import netz
+    assert isinstance(netz.ssl_kontext(), ssl.SSLContext)
+
+
+@pytest.mark.skipif(not os.environ.get("DATENWAECHTER_NETZTEST"), reason="nur mit Internet (DATENWAECHTER_NETZTEST=1)")
+def test_https_echt():
+    from datenwaechter import netz
+    with netz.oeffnen("https://huggingface.co/api/models/Xenova/bert-base-multilingual-cased-ner-hrl", 30) as r:
+        assert r.status == 200

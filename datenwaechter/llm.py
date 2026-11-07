@@ -17,6 +17,7 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 
+from .netz import oeffnen
 from .settings import LlmSettings, load_llm
 
 OLLAMA_URL = os.environ.get("DATENWAECHTER_OLLAMA_URL", "http://127.0.0.1:11434")
@@ -98,7 +99,7 @@ def _request(url: str, body: dict | None = None, token: str = "", timeout: float
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(url, data=data, headers=headers, method="POST" if data else "GET")
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
+        with oeffnen(req, timeout) as r:
             return json.load(r)
     except urllib.error.HTTPError as e:
         detail = e.read()[:300].decode("utf-8", "replace")
@@ -185,6 +186,8 @@ class OpenAICompatible:
         return body
 
     def models(self) -> list[str]:
+        if not self.s.host:
+            raise LlmError("Die Adresse ist ungültig. Beispiel: https://ki.firma.de/v1")
         data = _request(f"{self.s.base_url}/models", token=self.s.token, timeout=3)
         return chat_zuerst([m.get("id", "") for m in data.get("data", []) if m.get("id")])
 
@@ -325,6 +328,7 @@ def test_connection(s: LlmSettings) -> tuple[bool, str]:
                 listed = b.models()
                 if not b.model and listed:
                     b.model = listed[0]
+                    b.label = f"openai:{b.model}@{s.host}"
                 if b.model and listed and b.model not in listed:
                     return False, f"Modell „{b.model}“ nicht gefunden. Verfügbar: {', '.join(listed[:8])}"
             except LlmError as e:

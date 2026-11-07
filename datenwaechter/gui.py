@@ -1523,6 +1523,13 @@ class App:
 
         last_extern = [settings.is_external(s.url)]
 
+        def url_aufraeumen(_e=None):   # „https:\\server\\v1“ → „https://server/v1“, sichtbar im Feld
+            sauber = settings.normalize_url(url.get())
+            if sauber and sauber != url.get().strip():
+                url.set(sauber)
+        url_box.bind("<FocusOut>", url_aufraeumen, add="+")
+        url_box.bind("<Return>", url_aufraeumen, add="+")
+
         def update_warn(*_):
             extern = settings.is_external(url.get())
             if extern != last_extern[0]:  # Voreinstellungen passend zur Art des Servers

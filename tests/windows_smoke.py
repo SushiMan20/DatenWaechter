@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import struct
 import subprocess
 import sys
@@ -680,7 +681,15 @@ def exe_tests(dist: Path) -> None:
                            encoding="utf-8", errors="replace", timeout=180, env=e)
         for wort in ("Wenzeslaus Brummer", "Kowalczyk", "Klagenfurt", "Pirna"):
             assert wort in r.stdout, (wort, r.stdout[-800:], r.stderr[-800:])
-        return "lokales KI-Modell läuft im fertigen Programm (onnxruntime): seltene Namen und Orte gefunden"
+        # HTTPS im fertigen Programm (Zertifikate über Windows): eine Modelldatei neu laden lassen
+        kopie = TMP / "modell-kopie"
+        shutil.copytree(ordner, kopie, dirs_exist_ok=True)
+        (kopie / "config.json").unlink()
+        r = subprocess.run([str(cli), "modell", "laden"], capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", timeout=300, env=dict(e, DATENWAECHTER_MODELL_ORDNER=str(kopie)))
+        assert r.returncode == 0 and (kopie / "config.json").exists(), (r.stdout[-500:], r.stderr[-800:])
+        return ("lokales KI-Modell läuft im fertigen Programm (onnxruntime): seltene Namen und Orte gefunden; "
+                "HTTPS-Download mit Windows-Zertifikatsprüfung klappt")
 
     run("Programm: Kommandozeile", t_help)
     run("Programm: Dateien prüfen und schwärzen", t_scan_files)

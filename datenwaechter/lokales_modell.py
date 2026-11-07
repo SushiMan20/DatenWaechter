@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Callable
 
 from .detectors import MITTEL, Finding
+from .netz import oeffnen
 
 MODELL = "Xenova/bert-base-multilingual-cased-ner-hrl"
 REVISION = "263e82c06569c8c2ac46238a7ae5107598934234"   # fester Stand – die Prüfsummen gehören dazu
@@ -122,7 +123,7 @@ def laden(fortschritt: Callable[[int, int], None] | None = None, abbrechen: thre
         if vorhanden:
             req.add_header("Range", f"bytes={vorhanden}-")
         try:
-            with urllib.request.urlopen(req, timeout=60) as r:
+            with oeffnen(req, 60) as r:
                 if vorhanden and r.status != 206:   # Server kann nicht fortsetzen: von vorn
                     vorhanden = 0
                 with open(teil, "ab" if vorhanden else "wb") as f:

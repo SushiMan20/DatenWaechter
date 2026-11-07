@@ -22,7 +22,7 @@ except Exception as e:  # noqa: BLE001
     print("Hinweis: UIAutomationCore nicht vorbereitet:", e)
 hidden = (["pystray._win32", "keyring.backends.Windows", "win32timezone", "win32clipboard", "win32con"]
           + collect_submodules("winrt") + collect_submodules("datenwaechter") + collect_submodules("comtypes")
-          + ["onnxruntime", "onnxruntime.capi._pybind_state", "tokenizers"])
+          + ["onnxruntime", "onnxruntime.capi._pybind_state", "tokenizers", "truststore", "certifi"])
 
 a = Analysis(
     [os.path.join(SPECPATH, "main.py")],

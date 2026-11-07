@@ -28,8 +28,15 @@ export function speichern(s) {
   try { localStorage.setItem(SPEICHER, JSON.stringify(s)); } catch { /* privater Modus */ }
 }
 
+// wie settings.normalize_url: „https:\\server\v1“, „server/v1“ (ohne https://) und „…/chat/completions“ werden sauber
+const LOKAL = /^(?:localhost|127\.|10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.|\[?::1\]?$|[^./]+\.(?:local|lan)$|[^.]+$)/i;
 export function baseUrl(url) {
-  let u = String(url || "").trim().replace(/\/+$/, "");
+  let u = String(url || "").trim().replace(/\\/g, "/");
+  if (!u) return "";
+  const m = /^(https?):\/*/i.exec(u);
+  if (m) u = `${m[1].toLowerCase()}://${u.slice(m[0].length)}`;
+  else u = (LOKAL.test(u.split(/[/:]/)[0]) ? "http://" : "https://") + u;
+  u = u.replace(/\/+$/, "");
   for (const suffix of ["/chat/completions", "/completions", "/models"]) if (u.endsWith(suffix)) u = u.slice(0, -suffix.length);
   return u;
 }

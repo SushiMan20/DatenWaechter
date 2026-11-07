@@ -47,6 +47,8 @@ jobs:
           "DATENWAECHTER_TEST_MODELL=${{ runner.temp }}\ki-modell" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: Tests (pytest)
+        env:
+          DATENWAECHTER_NETZTEST: "1"   # echter HTTPS-Abruf mit Windows-Zertifikatsprüfung
         run: pytest -q
 
       - name: Windows-Praxistest (Zwischenablage, OCR, Tastenkürzel, Benachrichtigung, Notepad, Registry)
