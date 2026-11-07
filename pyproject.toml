@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,6 +8,8 @@ version = "1.5.0"
 description = "Lokaler Scanner, der persönliche und geheime Daten vor dem Hochladen in KI-Chats erkennt und anonymisiert."
 readme = "README.md"
 requires-python = ">=3.10"
+license = "LicenseRef-Proprietary"
+license-files = ["LICENSE"]
 keywords = ["datenschutz", "dsgvo", "anonymisieren", "pii", "ki", "chatgpt", "claude", "ocr", "schwärzen"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",

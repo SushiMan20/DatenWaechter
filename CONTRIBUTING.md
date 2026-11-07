@@ -14,6 +14,9 @@ Bitte ein Issue mit:
 
 ## Code beitragen
 
+Der Datenwächter ist derzeit nicht quelloffen: Alle Rechte liegen bei portamedia (siehe [LICENSE](LICENSE)).
+Code-Beiträge bitte nur nach Absprache. Wer etwas einreicht, räumt portamedia daran die vollen Nutzungsrechte ein.
+
 ```bash
 pip install -e ".[dev]"
 pytest

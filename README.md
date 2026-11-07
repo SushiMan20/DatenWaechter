@@ -294,6 +294,11 @@ beider Fassungen Stelle für Stelle. Die Handy-App nutzt dieselbe `extension/det
 Fehler und Ideen bitte als Issue melden. Sicherheitslücken bitte nicht öffentlich, siehe [SECURITY.md](SECURITY.md).
 Wie du beiträgst, steht in [CONTRIBUTING.md](CONTRIBUTING.md), Änderungen im [CHANGELOG](CHANGELOG.md).
 
+## Lizenz
+
+© 2026 portamedia. Alle Rechte vorbehalten, siehe [LICENSE](LICENSE). Bestandteile Dritter stehen unter ihren
+eigenen Lizenzen (siehe unten).
+
 ## Danksagung
 
 [pypdfium2](https://github.com/pypdfium2-team/pypdfium2), [pypdf](https://github.com/py-pdf/pypdf),
