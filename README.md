@@ -34,7 +34,7 @@ eine anonymisierte Fassung hochladen, das Original verwenden oder abbrechen. Die
 - **Übersetzt KI-Antworten zurück:** Aus `[PERSON_1]` wird wieder der echte Name.
 - **Erkennt Namen auch ohne „Herr/Frau“** – ohne KI, mit einer Liste von rund 1.500 Vornamen und typischen Stellen wie „Liebe Mia,“, „Viele Grüße, Thomas“, „Name: …“ oder „Familie Schneider“. Ist ein Name einmal erkannt, wird er überall im Text markiert.
 - **Optional mit lokalem KI-Modell:** Ein Klick in den Einstellungen lädt einmalig ein Modell (180 MB), das danach ohne Internet auf deinem PC seltene Namen („Wenzeslaus Brummer“) und Orte findet.
-- **Optional mit eigenem KI-Server** (OpenAI-kompatible API mit Adresse und Token). Die KI bewertet dann Inhalte und Fotos genauer und findet auch seltene Namen.
+- **Optional mit eigenem, privatem KI-Server** (OpenAI-kompatible API mit Adresse und Token, z. B. im Firmennetz). Die KI bewertet dann Inhalte und Fotos genauer und findet auch seltene Namen.
 - **KI-Aktionen** wie „Umformulieren“, „Kürzen“, „Übersetzen“ oder eigene Anweisungen. Text markieren → **✨-Knopf** neben der Markierung (in jedem Windows-Programm), Strg+Alt+Leertaste oder im Browser Rechtsklick.
 - **Auch auf dem Handy:** In der Galerie, Mail- oder PDF-App auf *Teilen → Datenwächter* tippen, prüfen und schwärzen lassen, dann *Geschützt teilen → ChatGPT*. Die App läuft komplett auf dem Gerät, auch offline.
 
@@ -157,8 +157,17 @@ Vornamenliste kennt.
 
 Ohne KI arbeitet der Datenwächter mit Regeln und Stichwörtern. Mit einer KI wird er genauer. Unter *Einstellungen →
 KI-Server einrichten* trägst du die **API-Adresse** und dein **Token** ein. Das funktioniert mit jedem Dienst, der die
-OpenAI-Schnittstelle (`/v1/chat/completions`) spricht, z. B. OpenAI, Azure OpenAI, Mistral, OpenRouter, ein
-Firmen-Gateway, LM Studio oder vLLM.
+OpenAI-Schnittstelle (`/v1/chat/completions`) spricht, z. B. ein Firmen-Gateway (etwa LiteLLM), LM Studio, Ollama
+oder vLLM.
+
+> **Nur einen privaten Dienst eintragen.** Der Datenwächter soll verhindern, dass Daten bei öffentlichen KI-Diensten
+> landen. Sie für die Prüfung trotzdem an OpenAI, ChatGPT & Co. zu schicken, ergibt keinen Sinn. Geeignet ist ein
+> Dienst, der deine Datenschutz-Vorgaben erfüllt:
+> - ein eigener Server oder einer im Firmennetz, oder ein Anbieter mit Auftragsverarbeitungsvertrag (AVV),
+> - Verarbeitung in der EU, ohne Speicherung der Inhalte und ohne Training mit deinen Daten,
+> - Zugang nur mit Schlüssel.
+>
+> Auch dann gehen bekannte Angaben (IBAN, Telefon, erkannte Namen) standardmäßig nur als Platzhalter raus.
 
 <p align="center"><img src="docs/ki-server.png" alt="KI-Server einrichten: API-Adresse, Token, Modell" width="620"></p>
 
@@ -239,7 +248,7 @@ landen nicht im Repository).
 ## Grenzen und häufige Fragen
 
 - **Kann die Handy-App Uploads in der ChatGPT-App abfangen?** Nein. iOS und Android lassen keine App die Zwischenablage im Hintergrund lesen oder in fremde Apps eingreifen. Deshalb gilt auf dem Handy: erst *Teilen → Datenwächter*, dann *Geschützt teilen → ChatGPT*.
-- **Handy-App mit eigenem KI-Server?** Klappt, wenn der Server per **https** erreichbar ist und Zugriffe aus dem Browser erlaubt (CORS). Bei OpenAI, OpenRouter und Mistral ist das so. Für LM Studio, Ollama & Co. im Heimnetz brauchst du einen Reverse-Proxy mit https.
+- **Handy-App mit eigenem KI-Server?** Klappt, wenn der Server per **https** erreichbar ist und Zugriffe aus dem Browser erlaubt (CORS). Bei LiteLLM ist das der Standard. Für LM Studio, Ollama & Co. im Heimnetz brauchst du einen Reverse-Proxy mit https.
 - **Warum gibt es keinen Eintrag im Windows-Rechtsklick-Menü?** Fremde Programme lassen sich dort nicht erweitern. Deshalb erscheint beim Markieren der ✨-Knopf (abschaltbar unter *KI-Aktionen bearbeiten*), zusätzlich gibt es Strg+Alt+Leertaste.
 - **Wie zuverlässig ist die Namenserkennung?** Häufige Vornamen (deutsch und international) und Namen an typischen Stellen findet sie zuverlässig. Seltene Namen ohne Zusammenhang („Wenzeslaus“) erkennen das lokale KI-Modell oder der eigene KI-Server. Wörter, die auch Namen sein können („Ernst“, „Rose“, „August“, „Claude“), zählen nur mit Nachnamen oder in eindeutigem Zusammenhang. Die Liste steht in [`datenwaechter/vornamen.txt`](datenwaechter/vornamen.txt) und lässt sich erweitern.
 - **Desktop-Apps wie die ChatGPT- oder Claude-App?** Geschützt (Windows): Ziehst du eine Datei über das App-Fenster, legt sich eine Auffangfläche darüber – die Datei landet erst beim Datenwächter. Im Fenster „Datei öffnen“ der App hält er „Öffnen“, Enter und Doppelklick kurz an und prüft. Die App bekommt auf Wunsch nur die geschwärzte Fassung. Grenzen: Apps mit eigenem (nicht Windows-)Auswahlfenster; die App muss Einfügen von Dateien (Strg+V) können. Abschaltbar in den Einstellungen.
