@@ -1,5 +1,9 @@
 # Änderungen
 
+## 1.5.2
+
+- **Drop-Schutz verdeckt keine anderen Fenster mehr:** Die Auffangfläche liegt jetzt direkt über der KI-App statt über allem. Liegt ein Explorer- oder Browserfenster vor der Claude- oder ChatGPT-App, bleibt es davor, und Ziehen zwischen anderen Fenstern funktioniert normal. Verlässt die Maus die App, verschwindet die Fläche; zurück über der App erscheint sie wieder.
+
 ## 1.5.1
 
 - **KI-Server-Adresse wird aufgeräumt:** `https:\\server\v1` (Backslashes), `server/v1` (ohne https://) oder die ganze Endpunkt-Adresse funktionieren jetzt. Vorher hieß es „no host given“, und der Server galt fälschlich als lokal (Fotos an, Anonymisieren aus). Gespeicherte Einstellungen mit Backslashes werden beim Start korrigiert.

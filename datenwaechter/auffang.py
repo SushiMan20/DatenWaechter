@@ -6,6 +6,7 @@ geschwärzt). Halbdurchsichtig, damit man sieht, wohin man zieht.
 
 from __future__ import annotations
 
+import sys
 import tkinter as tk
 
 try:
@@ -19,7 +20,6 @@ class Auffangflaeche(tk.Toplevel):
         super().__init__(master)
         self.withdraw()
         self.overrideredirect(True)
-        self.attributes("-topmost", True)
         try:
             self.attributes("-alpha", 0.86)
         except tk.TclError:
@@ -41,13 +41,21 @@ class Auffangflaeche(tk.Toplevel):
                 w.drop_target_register(DND_FILES, DND_TEXT)
                 w.dnd_bind("<<Drop>>", self._drop)
 
-    def zeigen(self, rect: tuple[int, int, int, int], app: str) -> None:
+    def zeigen(self, rect: tuple[int, int, int, int], app: str, app_hwnd=None) -> None:
+        """Über das Fenster der KI-App legen – direkt darüber, nicht über Fenster, die vor der App liegen."""
         left, top, right, bottom = rect
         self.unter.configure(text=f"Der Datenwächter prüft die Datei,\nbevor {app} sie bekommt.")
         self.geometry(f"{max(200, right - left)}x{max(150, bottom - top)}+{left}+{top}")
         self.deiconify()
-        self.lift()
-        self.attributes("-topmost", True)
+        self.update_idletasks()
+        if sys.platform == "win32" and app_hwnd:
+            from . import schutz
+            try:
+                schutz.direkt_ueber(schutz.wurzel(self.winfo_id()), app_hwnd)
+            except Exception:  # noqa: BLE001 – im Zweifel normal anzeigen
+                self.lift()
+        else:
+            self.lift()
         self.aktiv = True
 
     def verstecken(self) -> None:

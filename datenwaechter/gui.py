@@ -563,7 +563,11 @@ class App:
             if self.auffang is None or not self.auffang.winfo_exists():
                 self.auffang = Auffangflaeche(self.root, font=FONT, on_drop=self._auffang_drop)
             self._auffang_ziel = hwnd
-            self.auffang.zeigen(schutz.rechteck(hwnd), schutz.app_name(schutz.prozessname(schutz.fenster_pid(hwnd))))
+            self.auffang.zeigen(schutz.rechteck(hwnd), schutz.app_name(schutz.prozessname(schutz.fenster_pid(hwnd))),
+                                hwnd)
+        elif art == "drop-weg":   # Maus über einem anderen Fenster (z. B. Explorer vor der App): dort normal ablegen
+            if self.auffang is not None and self.auffang.aktiv:
+                self.auffang.verstecken()
         elif art == "drop-ende":
             if self.auffang is not None:
                 self.root.after(700, lambda: self.auffang.aktiv and self.auffang.verstecken())

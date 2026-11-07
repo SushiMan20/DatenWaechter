@@ -201,6 +201,29 @@ def kinder(hwnd) -> list:
     return out
 
 
+def direkt_ueber(hwnd, app) -> None:
+    """Fenster in der Z-Reihenfolge direkt über `app` einsortieren, nicht „immer oben“.
+
+    So liegt die Auffangfläche nur dort, wo die KI-App sichtbar ist: Explorer, Browser & Co., die vor der App
+    liegen, bleiben davor – dort abzulegen funktioniert ganz normal.
+    """
+    ctypes, wintypes, u, _k = _win()
+    u.GetWindow.argtypes = [wintypes.HWND, ctypes.c_uint]
+    u.GetWindow.restype = wintypes.HWND
+    u.GetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int]
+    u.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                               ctypes.c_uint]
+    flags = 0x0001 | 0x0002 | 0x0010   # SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE
+    u.SetWindowPos(hwnd, wintypes.HWND(-2), 0, 0, 0, 0, flags)   # HWND_NOTOPMOST: aus der „immer oben“-Ebene
+    davor = u.GetWindow(app, 3)   # GW_HWNDPREV: das Fenster direkt über der App
+    while davor and davor == hwnd:
+        davor = u.GetWindow(davor, 3)
+    if not davor or u.GetWindowLongW(davor, -20) & 0x8:   # GWL_EXSTYLE & WS_EX_TOPMOST
+        u.SetWindowPos(hwnd, wintypes.HWND(0), 0, 0, 0, 0, flags)   # App ist vorn: ganz nach vorn (HWND_TOP)
+    else:
+        u.SetWindowPos(hwnd, davor, 0, 0, 0, 0, flags)   # direkt unter das Fenster, das vor der App liegt
+
+
 def rechteck(hwnd) -> tuple[int, int, int, int]:
     ctypes, wintypes, u, _k = _win()
     r = wintypes.RECT()
@@ -312,7 +335,7 @@ class Waechter:
     """Maus- und Tastatur-Hook. callback(art, hwnd, extra) läuft im Hook-Thread (nur in eine Queue legen!).
 
     Arten: "dialog" (Öffnen/Enter angehalten), "dialog-doppelklick", "drop-zeigen" (Ziehen über eine KI-App),
-    "drop-ende" (Maustaste losgelassen).
+    "drop-weg" (Ziehen über ein anderes Fenster), "drop-ende" (Maustaste losgelassen).
     """
 
     def __init__(self, callback):
@@ -431,6 +454,8 @@ class Waechter:
                                     self._ueber = root
                                     if self._ist_app(root):
                                         self.callback("drop-zeigen", root, None)
+                                    elif fenster_pid(root) != os.getpid():   # eigene Auffangfläche zählt als App
+                                        self.callback("drop-weg", root, None)
                     elif w_param == WM_LBUTTONUP:
                         if self._schlucke_maus:
                             self._schlucke_maus = False

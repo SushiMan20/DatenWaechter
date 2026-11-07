@@ -342,6 +342,15 @@ r.mainloop()
 """
 
 
+DAVOR_KIND = r"""
+import tkinter as tk
+r = tk.Tk(); r.geometry("200x300+880+260"); r.title("Davor")
+tk.Label(r, text="Fenster vor der App", bg="lightblue").pack(fill="both", expand=True)
+r.after(30000, r.destroy)
+r.mainloop()
+"""
+
+
 def _fenster_von(pid: int, klasse: str | None = None):
     import ctypes
     from ctypes import wintypes
@@ -531,11 +540,29 @@ def t_drop_schutz():
     def bewege(x, y):
         u.mouse_event(0x8001, int(x * 65535 / sw), int(y * 65535 / sh), 0, 0)   # MOVE | ABSOLUTE
 
+    from ctypes import wintypes
+
+    def z_folge():   # alle Hauptfenster, oben zuerst
+        liste = []
+        Proc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+        u.EnumWindows(Proc(lambda h, _l: liste.append(h) or True), 0)
+        return liste
+
+    def auffang_fenster(hn):
+        nl, nt, nr, nb = schutz.rechteck(hn)
+        for h in z_folge():
+            if schutz.fenster_pid(h) == os.getpid() and u.IsWindowVisible(h):
+                l, t, r, b = schutz.rechteck(h)
+                if abs(l - nl) <= 3 and abs(t - nt) <= 3 and abs(r - nr) <= 3 and abs(b - nb) <= 3:
+                    return h
+        return None
+
     def ziehen():
         try:
             note = subprocess.Popen(["notepad.exe"])
             quelle = subprocess.Popen([sys.executable, "-c", DRAG_KIND, str(datei), str(ROOT)],
                                       stdout=subprocess.PIPE, text=True)
+            davor = None
             out["prozesse"] = (note, quelle)
             hn = hq = None
             for _ in range(50):
@@ -546,6 +573,17 @@ def t_drop_schutz():
                     break
             assert hn and hq, "Notepad oder Ziehquelle nicht gefunden"
             u.MoveWindow(hn, 400, 200, 700, 500, True)
+            # ein anderes Fenster liegt vor einem Teil der App (wie Explorer oder Browser vor der Claude-App)
+            davor = subprocess.Popen([sys.executable, "-c", DAVOR_KIND])
+            out["prozesse"] = (note, quelle, davor)
+            hd = None
+            for _ in range(50):
+                time.sleep(0.2)
+                hd = _fenster_von(davor.pid)
+                if hd:
+                    break
+            assert hd, "Fenster „Davor“ nicht gefunden"
+            u.SetWindowPos(hd, 0, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010)   # HWND_TOP, ohne Größe/Fokus
             time.sleep(0.8)
             ql, qt, qr, qb = schutz.rechteck(hq)
             sx, sy = (ql + qr) // 2, (qt + qb) // 2 + 10
@@ -559,6 +597,22 @@ def t_drop_schutz():
                 bewege(sx + (tx - sx) * i // 30, sy + (ty - sy) * i // 30)
                 time.sleep(0.03)
             for _ in range(15):                         # über dem Ziel etwas bewegen, bis die Auffangfläche da ist
+                bewege(tx + _ % 3, ty)
+                time.sleep(0.08)
+            ha = auffang_fenster(hn)
+            z = z_folge()
+            out["z"] = (ha is not None and hd in z and hn in z and z.index(hd) < z.index(ha) < z.index(hn))
+            for i in range(1, 11):                      # weiter über das Fenster, das vor der App liegt
+                bewege(tx + (980 - tx) * i // 10, ty + (400 - ty) * i // 10)
+                time.sleep(0.04)
+            for _ in range(10):
+                bewege(980 + _ % 3, 400)
+                time.sleep(0.08)
+            out["weg"] = auffang_fenster(hn) is None
+            for i in range(1, 11):                      # zurück über die App
+                bewege(980 + (tx - 980) * i // 10, 400 + (ty - 400) * i // 10)
+                time.sleep(0.04)
+            for _ in range(15):
                 bewege(tx + _ % 3, ty)
                 time.sleep(0.08)
             u.mouse_event(0x0004, 0, 0, 0, 0)          # loslassen = ablegen
@@ -588,11 +642,15 @@ def t_drop_schutz():
         os.environ.pop("DATENWAECHTER_DRAG_QUELLEN", None)
     assert "fehler" not in out, out["fehler"]
     assert "drop-zeigen" in out["ereignisse"], f"Auffangfläche nicht gezeigt (Ereignisse: {out['ereignisse']})"
+    assert out.get("z"), "Auffangfläche muss direkt über der App liegen – unter dem Fenster, das davor liegt"
+    assert out.get("weg") and "drop-weg" in out["ereignisse"], \
+        f"über dem Fenster davor muss die Auffangfläche verschwinden (Ereignisse: {out['ereignisse']})"
     assert out.get("popup"), f"keine Rückfrage nach dem Ablegen (Ereignisse: {out['ereignisse']})"
     dateien = out.get("zwischenablage") or []
     assert dateien and dateien[0].endswith("_anonymisiert.txt"), f"übergeben: {dateien}"
     assert "DE89" not in Path(dateien[0]).read_text(encoding="utf-8")
-    return "Ziehen über Notepad → Auffangfläche → Rückfrage → geschwärzte Fassung übergeben"
+    return ("Ziehen über Notepad → Auffangfläche (unter dem Fenster davor, verschwindet über ihm) → Rückfrage → "
+            "geschwärzte Fassung übergeben")
 
 
 def t_browser_bridge():
