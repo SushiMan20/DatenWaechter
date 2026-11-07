@@ -1,13 +1,16 @@
 """Moderne Aktionsleiste für KI-Aktionen (statt des grauen Standard-Menüs).
 
-Schwebendes Fenster am Mauszeiger: Kopfzeile, Vorschau des markierten Texts, Suchfeld, Aktionen mit Symbol und
-Hinweis, was mit dem Ergebnis passiert. Bedienung mit Maus oder ↑ ↓ Enter Esc; Eingabe filtert – oder wird als
-eigene Anweisung ausgeführt. Unter Windows 11 mit runden Ecken und Schatten.
+Schwebendes Fenster direkt neben dem Mauszeiger (auf dem Bildschirm, auf dem die Maus ist): Kopfzeile, Vorschau
+des markierten Texts, Suchfeld, Aktionen mit Symbol und Hinweis, was mit dem Ergebnis passiert. Bedienung mit Maus
+oder ↑ ↓ Enter Esc; Eingabe filtert – oder wird als eigene Anweisung ausgeführt. Nach der Wahl bleibt die Leiste an
+ihrem Platz und zeigt einen drehenden Kreis, bis die KI fertig ist (Abbrechen jederzeit). Unter Windows 11 mit runden
+Ecken und Schatten.
 """
 
 from __future__ import annotations
 
 import sys
+import time
 import tkinter as tk
 
 from .actions import Aktion
@@ -67,12 +70,15 @@ class ActionPalette(tk.Toplevel):
         self.index = 0
         self._closed = False
         self._had_focus = False
+        self.modus = "auswahl"           # auswahl → arbeitet → fertig
+        self._on_abbrechen = None
+        self._ueber_zeiger = False       # am unteren Rand oberhalb der Maus platziert
 
         self.overrideredirect(True)
         self.attributes("-topmost", True)
         c = self.c
         self.configure(bg=c["border"])
-        body = tk.Frame(self, bg=c["bg"])
+        body = self.body = tk.Frame(self, bg=c["bg"])
         body.pack(fill="both", expand=True, padx=1, pady=1)
 
         # Kopfzeile
@@ -81,7 +87,9 @@ class ActionPalette(tk.Toplevel):
         tk.Label(head, text="✦", bg=c["bg"], fg=c["accent"], font=(font, 12, "bold")).pack(side="left")
         tk.Label(head, text="Mit KI bearbeiten", bg=c["bg"], fg=c["text"], font=(font, 11, "bold")).pack(
             side="left", padx=(6, 0))
-        tk.Label(head, text=server or "kein KI-Server", bg=c["bg"], fg=c["muted"] if server else "#c62828",
+        anzeige = server or "kein KI-Server"
+        anzeige = anzeige if len(anzeige) <= 24 else anzeige[:23] + "…"
+        tk.Label(head, text=anzeige, bg=c["bg"], fg=c["muted"] if server else "#c62828",
                  font=(font, 8)).pack(side="right")
 
         # Vorschau der Markierung
@@ -91,7 +99,7 @@ class ActionPalette(tk.Toplevel):
                  justify="left", wraplength=self.WIDTH - 30).pack(fill="x", padx=14, pady=(0, 8))
 
         # Suchfeld
-        field = tk.Frame(body, bg=c["field"])
+        field = self.field = tk.Frame(body, bg=c["field"])
         field.pack(fill="x", padx=12)
         tk.Label(field, text="⌕", bg=c["field"], fg=c["muted"], font=(font, 11)).pack(side="left", padx=(10, 2))
         self.query = tk.StringVar()
@@ -103,8 +111,9 @@ class ActionPalette(tk.Toplevel):
         self.list = tk.Frame(body, bg=c["bg"])
         self.list.pack(fill="x", padx=6, pady=(8, 4))
 
-        tk.Frame(body, bg=c["sep"], height=1).pack(fill="x")
-        foot = tk.Frame(body, bg=c["bg"])
+        self.sep = tk.Frame(body, bg=c["sep"], height=1)
+        self.sep.pack(fill="x")
+        foot = self.foot = tk.Frame(body, bg=c["bg"])
         foot.pack(fill="x", padx=14, pady=7)
         tk.Label(foot, text="↑↓ wählen   ↵ ausführen   Esc schließen", bg=c["bg"], fg=c["muted"],
                  font=(font, 8)).pack(side="left")
@@ -199,13 +208,23 @@ class ActionPalette(tk.Toplevel):
             self._set((self.index + d) % len(self.rows))
 
     def _place(self, xy) -> None:
+        """Direkt neben den Mauszeiger – auf dem Monitor, auf dem die Maus ist; am Rand links bzw. oberhalb."""
+        from .toast import neben_zeiger, zeiger
         self.update_idletasks()
         w, h = self.WIDTH, self.winfo_reqheight()
-        x, y = xy or self.winfo_pointerxy()
-        sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
-        x = max(8, min(x + 12, sw - w - 8))
-        y = max(8, min(y + 12, sh - h - 8))
+        mx, my = xy or zeiger(self)
+        x, y = neben_zeiger(self, w, h, mx, my)
+        self._ueber_zeiger = y < my
         self.geometry(f"{w}x{h}+{x}+{y}")
+
+    def _groesse_anpassen(self) -> None:
+        """Nach dem Umschalten: gleiche Stelle, neue Höhe (oberhalb der Maus: untere Kante bleibt)."""
+        x, y, alt = self.winfo_x(), self.winfo_y(), self.winfo_height()
+        self.update_idletasks()
+        h = self.winfo_reqheight()
+        if self._ueber_zeiger:
+            y += alt - h
+        self.geometry(f"{self.WIDTH}x{h}+{x}+{y}")
 
     def _grab_focus(self) -> None:
         if self._closed:
@@ -217,6 +236,9 @@ class ActionPalette(tk.Toplevel):
 
     # ------------------------------------------------------------------ Auswahl
     def choose(self, i: int | None = None) -> None:
+        """Aktion gewählt: Die Leiste bleibt offen – der Aufrufer schaltet auf „arbeitet“ (oder schließt sie)."""
+        if self.modus != "auswahl":
+            return
         if i is not None:
             self._set(i)
         if not self.rows:
@@ -224,7 +246,100 @@ class ActionPalette(tk.Toplevel):
         aktion = self.rows[self.index][1]
         if aktion not in self.aktionen:  # eigene Anweisung
             aktion = Aktion("Eigene Anweisung", aktion.anweisung, "ersetzen")
-        self._finish(lambda: self.on_choose(aktion))
+        self.modus = "gewaehlt"
+        self.on_choose(aktion)
+
+    # ------------------------------------------------------------------ Während die KI arbeitet
+    def arbeiten(self, name: str, on_abbrechen) -> None:
+        """Gleiche Stelle, statt der Liste: drehender Kreis, Name der Aktion, Sekunden, „Abbrechen“."""
+        if self._closed:
+            return
+        c = self.c
+        self.modus = "arbeitet"
+        self._on_abbrechen = on_abbrechen
+        for w in (self.field, self.list, self.sep, self.foot):
+            w.pack_forget()
+        self.arbeit = tk.Frame(self.body, bg=c["bg"])
+        self.arbeit.pack(fill="x", padx=14, pady=(2, 14))
+        self.kreis = tk.Canvas(self.arbeit, width=28, height=28, bg=c["bg"], highlightthickness=0)
+        self.kreis.pack(side="left")
+        self.kreis.create_oval(4, 4, 24, 24, outline=c["sep"], width=3)
+        self._bogen = self.kreis.create_arc(4, 4, 24, 24, start=90, extent=-110, style="arc", outline=c["accent"],
+                                            width=3)
+        self._winkel = 90
+        self.knopf = tk.Label(self.arbeit, text="Abbrechen", bg=c["bg"], fg=c["accent"], cursor="hand2",
+                              font=(self.font, 9, "underline"))
+        self.knopf.pack(side="right", anchor="n")   # zuerst: behält seinen Platz, auch bei langem Text
+        self.knopf.bind("<Button-1>", lambda e: self._abbrechen())
+        texte = tk.Frame(self.arbeit, bg=c["bg"])
+        texte.pack(side="left", fill="x", expand=True, padx=(10, 8))
+        self.arbeit_titel = tk.Label(texte, text=f"{name} …", bg=c["bg"], fg=c["text"], font=(self.font, 10, "bold"),
+                                     anchor="w")
+        self.arbeit_titel.pack(fill="x")
+        self.arbeit_info = tk.Label(texte, text="KI arbeitet", bg=c["bg"], fg=c["muted"], font=(self.font, 8),
+                                    anchor="w", justify="left", wraplength=self.WIDTH - 140)
+        self.arbeit_info.pack(fill="x")
+        self.bind("<Escape>", lambda e: self._abbrechen())
+        self._start = time.monotonic()
+        self._groesse_anpassen()
+        self._drehen()
+        self._sekunden()
+
+    def _drehen(self) -> None:
+        if self._closed or self.modus != "arbeitet":
+            return
+        self._winkel = (self._winkel - 14) % 360
+        self.kreis.itemconfigure(self._bogen, start=self._winkel)
+        self.after(40, self._drehen)
+
+    def _sekunden(self) -> None:
+        if self._closed or self.modus != "arbeitet":
+            return
+        s = int(time.monotonic() - self._start)
+        self.arbeit_info.configure(text="KI arbeitet" + (f" · {s} s" if s else ""))
+        self.after(1000, self._sekunden)
+
+    def _abbrechen(self) -> None:
+        if self.modus == "arbeitet" and self._on_abbrechen:
+            self._on_abbrechen()
+        self.schliessen()
+
+    def fertig(self, text: str, ms: int = 900) -> None:
+        """Häkchen statt Kreis, kurz stehen lassen, dann schließen."""
+        if self._closed or not hasattr(self, "kreis"):
+            return self.schliessen()
+        self.modus = "fertig"
+        self.kreis.delete("all")
+        self.kreis.create_oval(4, 4, 24, 24, outline=self.c["accent"], width=3)
+        self.kreis.create_text(14, 14, text="✓", fill=self.c["accent"], font=(self.font, 11, "bold"))
+        self.arbeit_titel.configure(text=text)
+        self.arbeit_info.configure(text="")
+        self.knopf.pack_forget()
+        self.after(ms, self.schliessen)
+
+    def fehler(self, text: str, ms: int = 12000) -> None:
+        """Fehler an derselben Stelle zeigen (schließt sich nach einiger Zeit oder mit „Schließen“)."""
+        if self._closed or not hasattr(self, "kreis"):
+            return
+        self.modus = "fertig"
+        warn = "#c62828" if not self.dark else "#ef9a9a"
+        self.kreis.delete("all")
+        self.kreis.create_oval(4, 4, 24, 24, outline=warn, width=3)
+        self.kreis.create_text(14, 14, text="!", fill=warn, font=(self.font, 11, "bold"))
+        self.arbeit_titel.configure(text="Hat nicht geklappt", fg=warn)
+        self.arbeit_info.configure(text=text)
+        self.knopf.configure(text="Schließen")
+        self.knopf.bind("<Button-1>", lambda e: self.schliessen())
+        self._groesse_anpassen()
+        self.after(ms, self.schliessen)
+
+    def schliessen(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        self.modus = "fertig"
+        if self.winfo_exists():
+            self.destroy()
 
     def cancel(self) -> None:
         self._finish(self.on_cancel)
@@ -238,8 +353,9 @@ class ActionPalette(tk.Toplevel):
             fn()
 
     def _focus_out(self, e) -> None:
-        # Klick in ein anderes Programm = abbrechen (kurz warten: Fokus springt auch innerhalb des Fensters)
-        if self._had_focus:
+        # Klick in ein anderes Programm = abbrechen (kurz warten: Fokus springt auch innerhalb des Fensters).
+        # Nach der Wahl nicht: die KI arbeitet, das Ergebnis wird ins Programm eingefügt.
+        if self._had_focus and self.modus == "auswahl":
             self.after(150, lambda: (not self._closed and self.focus_get() is None) and self.cancel())
 
     def type(self, text: str) -> None:

@@ -35,7 +35,8 @@ function startAi() {
       }
       requests.push(b);
       const inner = /<<<\n([\s\S]*)\n>>>/.exec(b.messages.at(-1).content)[1];
-      send({ choices: [{ message: { content: `Neu: ${inner}` } }] });
+      const antwort = () => send({ choices: [{ message: { content: `Neu: ${inner}` } }] });
+      if (inner.includes("langsam")) setTimeout(antwort, 2500); else antwort();   // KI braucht etwas länger
     });
   });
   return new Promise((r) => srv.listen(0, "127.0.0.1", () => r(srv)));
@@ -120,8 +121,43 @@ function startAi() {
   await page.keyboard.press("Escape");
   assert.ok(!(await paletteOpen()));
   assert.strictEqual(requests.length, count);
-  await page.evaluate(() => { ta.value = "Hallo Herr Becker, anbei die Unterlagen. Grüße"; });
   step("Esc schließt die Leiste, nichts gesendet");
+
+  // 1e) Während die KI arbeitet: Leiste bleibt an ihrer Stelle, Kreis dreht, danach Häkchen, dann zu
+  const zustand = () => sw.evaluate(async (tabId) => (await chrome.scripting.executeScript(
+    { target: { tabId }, func: () => globalThis.__dwKI.zustand() }))[0].result, tabId);
+  await page.evaluate(() => { ta.value = "langsam: bitte kürzen"; ta.focus(); ta.setSelectionRange(0, ta.value.length); });
+  await palette();
+  await page.waitForTimeout(250);
+  const vorher = await zustand();
+  await page.keyboard.type("kürz");
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(700);
+  const waehrend = await zustand();
+  assert.ok(waehrend.offen && waehrend.arbeitet && waehrend.titel === "Kürzen …", JSON.stringify(waehrend));
+  assert.ok(Math.abs(waehrend.left - vorher.left) <= 1 && Math.abs(waehrend.top - vorher.top) <= 1,
+    `Leiste ist gesprungen: ${JSON.stringify(vorher)} → ${JSON.stringify(waehrend)}`);
+  if (shotDir) await page.screenshot({ path: path.join(shotDir, "ki-arbeitet-browser.png") });
+  await page.waitForFunction(() => document.getElementById("ta").value.startsWith("Neu:"), null, { timeout: 20_000 });
+  const danach = await zustand();
+  assert.ok(danach.offen && danach.fertig && /Ersetzt/.test(danach.titel), JSON.stringify(danach));
+  await page.waitForTimeout(2600);
+  assert.ok(!(await zustand()).offen, "Leiste sollte sich nach dem Häkchen schließen");
+  step("während die KI arbeitet: Leiste bleibt stehen (Kreis, „Kürzen …“), danach ✓ „Ersetzt“, dann zu");
+
+  // 1f) Abbrechen (Esc) während die KI arbeitet: nichts wird ersetzt, auch wenn die Antwort später kommt
+  await page.evaluate(() => { ta.value = "langsam: abbrechen"; ta.focus(); ta.setSelectionRange(0, ta.value.length); });
+  await palette();
+  await page.keyboard.type("kürz");
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(600);
+  assert.ok((await zustand()).arbeitet);
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(3200);
+  assert.strictEqual(await page.inputValue("#ta"), "langsam: abbrechen");
+  assert.ok(!(await zustand()).offen);
+  await page.evaluate(() => { ta.value = "Hallo Herr Becker, anbei die Unterlagen. Grüße"; });
+  step("Abbrechen während die KI arbeitet: Text bleibt, späte Antwort wird verworfen");
 
   // 2) Textfeld: Teil markieren -> Umformulieren -> nur die Markierung wird ersetzt
   await page.evaluate(() => { ta.focus(); ta.setSelectionRange(0, 17); });

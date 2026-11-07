@@ -30,6 +30,8 @@
   window.addEventListener("change", onFileInput, true);
   window.addEventListener("copy", onCopy, true);
   window.addEventListener("message", onPageMessage);
+  // Rechtsklick merken: Die KI-Aktionsleiste öffnet sich dann direkt neben der Maus
+  window.addEventListener("contextmenu", (e) => { globalThis.__dwZeiger = { x: e.clientX, y: e.clientY, t: Date.now() }; }, true);
 
   const host = (request) => chrome.runtime.sendMessage({ type: "host", request }).catch((e) => ({ ok: false, error: String(e) }));
   const hostStatus = () => chrome.runtime.sendMessage({ type: "ping" }).catch(() => ({ ok: false }));

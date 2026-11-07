@@ -291,6 +291,12 @@ def t_auswahl_knopf():
     def ende():
         out["palette"] = app._ki_palette is not None and app._ki_palette.winfo_exists()
         if out["palette"]:
+            from datenwaechter.toast import zeiger
+            mx, my = zeiger(app.root)
+            p = app._ki_palette
+            # direkt neben dem Mauszeiger (rechts unten oder – am Rand – links/oberhalb), nicht irgendwo am Bildschirmrand
+            out["abstand"] = min(abs(p.winfo_x() - mx), abs(p.winfo_x() + p.winfo_width() - mx)) + \
+                min(abs(p.winfo_y() - my), abs(p.winfo_y() + p.winfo_height() - my))
             app._ki_palette.destroy()
         out["proc"].kill()
         app._quit()
@@ -298,6 +304,7 @@ def t_auswahl_knopf():
     app.root.after(1500, start)
     app.run()
     assert out.get("knopf"), "✨-Knopf ist nach dem Markieren nicht erschienen"
+    assert out.get("abstand", 0) <= 40, f"Aktionsleiste nicht am Mauszeiger (Abstand {out.get('abstand')} px)"
     assert out.get("text", "").strip(), "Klick auf den Knopf hat keinen markierten Text geholt"
     assert out["fg"] == out["hwnd"], "Knopf hat Notepad den Fokus genommen"
     assert out.get("palette"), "KI-Leiste ist nicht aufgegangen"

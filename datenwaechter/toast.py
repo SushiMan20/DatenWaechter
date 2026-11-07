@@ -34,18 +34,55 @@ LEVEL = {"warnung": ("warnung", "#c62828", "#ff8a80"), "thema": ("pause", "#b453
          "ok": ("aktiv", "#2e7d32", "#81c784")}
 
 
-def work_area(win: tk.Misc) -> tuple[int, int, int, int]:
-    """Bildschirmbereich ohne Taskleiste (links, oben, rechts, unten)."""
+def zeiger(win: tk.Misc) -> tuple[int, int]:
+    """Mausposition in denselben Koordinaten wie Tk (unter Windows GetCursorPos – stimmt auch bei 125/150 %)."""
     if sys.platform == "win32":
         try:
             import ctypes
             from ctypes import wintypes
+            p = wintypes.POINT()
+            if ctypes.windll.user32.GetCursorPos(ctypes.byref(p)):
+                return p.x, p.y
+        except Exception:  # noqa: BLE001
+            pass
+    return win.winfo_pointerxy()
+
+
+def work_area(win: tk.Misc, punkt: tuple[int, int] | None = None) -> tuple[int, int, int, int]:
+    """Bildschirmbereich ohne Taskleiste (links, oben, rechts, unten).
+
+    Ohne punkt: Hauptbildschirm. Mit punkt: der Monitor, auf dem der Punkt liegt (wichtig bei zwei Bildschirmen).
+    """
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            from ctypes import wintypes
+            u = ctypes.windll.user32
+            if punkt is not None:
+                class MONITORINFO(ctypes.Structure):
+                    _fields_ = [("cbSize", wintypes.DWORD), ("rcMonitor", wintypes.RECT), ("rcWork", wintypes.RECT),
+                                ("dwFlags", wintypes.DWORD)]
+                u.MonitorFromPoint.argtypes = [wintypes.POINT, wintypes.DWORD]
+                u.MonitorFromPoint.restype = wintypes.HANDLE
+                mon = u.MonitorFromPoint(wintypes.POINT(int(punkt[0]), int(punkt[1])), 2)   # MONITOR_DEFAULTTONEAREST
+                info = MONITORINFO(cbSize=ctypes.sizeof(MONITORINFO))
+                if mon and u.GetMonitorInfoW(mon, ctypes.byref(info)):
+                    r = info.rcWork
+                    return r.left, r.top, r.right, r.bottom
             r = wintypes.RECT()
-            if ctypes.windll.user32.SystemParametersInfoW(0x30, 0, ctypes.byref(r), 0):  # SPI_GETWORKAREA
+            if u.SystemParametersInfoW(0x30, 0, ctypes.byref(r), 0):  # SPI_GETWORKAREA
                 return r.left, r.top, r.right, r.bottom
         except Exception:  # noqa: BLE001
             pass
     return 0, 0, win.winfo_screenwidth(), win.winfo_screenheight() - 48
+
+
+def neben_zeiger(win: tk.Misc, w: int, h: int, x: int, y: int, abstand: int = 12) -> tuple[int, int]:
+    """Position für ein Fenster direkt neben dem Mauszeiger (rechts unten; am Rand links bzw. oberhalb)."""
+    left, top, right, bottom = work_area(win, (x, y))
+    px = x + abstand if x + abstand + w <= right else x - abstand - w
+    py = y + abstand if y + abstand + h <= bottom else y - abstand - h
+    return max(left, min(px, right - w)), max(top, min(py, bottom - h))
 
 
 def _no_activate(win: tk.Toplevel) -> None:

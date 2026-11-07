@@ -1,9 +1,9 @@
 ﻿; Installer für das fertige Windows-Programm (Inno Setup 6).
-; Bauen: iscc /DAppVersion=1.5.2 packaging\installer.iss   (vorher PyInstaller ausführen)
+; Bauen: iscc /DAppVersion=1.5.3 packaging\installer.iss   (vorher PyInstaller ausführen)
 ; Installiert ohne Admin-Rechte nach %LOCALAPPDATA%\Programs\Datenwaechter.
 
 #ifndef AppVersion
-  #define AppVersion "1.5.2"
+  #define AppVersion "1.5.3"
 #endif
 
 [Setup]

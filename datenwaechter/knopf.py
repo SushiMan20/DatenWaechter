@@ -42,7 +42,7 @@ class Knopf(tk.Toplevel):
         self._on_click = on_click
         self.update_idletasks()
         w, h = self.winfo_reqwidth(), self.winfo_reqheight()
-        left, top, right, bottom = work_area(self)
+        left, top, right, bottom = work_area(self, (x, y))   # Monitor unter der Maus, nicht der Hauptbildschirm
         px = min(max(left, x + 12), right - w - 4)
         py = y + 18 if y + 18 + h < bottom else y - h - 12
         self.geometry(f"+{px}+{max(top, py)}")

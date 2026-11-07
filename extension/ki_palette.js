@@ -1,6 +1,7 @@
 // KI-Aktionsleiste im Browser (wird bei Bedarf in die Seite eingeschleust – nur nach Rechtsklick, nur in diesem Tab).
 // Gleiches Aussehen wie im Windows-Fenster: Kopfzeile, Vorschau, Suchfeld, Aktionen mit Symbol, Tastatur-Bedienung.
-// Tippen filtert – oder wird als eigene Anweisung ausgeführt.
+// Tippen filtert – oder wird als eigene Anweisung ausgeführt. Nach der Wahl bleibt die Leiste stehen und zeigt einen
+// drehenden Kreis, bis die KI fertig ist (Abbrechen jederzeit); Ergebnis, Häkchen oder Fehler erscheinen an derselben Stelle.
 (() => {
   if (globalThis.__dwKI) return;
 
@@ -58,14 +59,31 @@
              color: var(--text); cursor: pointer; }
     button.main { background: var(--accent); color: #fff; font-weight: 600; }
     .close { margin-left: auto; color: var(--muted); cursor: pointer; padding: 0 2px; }
+    .busy { display: flex; align-items: flex-start; gap: 10px; padding: 4px 14px 14px; }
+    .spin { width: 22px; height: 22px; border-radius: 50%; border: 3px solid var(--border); border-top-color: var(--accent);
+            animation: spin .8s linear infinite; flex: none; margin-top: 2px; display: grid; place-items: center;
+            font-size: 12px; font-weight: 700; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .spin { animation-duration: 2.5s; } }
+    .spin.ok { animation: none; border-color: var(--accent); color: var(--accent); }
+    .spin.err { animation: none; border-color: #c62828; color: #c62828; }
+    .busy .t { flex: 1; min-width: 0; }
+    .busy .t b { display: block; font-size: 14px; }
+    .busy .t b.err { color: #c62828; }
+    .busy .t small { display: block; color: var(--muted); font-size: 11.5px; overflow-wrap: anywhere; }
+    .link { background: none; border: 0; padding: 0; color: var(--accent); text-decoration: underline; cursor: pointer;
+            font: inherit; font-size: 12.5px; flex: none; }
     .toast { position: fixed; z-index: 2147483647; right: 18px; bottom: 18px; background: #18181b; color: #fff;
              padding: 10px 14px; border-radius: 10px; font: 13px "Segoe UI", system-ui, sans-serif; max-width: 420px;
              box-shadow: 0 8px 30px rgba(0,0,0,.25); animation: pop .12s ease-out; }`;
+
+  let gezeigt = null;   // zuletzt gezeigtes Fenster (für zustand())
 
   function mount() {
     document.querySelectorAll("datenwaechter-ki").forEach((n) => n.remove());
     const host = document.createElement("datenwaechter-ki");
     const root = host.attachShadow({ mode: "closed" });
+    gezeigt = { host, root };
     const style = document.createElement("style");
     style.textContent = CSS;
     root.append(style);
@@ -90,22 +108,53 @@
     return r || { left: innerWidth / 2 - 180, bottom: 80, top: 60 };
   }
 
-  // Neben die Markierung setzen: unten, falls Platz – sonst oben; reicht beides nicht, wird die Liste gekürzt
-  function place(card) {
+  // Wo steht die Maus? Den Rechtsklick merkt sich content.js auf KI-Seiten; sonst: Ende der Markierung
+  function anker() {
+    const z = globalThis.__dwZeiger;
+    if (z && Date.now() - z.t < 120000 && z.x >= 0 && z.y >= 0 && z.x <= innerWidth && z.y <= innerHeight) {
+      return { left: z.x + 12, right: z.x - 12, top: z.y - 12, bottom: z.y + 12, zeiger: true };
+    }
+    const st = globalThis.__datenwaechterSel || {};
+    try {
+      const rects = st.range ? [...st.range.getClientRects()].filter((q) => q.width || q.height) : [];
+      const r = rects.at(-1);
+      if (r) return { left: r.right + 4, right: r.right, top: r.top, bottom: r.bottom + 4 };
+    } catch { /* egal */ }
     const r = anchorRect();
-    const list = card.querySelector(".list, .text");
+    return { left: r.left, right: r.left, top: r.top, bottom: r.bottom + 4 };
+  }
+
+  // Neben Maus bzw. Markierung: rechts unten, falls Platz – sonst links bzw. oben; reicht beides nicht, wird die Liste
+  // gekürzt. fest = {left, top}: an derselben Stelle bleiben (Arbeits-, Ergebnis- und Fehleranzeige).
+  function place(card, fest) {
     const w = 360;
-    const below = innerHeight - r.bottom - 16, above = r.top - 16;
+    if (fest) {
+      const h = card.offsetHeight;
+      card.style.left = `${Math.min(Math.max(8, fest.left), innerWidth - w - 8)}px`;
+      card.style.top = `${Math.max(8, Math.min(fest.oben ? fest.bottom - h : fest.top, innerHeight - h - 8))}px`;
+      return;
+    }
+    const a = anker();
+    const list = card.querySelector(".list, .text");
+    const below = innerHeight - a.bottom - 8, above = a.top - 8;
     const space = Math.max(below, above);
     if (list && card.offsetHeight > space) {
       const rest = card.offsetHeight - list.offsetHeight;
       list.style.maxHeight = `${Math.max(110, space - rest)}px`;
     }
     const h = card.offsetHeight;
-    const x = Math.min(Math.max(8, r.left), innerWidth - w - 8);
-    const y = below >= h || below >= above ? r.bottom + 8 : r.top - h - 8;
-    card.style.left = `${x}px`;
+    const x = a.left + w <= innerWidth - 8 ? a.left : a.right - w;
+    const oben = !(below >= h || below >= above);
+    const y = oben ? a.top - h : a.bottom;
+    card.style.left = `${Math.min(Math.max(8, x), innerWidth - w - 8)}px`;
     card.style.top = `${Math.max(8, Math.min(y, innerHeight - h - 8))}px`;
+    card.dataset.oben = oben ? "1" : "";
+  }
+
+  // Wo die Karte gerade steht (damit Ergebnis/Fehler genau dort erscheinen)
+  function stelle(card) {
+    const r = card.getBoundingClientRect();
+    return { left: r.left, top: r.top, bottom: r.bottom, oben: card.dataset.oben === "1" };
   }
 
   function capture() {
@@ -133,6 +182,62 @@
     }
     globalThis.__datenwaechterSel = st;
     return { text: st.text, kind: st.kind };
+  }
+
+  // ------------------------------------------------------------------ Während die KI arbeitet
+  let aktuell = null;   // { host, card, abgebrochen, fest }
+
+  function arbeiten(host, card, name) {
+    const fest = stelle(card);
+    card.querySelectorAll(".search, .list, .foot, .busy").forEach((n) => n.remove());
+    const busy = el("div", "busy");
+    const spin = el("div", "spin");
+    const t = el("div", "t");
+    const titel = el("b", "", `${name} …`);
+    const info = el("small", "", "KI arbeitet");
+    t.append(titel, info);
+    const knopf = el("button", "link", "Abbrechen");
+    busy.append(spin, t, knopf);
+    card.append(busy);
+    place(card, fest);
+    const lauf = { host, card, spin, titel, info, knopf, abgebrochen: false, fest: stelle(card) };
+    const start = Date.now();
+    const uhr = setInterval(() => {
+      const s = Math.round((Date.now() - start) / 1000);
+      if (!host.isConnected || lauf.ende) return clearInterval(uhr);
+      info.textContent = `KI arbeitet${s ? ` · ${s} s` : ""}`;
+    }, 1000);
+    const abbrechen = () => { lauf.abgebrochen = true; lauf.ende = true; host.remove(); globalThis.__datenwaechterSel?.el?.focus?.(); };
+    knopf.addEventListener("click", abbrechen);
+    knopf.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Escape") { e.preventDefault(); abbrechen(); } });
+    knopf.focus();
+    aktuell = lauf;
+    return lauf;
+  }
+
+  function fertig(lauf, text, ms = 2200) {
+    lauf.ende = true;
+    lauf.spin.className = "spin ok";
+    lauf.spin.textContent = "✓";
+    lauf.titel.textContent = text;
+    lauf.info.textContent = "";
+    lauf.knopf.remove();
+    place(lauf.card, lauf.fest);
+    setTimeout(() => lauf.host.remove(), ms);
+  }
+
+  function fehler(lauf, text) {
+    lauf.ende = true;
+    lauf.spin.className = "spin err";
+    lauf.spin.textContent = "!";
+    lauf.titel.textContent = "Hat nicht geklappt";
+    lauf.titel.className = "err";
+    lauf.info.textContent = text;
+    lauf.knopf.textContent = "Schließen";
+    lauf.knopf.replaceWith(lauf.knopf.cloneNode(true));
+    lauf.card.querySelector(".busy .link").addEventListener("click", () => lauf.host.remove());
+    place(lauf.card, lauf.fest);
+    setTimeout(() => lauf.host.remove(), 12000);
   }
 
   function toast(text, ms = 3500) {
@@ -193,12 +298,12 @@
     function choose() {
       const a = rows[index]?.a;
       if (!a) return;
-      close();
-      if (!info.server) { toast("Kein KI-Server eingerichtet – im Datenwächter unter Einstellungen → KI-Server."); return; }
-      busy(a.custom ? "Eigene Anweisung" : a.name);
+      if (!info.server) { close(); toast("Kein KI-Server eingerichtet – im Datenwächter unter Einstellungen → KI-Server."); return; }
+      document.removeEventListener("mousedown", outside, true);   // ab jetzt bleibt die Leiste stehen
+      const lauf = arbeiten(host, card, a.custom ? "Eigene Anweisung" : a.name);
       const request = a.custom ? { custom: a.custom, mode: "ersetzen" } : { id: a.id };
-      chrome.runtime.sendMessage({ type: "kiRun", request: { ...request, text: st.text } }).then(apply)
-        .catch((e) => apply({ ok: false, error: String(e) }));
+      chrome.runtime.sendMessage({ type: "kiRun", request: { ...request, text: st.text } }).then((r) => apply(r, lauf))
+        .catch((e) => apply({ ok: false, error: String(e) }, lauf));
     }
     input.addEventListener("input", render);
     input.addEventListener("keydown", (e) => {
@@ -214,11 +319,20 @@
     return true;
   }
 
+  // Aktion ohne Leiste (direkt aus dem Menü): kleine Karte an der Maus mit drehendem Kreis
   function busy(name) {
-    toast(`✦ ${name} … KI arbeitet`, 0);
+    const st = globalThis.__datenwaechterSel || {};
+    const { host, root } = mount();
+    const card = el("div", "card");
+    const head = el("div", "head");
+    head.append(el("span", "spark", "✦"), el("b", "", "Mit KI bearbeiten"));
+    card.append(head, el("div", "preview", `„${(st.text || "").replace(/\s+/g, " ").trim()}“`));
+    root.append(card);
+    place(card);
+    arbeiten(host, card, name);
   }
 
-  function resultCard(r, note) {
+  function resultCard(r, note, fest) {
     const { host, root } = mount();
     const card = el("div", "card");
     const head = el("div", "head");
@@ -238,17 +352,25 @@
     btns.append(close);
     card.append(btns);
     root.append(card);
-    place(card);
+    place(card, fest);
     btns.querySelector("button").focus();
   }
 
-  function apply(r) {
-    document.querySelectorAll("datenwaechter-ki").forEach((n) => n.remove());
+  function apply(r, lauf = aktuell) {
+    if (lauf?.abgebrochen) {   // Abbrechen gedrückt: spätes Ergebnis verwerfen
+      if (lauf === aktuell) aktuell = null;
+      return;
+    }
+    if (lauf) aktuell = null;
+    const sichtbar = lauf && lauf.host.isConnected;
     const st = globalThis.__datenwaechterSel || {};
     const note = r?.sent_to ? `An ${r.sent_to} gesendet${r.anonymized ? " – persönliche Daten vorher anonymisiert" : ""}` : "";
-    if (!r?.ok) return resultCard(r || {}, "");
+    if (!r?.ok) {
+      if (sichtbar) return fehler(lauf, r?.error || "Unbekannter Fehler");
+      return resultCard(r || {}, "");
+    }
     const editable = st.kind === "input" || st.kind === "editable";
-    if (r.mode === "anzeigen" || !editable || !st.el?.isConnected) return resultCard(r, note);
+    if (r.mode === "anzeigen" || !editable || !st.el?.isConnected) return resultCard(r, note, sichtbar ? lauf.fest : undefined);
 
     const insert = r.mode === "einfuegen" ? `\n\n${r.result}` : r.result;
     st.el.focus();
@@ -270,8 +392,24 @@
         range.insertNode(document.createTextNode(insert));
       }
     }
-    toast(`✔ ${r.name} – ${r.mode === "einfuegen" ? "eingefügt" : "ersetzt"} (Rückgängig: Strg+Z)${note ? ". " + note : ""}`, 4000);
+    const was = r.mode === "einfuegen" ? "Eingefügt" : "Ersetzt";
+    if (sichtbar) {
+      fertig(lauf, `${was} – Rückgängig: Strg+Z`);
+      if (note) lauf.info.textContent = note;
+    } else {
+      toast(`✔ ${r.name} – ${was.toLowerCase()} (Rückgängig: Strg+Z)${note ? ". " + note : ""}`, 4000);
+    }
   }
 
-  globalThis.__dwKI = { capture, open, busy, apply, toast };
+  // Zustand für Tests und Fehlersuche: offen?, arbeitet?, fertig?, Position – ohne Inhalte
+  function zustand() {
+    const card = gezeigt?.host?.isConnected && gezeigt.root.querySelector(".card");
+    if (!card) return { offen: false };
+    const r = card.getBoundingClientRect();
+    return { offen: true, left: Math.round(r.left), top: Math.round(r.top), arbeitet: !!card.querySelector(".spin:not(.ok):not(.err)"),
+      fertig: !!card.querySelector(".spin.ok"), fehler: !!card.querySelector(".spin.err"),
+      titel: card.querySelector(".busy b")?.textContent || "" };
+  }
+
+  globalThis.__dwKI = { capture, open, busy, apply, toast, zustand };
 })();

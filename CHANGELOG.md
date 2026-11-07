@@ -1,5 +1,12 @@
 # Änderungen
 
+## 1.5.3
+
+- **KI-Aktionsleiste direkt am Mauszeiger** – auch auf dem zweiten Bildschirm und am Bildschirmrand (dort links bzw. oberhalb der Maus). Gilt ebenso für den ✨-Knopf. Im Browser öffnet sie sich nach einem Rechtsklick auf KI-Seiten an der Maus, sonst am Ende der Markierung.
+- **Die Leiste bleibt stehen, während die KI arbeitet:** drehender Kreis, Name der Aktion, Sekunden und „Abbrechen“ (auch mit Esc). Danach ✓ „Ersetzt“; Ergebnisse zum Anzeigen und Fehler erscheinen an derselben Stelle. Windows-Programm und Browser gleich.
+- **Behoben: Nach „Umformulieren“ verschwand die Leiste und das Fenster zeigte dauerhaft „prüft …“.** Unerwartete Fehler beim KI-Aufruf oder beim Einfügen kommen jetzt als Meldung zurück; nach spätestens zweieinhalb Minuten ohne Antwort wird die Aktion beendet. Liegt das Ergebnis nicht im Programm, steht es in der Zwischenablage.
+- Fehlerprotokoll `fehler.log` neben den Einstellungen (ohne Inhalte), damit sich Probleme nachvollziehen lassen.
+
 ## 1.5.2
 
 - **Drop-Schutz verdeckt keine anderen Fenster mehr:** Die Auffangfläche liegt jetzt direkt über der KI-App statt über allem. Liegt ein Explorer- oder Browserfenster vor der Claude- oder ChatGPT-App, bleibt es davor, und Ziehen zwischen anderen Fenstern funktioniert normal. Verlässt die Maus die App, verschwindet die Fläche; zurück über der App erscheint sie wieder.

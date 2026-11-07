@@ -23,8 +23,8 @@ import uuid
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from . import (actions, auswahl, autostart, browser_bridge, content_check, hotkey, llm, lokales_modell, ocr, schutz,
-               settings, winclip)
+from . import (actions, auswahl, autostart, browser_bridge, content_check, hotkey, llm, lokales_modell, ocr, protokoll,
+               schutz, settings, winclip)
 from .analysis import analyze, anonymize as anonymize_report
 from .auffang import Auffangflaeche
 from .anonymize import Anonymizer
@@ -33,7 +33,7 @@ from .faces import available as faces_available
 from .icons import FARBEN, shield
 from .knopf import Knopf
 from .palette import ActionPalette
-from .toast import TrayPopup
+from .toast import TrayPopup, neben_zeiger, zeiger
 from .stats import Stats
 from .tray import Tray
 
@@ -133,6 +133,7 @@ class App:
         self._log: deque = deque(maxlen=4)
         self._suspend = False      # während einer KI-Aktion die Zwischenablage nicht prüfen
         self._ki_busy = False
+        self._ki_lauf = 0          # Nummer der laufenden KI-Aktion (Abbrechen/Zeitüberschreitung: spätes Ergebnis verwerfen)
         self._ki_popup = None
         self._ki_palette = None
         self._llm_info = None
@@ -723,12 +724,13 @@ class App:
 
     def _pointer_note(self, text: str, ms: int = 3500):
         """Kleiner Hinweis am Mauszeiger (gibt das Fenster zurück, damit es vorzeitig geschlossen werden kann)."""
-        x, y = self.root.winfo_pointerxy()
+        x, y = zeiger(self.root)
         w = tk.Toplevel(self.root)
         w.overrideredirect(True)
         w.attributes("-topmost", True)
         tk.Label(w, text=text, bg="#263238", fg="white", font=(FONT, 10), padx=12, pady=8).pack()
-        w.geometry(f"+{x + 16}+{y + 16}")
+        w.update_idletasks()
+        w.geometry("+%d+%d" % neben_zeiger(w, w.winfo_reqwidth(), w.winfo_reqheight(), x, y, 16))
         if ms:
             w.after(ms, lambda: w.winfo_exists() and w.destroy())
         return w
@@ -739,7 +741,15 @@ class App:
             return
         self._suspend = True
         b = self.bridge
-        threading.Thread(target=lambda: self.results.put(("ki-captured", hwnd, *b.capture(hwnd))), daemon=True).start()
+
+        def holen():
+            try:
+                text, old = b.capture(hwnd)
+            except Exception as e:  # noqa: BLE001 – sonst bliebe die Zwischenablage-Prüfung angehalten
+                protokoll.fehler("Markierten Text holen", e)
+                text, old = "", None
+            self.results.put(("ki-captured", hwnd, text, old))
+        threading.Thread(target=holen, daemon=True).start()
 
     def _ki_end(self) -> None:
         self._suspend = False
@@ -768,49 +778,123 @@ class App:
         if label and self.llm_ok:
             anon = " anonymisiert" if extern and settings.load_llm().anonymize_first else ""
             server = label.partition(":")[2].split("@")[0] + (f" · extern{anon}" if extern else " · lokal")
+        def waehlen(aktion):
+            if not self.llm_ok:   # noch kein KI-Server: Leiste schließen, Einstellungen öffnen
+                if self._ki_palette is not None:
+                    self._ki_palette.schliessen()
+                cancel()
+                self._show()
+                self._llm_settings()
+                return
+            self._ki_run(aktion, hwnd, text, old)
         self._ki_palette = ActionPalette(
             self.root, actions.load(), text, dark=self.t is THEMES["dunkel"], font=FONT, server=server,
-            on_choose=lambda a: self._ki_run(a, hwnd, text, old) if self.llm_ok else (cancel(), self._show(),
-                                                                                       self._llm_settings()),
-            on_cancel=cancel, on_edit=edit)
+            on_choose=waehlen, on_cancel=cancel, on_edit=edit)
+
+    def _ki_leiste(self):
+        p = self._ki_palette
+        return p if p is not None and not p._closed and p.winfo_exists() else None
 
     def _ki_run(self, aktion, hwnd, text: str, old) -> None:
         self._ki_busy = True
+        self._ki_lauf += 1
+        lauf = self._ki_lauf
         self._refresh()
-        self._ki_popup = self._pointer_note(f"🛡 {aktion.name} … KI arbeitet", ms=0)
+        leiste = self._ki_leiste()
+        if leiste is not None:   # Leiste bleibt am Mauszeiger und zeigt den drehenden Kreis
+            leiste.arbeiten(aktion.name, lambda: self._ki_abbrechen(lauf, old))
+        else:
+            self._ki_popup = self._pointer_note(f"🛡 {aktion.name} … KI arbeitet", ms=0)
 
         def work():
             try:
-                self.results.put(("ki-result", hwnd, actions.run(aktion, text), None, old, text))
+                erg, fehler = actions.run(aktion, text), None
             except llm.LlmError as e:
-                self.results.put(("ki-result", hwnd, None, str(e), old, text))
+                erg, fehler = None, str(e)
+            except Exception as e:  # noqa: BLE001 – nie hängen bleiben: jeder Fehler kommt als Meldung zurück
+                protokoll.fehler(f"KI-Aktion „{aktion.name}“", e)
+                erg, fehler = None, f"Unerwarteter Fehler ({type(e).__name__}: {e}). Details in {protokoll.datei()}"
+            self.results.put(("ki-result", hwnd, erg, fehler, old, text, lauf))
         threading.Thread(target=work, daemon=True).start()
+        self.root.after(llm.TIMEOUT * 1000 + 30_000, lambda: self._ki_wachhund(lauf, old))
 
-    def _ki_result(self, hwnd, erg, error, old, text: str) -> None:
+    def _ki_abbrechen(self, lauf: int, old) -> None:
+        if lauf != self._ki_lauf or not self._ki_busy:
+            return
+        self._ki_lauf += 1            # ein spätes Ergebnis wird verworfen
+        self.bridge.restore(old)
+        self._ki_end()
+        self._status("KI-Aktion abgebrochen", FARBEN["pause"])
+
+    def _ki_wachhund(self, lauf: int, old) -> None:
+        """Sicherheitsnetz: Kommt gar nichts zurück, nicht ewig „prüft …“ anzeigen."""
+        if lauf != self._ki_lauf or not self._ki_busy:
+            return
+        self._ki_lauf += 1
+        self.bridge.restore(old)
+        self._ki_end()
+        meldung = "Keine Antwort vom KI-Server – bitte noch einmal versuchen."
+        leiste = self._ki_leiste()
+        if leiste is not None:
+            leiste.fehler(meldung)
+        else:
+            self._pointer_note(meldung, ms=6000)
+        self._status(meldung, FARBEN["warnung"])
+
+    def _ki_result(self, hwnd, erg, error, old, text: str, lauf: int | None = None) -> None:
         if self._ki_popup is not None and self._ki_popup.winfo_exists():
             self._ki_popup.destroy()
+        if lauf is not None and lauf != self._ki_lauf:
+            return   # abgebrochen oder zu spät
+        leiste = self._ki_leiste()
         if erg is None:
             self.bridge.restore(old)
             self._ki_end()
             self._status(f"KI-Aktion fehlgeschlagen: {error}", FARBEN["warnung"])
-            self._pointer_note(f"KI-Aktion fehlgeschlagen:\n{error}", ms=6000)
+            if leiste is not None:
+                leiste.fehler(error)
+            else:
+                self._pointer_note(f"KI-Aktion fehlgeschlagen:\n{error}", ms=6000)
             return
         note = f" – an {erg.sent_to} gesendet{', vorher anonymisiert' if erg.anonymized else ''}" if erg.sent_to else ""
         if erg.aktion.modus == "anzeigen":
             self._ki_busy = False
             self._refresh()
-            self._ki_show(hwnd, erg, old, note)
+            xy = (leiste.winfo_x(), leiste.winfo_y()) if leiste is not None else None
+            if leiste is not None:
+                leiste.schliessen()
+            self._ki_show(hwnd, erg, old, note, xy)
             return
         out = erg.text if erg.aktion.modus == "ersetzen" else f"{text}\n\n{erg.text}"
         b = self.bridge
-        threading.Thread(target=lambda: (b.deliver(hwnd, out, old),
-                                         self.results.put(("ki-done", f"✔ {erg.aktion.name}{note}"))), daemon=True).start()
+        fertig_text = "Ersetzt" if erg.aktion.modus == "ersetzen" else "Eingefügt"
 
-    def _ki_done(self, message: str) -> None:
+        def einsetzen():
+            try:
+                b.deliver(hwnd, out, old)
+                self.results.put(("ki-done", f"✔ {erg.aktion.name}{note}", True, fertig_text))
+            except Exception as e:  # noqa: BLE001 – z. B. Zwischenablage gerade von einem anderen Programm belegt
+                protokoll.fehler("Ergebnis einfügen", e)
+                self.results.put(("ki-done", f"Einfügen hat nicht geklappt ({type(e).__name__}). Das Ergebnis liegt in "
+                                             "der Zwischenablage – mit Strg+V einfügen.", False, out))
+        threading.Thread(target=einsetzen, daemon=True).start()
+
+    def _ki_done(self, message: str, ok: bool = True, extra: str = "") -> None:
+        leiste = self._ki_leiste()
+        if not ok and extra:   # Ergebnis nicht eingefügt: wenigstens in die Zwischenablage
+            try:
+                self._set_clipboard_text(extra)
+            except Exception as e:  # noqa: BLE001
+                protokoll.fehler("Ergebnis in die Zwischenablage", e)
         self._ki_end()
-        self._status(message, FARBEN["aktiv"])
+        self._status(message, FARBEN["aktiv"] if ok else FARBEN["warnung"])
+        if leiste is not None:
+            if ok:
+                leiste.fertig(extra or "Fertig")
+            else:
+                leiste.fehler(message)
 
-    def _ki_show(self, hwnd, erg, old, note: str) -> None:
+    def _ki_show(self, hwnd, erg, old, note: str, xy: tuple[int, int] | None = None) -> None:
         """Ergebnis anzeigen (Modus „nur anzeigen“) – im Stil der Aktionsleiste, mit Kopieren und Einsetzen."""
         from .palette import FARBEN as PF, _windows_polish
         c = PF["dunkel" if self.t is THEMES["dunkel"] else "hell"]
@@ -866,10 +950,14 @@ class App:
         button("Kopieren", copy, main=True).pack(side="left")
         button("Markierung ersetzen", insert).pack(side="left", padx=6)
         win.update_idletasks()
-        x, y = self.root.winfo_pointerxy()
         w, h = 460, win.winfo_reqheight()
-        x = max(8, min(x - w // 2, self.root.winfo_screenwidth() - w - 8))
-        y = max(8, min(y + 12, self.root.winfo_screenheight() - h - 8))
+        if xy is not None:   # dort, wo die Aktionsleiste war
+            from .toast import work_area
+            left, top, right, bottom = work_area(win, xy)
+            x, y = max(left, min(xy[0], right - w)), max(top, min(xy[1], bottom - h))
+        else:
+            mx, my = zeiger(self.root)
+            x, y = neben_zeiger(win, w, h, mx, my)
         win.geometry(f"{w}x{h}+{x}+{y}")
         _windows_polish(win)
         win.focus_force()
