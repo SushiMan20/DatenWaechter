@@ -1,5 +1,10 @@
 # Änderungen
 
+## 1.4.1
+
+- Vorlage **„Datenwächter KI“** (`https://ki.firma.example/v1`) im Windows-Programm und in der Handy-App: Adresse auswählen, Schlüssel einfügen.
+- Server wie LiteLLM listen auch Sprach-, Vorlese-, Embedding- und OCR-Modelle. Ist kein Modell eingestellt, nimmt der Datenwächter jetzt das erste Chat-Modell statt z. B. „stt“.
+
 ## 1.4.0
 
 - **Lokales KI-Modell:** *Einstellungen → Lokales KI-Modell → Laden* holt einmalig ein Modell (180 MB), das danach ohne Internet und ohne Server auf dem PC Namen und Orte findet, die keine Regel kennt („Wenzeslaus Brummer“, „Kowalczyk“, „Pirna“). Fester Modellstand, SHA-256-geprüft, Download wird fortgesetzt; läuft mit onnxruntime (im Windows-Programm enthalten), ohne PyTorch.

@@ -170,3 +170,18 @@ def test_aelteres_antwortformat_und_kleine_modelle(server, monkeypatch):
     assert _llm_keys({"kategorien": ["intimes", "Ausweis", "unkritisch"]}, has_image=True) == ["intim", "ausweis"]
     assert _llm_keys({"ausweis": "true", "gesundheit": "false", "personen": True}, has_image=False) == ["ausweis"]
     assert _llm_keys({"beschreibung": "eine Katze", "personen": False}, has_image=True) == []
+
+
+def test_gateway_liste_chat_modell_zuerst(monkeypatch):
+    """LiteLLM & Co. listen auch Sprach-, Embedding- und OCR-Modelle; ohne Einstellung wird ein Chat-Modell gewählt."""
+    liste = ["stt", "tts", "tts-eu", "anthropic/*", "embed-modell", "ocr-modell", "text-embedding-3-small",
+             "whisper-1", "chat-modell", "qwen3-chat"]
+    monkeypatch.setattr(llm, "_request", lambda url, *a, **kw: {"data": [{"id": m} for m in liste]})
+    b = llm.OpenAICompatible(LlmSettings(typ="openai", url="https://ai.example.org/v1", token="t"))
+    assert b.available() and b.model == "chat-modell"
+    assert b.models()[:2] == ["chat-modell", "qwen3-chat"] and set(b.models()) == set(liste)
+
+
+def test_vorlage_datenwaechter_ki():
+    from datenwaechter.settings import URL_VORLAGEN
+    assert URL_VORLAGEN[0] == ("Datenwächter KI", "https://ki.firma.example/v1")

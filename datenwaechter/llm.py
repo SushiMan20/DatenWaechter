@@ -71,6 +71,16 @@ class LlmError(Exception):
     pass
 
 
+# Gateways wie LiteLLM listen auch Sprach-, Vorlese-, Embedding- und OCR-Modelle – die können keinen Chat
+_KEIN_CHAT = re.compile(r"(?i)(?:^|[/_.:-])(?:stt|tts|whisper|embed\w*|embedding\w*|ocr|rerank\w*|moderation|dall-e"
+                        r"|image|transcri\w*|speech|audio)(?:$|[/_.:-])|\*")
+
+
+def chat_zuerst(models: list[str]) -> list[str]:
+    """Modellliste mit Chat-Modellen vorn – das erste ist der sinnvolle Standard, wenn keins eingestellt ist."""
+    return [m for m in models if not _KEIN_CHAT.search(m)] + [m for m in models if _KEIN_CHAT.search(m)]
+
+
 @dataclass
 class Answer:
     data: dict
@@ -164,7 +174,7 @@ class OpenAICompatible:
 
     def models(self) -> list[str]:
         data = _request(f"{self.s.base_url}/models", token=self.s.token, timeout=3)
-        return [m.get("id", "") for m in data.get("data", []) if m.get("id")]
+        return chat_zuerst([m.get("id", "") for m in data.get("data", []) if m.get("id")])
 
     def available(self) -> bool:
         if not self.s.base_url:

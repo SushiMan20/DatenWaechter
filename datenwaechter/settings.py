@@ -24,6 +24,7 @@ KEYRING_USER = "llm-token"
 
 # Vorschläge für das Eingabefeld (Anzeige, Basis-URL)
 URL_VORLAGEN = [
+    ("Datenwächter KI", "https://ki.firma.example/v1"),
     ("LM Studio (lokal)", "http://localhost:1234/v1"),
     ("Ollama, OpenAI-Modus (lokal)", "http://localhost:11434/v1"),
     ("vLLM / LocalAI (lokal)", "http://localhost:8000/v1"),

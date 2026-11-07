@@ -8,6 +8,7 @@ const MAX_AKTION = 12000;
 const TIMEOUT = 120000;
 
 export const VORLAGEN = [
+  ["Datenwächter KI", "https://ki.firma.example/v1"],
   ["OpenAI", "https://api.openai.com/v1"],
   ["OpenRouter", "https://openrouter.ai/api/v1"],
   ["Mistral", "https://api.mistral.ai/v1"],
@@ -89,9 +90,13 @@ async function anfrage(s, pfad, body, timeout = TIMEOUT) {
   try { return await res.json(); } catch { throw new KiFehler("Der Server hat kein gültiges JSON geschickt."); }
 }
 
+// Gateways wie LiteLLM listen auch Sprach-, Vorlese-, Embedding- und OCR-Modelle – die können keinen Chat (wie llm.py)
+const KEIN_CHAT = /(?:^|[/_.:-])(?:stt|tts|whisper|embed\w*|embedding\w*|ocr|rerank\w*|moderation|dall-e|image|transcri\w*|speech|audio)(?:$|[/_.:-])|\*/i;
+export const chatZuerst = (liste) => [...liste.filter((m) => !KEIN_CHAT.test(m)), ...liste.filter((m) => KEIN_CHAT.test(m))];
+
 export async function modelle(s) {
   const data = await anfrage(s, "/models", null, 8000);
-  return (data.data || data.models || []).map((m) => m.id || m.name).filter(Boolean);
+  return chatZuerst((data.data || data.models || []).map((m) => m.id || m.name).filter(Boolean));
 }
 
 async function modellFuer(s) {
