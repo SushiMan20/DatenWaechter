@@ -107,6 +107,11 @@ def _request(url: str, body: dict | None = None, token: str = "", timeout: float
         raise LlmError(str(e)) from e
 
 
+def _antwort(text: str | None) -> str:
+    """Antworttext ohne „Nachdenken“ (<think>…</think>) und Leerzeilen davor/danach."""
+    return re.sub(r"(?s)<think>.*?</think>", "", text or "").strip()
+
+
 def _parse_json(text: str) -> dict:
     """Modelle packen JSON gern in ```-Blöcke oder schreiben einen Satz davor."""
     m = re.search(r"\{.*\}", text or "", re.S)
@@ -153,7 +158,7 @@ class Ollama:
     def complete(self, messages: list[dict], temperature: float = 0.3) -> str:
         """Freier Text (für KI-Aktionen wie „Umformulieren“)."""
         body = {"model": self.model, "messages": messages, "stream": False, "options": {"temperature": temperature}}
-        return (_request(f"{self.url}/api/chat", body).get("message") or {}).get("content", "")
+        return _antwort((_request(f"{self.url}/api/chat", body).get("message") or {}).get("content", ""))
 
     def ask(self, text: str, image=None, name: str = "") -> Answer:
         body = {"model": self.model, "prompt": _prompt(text, name), "format": "json", "stream": False,
@@ -169,15 +174,22 @@ class Ollama:
 class OpenAICompatible:
     def __init__(self, s: LlmSettings):
         self.s = s
-        self.model = s.modell
-        self.label = f"openai:{s.modell or '?'}@{s.host}"
+        self.model = s.modell or s.vorlage.get("modell", "")
+        self.label = f"openai:{self.model or '?'}@{s.host}"
+
+    def _body(self, body: dict) -> dict:
+        """Zusatzangaben der Vorlage (z. B. „nicht nachdenken“) – nur für deren Modell."""
+        v = self.s.vorlage
+        if v.get("extra") and self.model == v.get("modell"):
+            body.update(v["extra"])
+        return body
 
     def models(self) -> list[str]:
         data = _request(f"{self.s.base_url}/models", token=self.s.token, timeout=3)
         return chat_zuerst([m.get("id", "") for m in data.get("data", []) if m.get("id")])
 
     def available(self) -> bool:
-        if not self.s.base_url:
+        if not self.s.base_url or (self.s.vorlage.get("schluessel") and not self.s.token):
             return False
         try:
             listed = self.models()
@@ -203,10 +215,10 @@ class OpenAICompatible:
 
     def complete(self, messages: list[dict], temperature: float = 0.3) -> str:
         """Freier Text (für KI-Aktionen wie „Umformulieren“)."""
-        body = {"model": self.model, "temperature": temperature, "messages": messages}
+        body = self._body({"model": self.model, "temperature": temperature, "messages": messages})
         data = _request(f"{self.s.base_url}/chat/completions", body, self.s.token)
         try:
-            return data["choices"][0]["message"]["content"] or ""
+            return _antwort(data["choices"][0]["message"]["content"])
         except (KeyError, IndexError, TypeError) as e:
             raise LlmError("Unerwartetes Antwortformat") from e
 
@@ -223,6 +235,7 @@ class OpenAICompatible:
                 "messages": [{"role": "system", "content": "Du antwortest ausschließlich mit gültigem JSON."},
                              {"role": "user", "content": content}],
                 "response_format": {"type": "json_object"}}
+        self._body(body)
         url = f"{self.s.base_url}/chat/completions"
         try:
             data = _request(url, body, self.s.token)
@@ -238,7 +251,7 @@ class OpenAICompatible:
                 body["messages"][1]["content"] = content[0]["text"]   # … oder Bilder
                 data = _request(url, body, self.s.token)
         try:
-            reply = data["choices"][0]["message"]["content"]
+            reply = _antwort(data["choices"][0]["message"]["content"])
         except (KeyError, IndexError, TypeError) as e:
             raise LlmError("Unerwartetes Antwortformat") from e
         return Answer(_parse_json(reply), self.label, self.s.host if self.s.extern else None, anonymized)
@@ -303,6 +316,8 @@ def test_connection(s: LlmSettings) -> tuple[bool, str]:
     """Für den Knopf „Verbindung testen“: echte Mini-Anfrage, verständliche Meldung."""
     if s.typ == "aus":
         return False, "Inhalts-Check mit KI ist ausgeschaltet."
+    if s.vorlage.get("schluessel") and not s.token:
+        return False, f"Für {s.vorlage.get('name', s.host)} brauchst du einen Schlüssel (Token)."
     b = OpenAICompatible(s) if s.typ in ("openai", "auto") and s.base_url else Ollama()
     try:
         if isinstance(b, OpenAICompatible):

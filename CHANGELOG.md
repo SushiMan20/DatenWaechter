@@ -1,5 +1,11 @@
 # Änderungen
 
+## 1.4.2
+
+- „Datenwächter KI“ nutzt standardmäßig **qwen3-chat ohne Nachdenken**: Inhalts-Check in rund 2 s, Namenssuche und Umformulieren in unter 1 s; kann auch Bilder lesen.
+- Für „Datenwächter KI“ ist ein **Schlüssel Pflicht**: ohne Schlüssel geht nichts raus, „Verbindung testen“ sagt das klar.
+- Antworten von Modellen, die „laut nachdenken“ (`<think>…</think>`), werden bereinigt – auch bei anderen Servern.
+
 ## 1.4.1
 
 - Vorlage **„Datenwächter KI“** (`https://ki.firma.example/v1`) im Windows-Programm und in der Handy-App: Adresse auswählen, Schlüssel einfügen.

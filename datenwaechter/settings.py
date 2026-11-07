@@ -33,6 +33,16 @@ URL_VORLAGEN = [
     ("Mistral", "https://api.mistral.ai/v1"),
 ]
 
+# Feste Angaben je Vorlage: Standardmodell, Zusatzangaben für jede Anfrage (nur mit diesem Modell), Schlüssel Pflicht
+VORLAGE_DETAILS = {
+    "https://ki.firma.example/v1": {
+        "name": "Datenwächter KI",
+        "modell": "qwen3-chat",
+        "extra": {"chat_template_kwargs": {"enable_thinking": False}},   # ohne „Nachdenken“: 1 s statt mehrerer
+        "schluessel": True,
+    },
+}
+
 
 @dataclass
 class LlmSettings:
@@ -56,6 +66,10 @@ class LlmSettings:
     @property
     def host(self) -> str:
         return urlparse(self.base_url).hostname or ""
+
+    @property
+    def vorlage(self) -> dict:
+        return VORLAGE_DETAILS.get(self.base_url, {})
 
     @property
     def extern(self) -> bool:

@@ -1435,8 +1435,10 @@ class App:
         ttk.Checkbutton(frm, text="KI-Server benutzen (OpenAI-kompatible API)", variable=aktiv).grid(
             row=0, column=0, columnspan=3, sticky="w", pady=(0, 8))
         ttk.Label(frm, text="API-Adresse").grid(row=1, column=0, sticky="w", pady=3)
-        ttk.Combobox(frm, textvariable=url, values=[u for _, u in settings.URL_VORLAGEN]).grid(
-            row=1, column=1, columnspan=2, sticky="ew")
+        url_box = ttk.Combobox(frm, textvariable=url, values=[u for _, u in settings.URL_VORLAGEN])
+        url_box.grid(row=1, column=1, columnspan=2, sticky="ew")
+        url_box.bind("<<ComboboxSelected>>", lambda e: settings.VORLAGE_DETAILS.get(url.get(), {}).get("modell")
+                     and modell.set(settings.VORLAGE_DETAILS[url.get()]["modell"]))
         ttk.Label(frm, text="Basis-Adresse mit /v1, z. B. von OpenAI oder deinem Firmen-Gateway",
                   foreground="#777").grid(row=2, column=1, columnspan=2, sticky="w")
         ttk.Label(frm, text="Token / API-Schlüssel").grid(row=3, column=0, sticky="w", pady=3)

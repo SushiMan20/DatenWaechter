@@ -15,6 +15,13 @@ export const VORLAGEN = [
   ["Groq", "https://api.groq.com/openai/v1"],
 ];
 
+// Feste Angaben je Vorlage (wie settings.VORLAGE_DETAILS): Standardmodell, Zusatzangaben nur für dieses Modell, Schlüssel Pflicht
+const VORLAGE_DETAILS = {
+  "https://ki.firma.example/v1": { name: "Datenwächter KI", modell: "qwen3-chat",
+    extra: { chat_template_kwargs: { enable_thinking: false } }, schluessel: true },
+};
+export const vorlage = (url) => VORLAGE_DETAILS[baseUrl(url)] || {};
+
 const STANDARD = { aktiv: false, url: "", token: "", modell: "", anonymisieren: null, bilder: null, thema: true, namen: false };
 
 export function laden() {
@@ -47,7 +54,7 @@ export function extern(url) {
 }
 export const anonymZuerst = (s) => s.anonymisieren ?? extern(s.url);
 export const bilderSenden = (s) => s.bilder ?? !extern(s.url);
-export const bereit = (s) => Boolean(s.aktiv && baseUrl(s.url));
+export const bereit = (s) => Boolean(s.aktiv && baseUrl(s.url) && (s.token || !vorlage(s.url).schluessel));
 
 export class KiFehler extends Error {}
 
@@ -101,6 +108,7 @@ export async function modelle(s) {
 
 async function modellFuer(s) {
   if (s.modell) return s.modell;
+  if (vorlage(s.url).modell) return vorlage(s.url).modell;
   const liste = await modelle(s).catch(() => []);
   if (!liste.length) throw new KiFehler("Bitte in den Einstellungen ein Modell angeben.");
   return liste[0];
@@ -108,6 +116,8 @@ async function modellFuer(s) {
 
 export async function complete(s, messages, temperature = 0.3, extra = {}) {
   const body = { model: await modellFuer(s), temperature, messages, ...extra };
+  const v = vorlage(s.url);
+  if (v.extra && body.model === v.modell) Object.assign(body, v.extra);   // z. B. „nicht nachdenken“
   let data;
   try {
     data = await anfrage(s, "/chat/completions", body);
@@ -118,7 +128,7 @@ export async function complete(s, messages, temperature = 0.3, extra = {}) {
   }
   const text = data?.choices?.[0]?.message?.content;
   if (typeof text !== "string") throw new KiFehler("Unerwartetes Antwortformat vom Server.");
-  return text;
+  return text.replace(/<think>[\s\S]*?<\/think>/g, "").trim();   // ohne „Nachdenken“ und Leerzeilen
 }
 
 export function parseJson(text) {
@@ -300,6 +310,7 @@ export async function aktion(s, anweisung, text) {
 /** Für „Verbindung testen“: echte Mini-Anfrage, verständliche Meldung. */
 export async function testen(s) {
   if (!baseUrl(s.url)) return { ok: false, meldung: "Bitte die Adresse des Servers eintragen." };
+  if (vorlage(s.url).schluessel && !s.token) return { ok: false, meldung: `Für ${vorlage(s.url).name} brauchst du einen Schlüssel (Token).` };
   try {
     let liste = [];
     try { liste = await modelle(s); } catch (e) {
@@ -309,7 +320,7 @@ export async function testen(s) {
     if (s.modell && liste.length && !liste.includes(s.modell)) {
       return { ok: false, meldung: `Modell „${s.modell}“ nicht gefunden. Verfügbar: ${liste.slice(0, 8).join(", ")}` };
     }
-    const probe = { ...s, modell: s.modell || liste[0] || "" };
+    const probe = { ...s, modell: s.modell || vorlage(s.url).modell || liste[0] || "" };
     if (!probe.modell) return { ok: false, meldung: "Bitte ein Modell angeben." };
     const t = await thema(probe, "Einkaufsliste: Milch, Brot, Äpfel.", null, "test.txt");
     const ziel = t.extern ? ` · Daten gehen an ${t.host}${anonymZuerst(s) ? ", vorher anonymisiert" : ""}` : " · Server im eigenen Netz";

@@ -185,3 +185,33 @@ def test_gateway_liste_chat_modell_zuerst(monkeypatch):
 def test_vorlage_datenwaechter_ki():
     from datenwaechter.settings import URL_VORLAGEN
     assert URL_VORLAGEN[0] == ("Datenwächter KI", "https://ki.firma.example/v1")
+
+
+def test_vorlage_datenwaechter_ki_braucht_schluessel_und_denkt_nicht(monkeypatch):
+    gesendet = []
+
+    def antwort(url, body=None, token="", timeout=0):
+        if url.endswith("/models"):
+            return {"data": [{"id": m} for m in ("stt", "chat-modell", "qwen3-chat", "anthropic/claude-x")]}
+        gesendet.append((body, token))
+        return {"choices": [{"message": {"content": '<think>hmm</think>\n\n{"beschreibung": "Einkaufsliste"}'}}]}
+    monkeypatch.setattr(llm, "_request", antwort)
+
+    ohne = LlmSettings(typ="openai", url="https://ki.firma.example/v1/")
+    assert not llm.OpenAICompatible(ohne).available()
+    ok, meldung = llm.test_connection(ohne)
+    assert not ok and "Schlüssel" in meldung and not gesendet, "ohne Schlüssel geht nichts raus"
+
+    mit = LlmSettings(typ="openai", url="https://ki.firma.example/v1", token="sk-kunde")
+    b = llm.OpenAICompatible(mit)
+    assert b.available() and b.model == "qwen3-chat", "Standardmodell der Vorlage"
+    ok, meldung = llm.test_connection(mit)
+    assert ok, meldung
+    body, token = gesendet[-1]
+    assert token == "sk-kunde" and body["chat_template_kwargs"] == {"enable_thinking": False}
+    assert b.complete([{"role": "user", "content": "x"}]) == '{"beschreibung": "Einkaufsliste"}', "Nachdenken entfernt"
+
+    anderes = llm.OpenAICompatible(LlmSettings(typ="openai", url="https://ki.firma.example/v1", token="t",
+                                               modell="anthropic/claude-x"))
+    anderes.complete([{"role": "user", "content": "x"}])
+    assert "chat_template_kwargs" not in gesendet[-1][0], "Zusatzangaben nur für das Modell der Vorlage"

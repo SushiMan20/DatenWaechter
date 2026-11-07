@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Datenwächter",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "description": "Prüft Texte und Dateien auf persönliche oder geheime Daten, bevor sie in einen KI-Chat gelangen – komplett lokal.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2tbLfPYHwFcAbRZs9kerl7IdB9viNCGA430QpcUTGVvBB8r/8ynT0Us4TV82qdOknkk0EZHPcni/PcvSnuFPYBtcAtreIEZ2cGaCkQshYHbTMZSHQVvx841nqEA75D1DlcD9VIONyaQFXN+noF5wBeyDt7B+QxLBcmTeSB2EwUsCzmZ2U+dwnjl/7xhf1ZEmcZ+e/i/j+JslcQFzxVf6WErDE1RfWcvwtz0FsdLj/HZhDVnPPKX0gkTZceYSUVGxYu522XwwcIt6FHQAB2dnXgV3uHBIH3QqpHaDLydGPaP4CGFgrPTa844iR/Z81Z9kTSggYPVUEdnFZvFv7s8BhQIDAQAB",
   "icons": {

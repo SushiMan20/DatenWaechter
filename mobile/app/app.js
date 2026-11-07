@@ -703,6 +703,7 @@ $("vorlagen").addEventListener("click", (e) => {
   const b = e.target.closest("[data-url]");
   if (!b) return;
   $("ki-url").value = b.dataset.url;
+  if (ki.vorlage(b.dataset.url).modell) $("ki-modell").value = ki.vorlage(b.dataset.url).modell;
   einstellungenSpeichern();
   $("ki-token").focus();
 });
