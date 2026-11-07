@@ -272,6 +272,7 @@ pip install -e ".[dev]"
 pytest                                   # Regeln, Schwärzen, OCR, Gesichter, KI-Anbindung (simulierte Server), Oberfläche
 node --test tests/detectors.test.js      # Browser-Regeln = Python-Regeln
 python tests/korpus_bericht.py           # eigene Testdokumente: was gefunden, was verpasst wird
+python tests/test_repo_sauber.py --sperren "intern.firma.de"   # internen Begriff fürs Repository sperren
 python tests/benchmark_grascco.py        # Messung an 63 Arztbriefen (GraSCCo, wird heruntergeladen); --modell mit KI-Modell
 node tests/e2e_extension.js              # Erweiterung in echtem Chromium (SITE=chatgpt.com für ChatGPT)
 node tests/e2e_ki_aktionen.js            # KI-Aktionen im Browser
