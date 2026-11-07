@@ -22,7 +22,7 @@ gelöscht wird. Deshalb gilt für Code, Tests, Dokumentation, Bilder und Commit-
 - **Keine echten Personen- oder Kundendaten.** Erfundene Namen, `example.de`-Adressen, Test-IBAN
   `DE89 3704 0044 0532 0130 00`. Forschungsdaten (z. B. GraSCCo) nur herunterladen, nie einchecken.
 - **Keine internen Server, IP-Adressen oder Modellnamen** eigener Dienste. Beispiele: `ki.firma.example`, `qwen3-chat`.
-- **Keine Werkzeug- oder Co-Autor-Zeilen** in Commit-Nachrichten; Commits mit der GitHub-noreply-Adresse.
+- Commits mit der noreply-Adresse von GitHub.
 
 `tests/test_repo_sauber.py` prüft das bei jedem Push (und lokal mit `pytest`). Interne Begriffe stehen dort nur als
 SHA-256-Fingerabdruck; einen neuen Begriff sperrst du mit

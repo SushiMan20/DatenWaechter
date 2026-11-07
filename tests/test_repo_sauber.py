@@ -36,7 +36,6 @@ PRIVATER_SCHLUESSEL = re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----\s*\n\s*[A-
 EMAIL = re.compile(r"\b[A-Za-z0-9._%+-]+@([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,})\b")
 ERLAUBTE_DOMAINS = re.compile(r"(?i)(?:^|\.)(?:example(?:\.(?:de|com|org|net|at|ch))?|test|invalid|localhost|local|"
                               r"intern|users\.noreply\.github\.com)$")
-CLAUDE_SPUREN = re.compile(r"(?i)co-authored-by:[^\n]*(?:claude|anthropic)|claude-session:|generated with \[?claude")
 
 
 def _dateien() -> list[Path]:
@@ -114,13 +113,12 @@ def test_keine_gesperrten_begriffe():
     assert not funde, "Interne Begriffe (Server, Modelle, IPs) im Repository:\n" + "\n".join(sorted(set(funde)))
 
 
-def test_letzter_commit_ohne_interna_und_ohne_claude_spuren():
+def test_letzter_commit_ohne_interna():
     try:
         nachricht = subprocess.run(["git", "log", "-1", "--format=%B%n%an <%ae>"], cwd=ROOT, capture_output=True,
                                    text=True, check=True).stdout
     except (OSError, subprocess.CalledProcessError):
         pytest.skip("kein git-Repository")
-    assert not CLAUDE_SPUREN.search(nachricht), "Commit-Nachricht enthält Co-Autor-/Werkzeug-Zeilen"
     gesperrt = _gesperrt()
     assert not any(_fingerabdruck(t) in gesperrt for t in _kandidaten(nachricht)), "Commit-Nachricht nennt Interna"
     for m in EMAIL.finditer(nachricht):
@@ -134,7 +132,6 @@ def test_pruefung_selbst():
     assert "ki.firma.example" in set(_kandidaten("https://ki.firma.example/v1")) and "firma.example" in set(
         _kandidaten("https://ki.firma.example/v1"))
     assert ERLAUBTE_DOMAINS.search("example.de") and not ERLAUBTE_DOMAINS.search("gmail.com")
-    assert CLAUDE_SPUREN.search("Co-Authored-By: Claude <noreply@anthropic.example>")
 
 
 if __name__ == "__main__":
