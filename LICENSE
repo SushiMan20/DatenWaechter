@@ -18,6 +18,9 @@ Bestandteile Dritter (Bibliotheken, Sprachmodelle, Datensätze, Schriften) unter
 ihren eigenen Lizenzen; siehe README, Abschnitt „Danksagung“.
 
 DIE INHALTE WERDEN OHNE MÄNGELGEWÄHR ZUR VERFÜGUNG GESTELLT, SOWEIT GESETZLICH ZULÄSSIG.
+Insbesondere übernimmt portamedia keine Gewähr dafür, dass der Datenwächter alle personenbezogenen,
+vertraulichen oder sonst schutzwürdigen Daten erkennt, schwärzt oder entfernt. Ergebnisse sind vor der
+Weitergabe selbst zu prüfen.
 
 ------------------------------------------------------------------------------------------
 
@@ -38,3 +41,5 @@ Third-party components (libraries, language models, datasets, fonts) are subject
 own licenses; see README, section "Danksagung".
 
 THE CONTENTS ARE PROVIDED "AS IS", TO THE EXTENT PERMITTED BY LAW.
+In particular, portamedia gives no warranty that Datenwächter detects, redacts or removes all personal,
+confidential or otherwise sensitive data. Results must be checked before they are passed on.

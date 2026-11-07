@@ -254,7 +254,7 @@ landen nicht im Repository).
 - **Desktop-Apps wie die ChatGPT- oder Claude-App?** Geschützt (Windows): Ziehst du eine Datei über das App-Fenster, legt sich eine Auffangfläche darüber – die Datei landet erst beim Datenwächter. Im Fenster „Datei öffnen“ der App hält er „Öffnen“, Enter und Doppelklick kurz an und prüft. Die App bekommt auf Wunsch nur die geschwärzte Fassung. Grenzen: Apps mit eigenem (nicht Windows-)Auswahlfenster; die App muss Einfügen von Dateien (Strg+V) können. Abschaltbar in den Einstellungen.
 - **Warum Entwicklermodus?** Die Erweiterung ist (noch) nicht im Chrome Web Store.
 - **Was wird nicht geschwärzt?** Gesundheitsangaben im Fließtext (außer Diagnosen, ICD-Codes, Medikamenten und Laborwerten, wenn *Medizinische Inhalte* an ist) lösen nur eine Warnung aus. Handschrift erkennt die Texterkennung kaum. Bilder *in* Word-Dateien werden nicht geprüft.
-- **Ist das eine Garantie?** Nein. Der Datenwächter ist eine Schutzschicht gegen Versehen. Regeln und KI haben Lücken.
+- **Ist das eine Garantie?** Nein. Der Datenwächter ist eine Schutzschicht gegen Versehen. Er findet nicht jede persönliche Angabe (siehe Messung oben), Regeln und KI haben Lücken. Es gibt keine Gewähr, dass alle Daten erkannt, geschwärzt oder entfernt werden. Prüfe das Ergebnis, bevor du es hochlädst.
 
 ## Kommandozeile
 
@@ -307,6 +307,9 @@ Wie du beiträgst, steht in [CONTRIBUTING.md](CONTRIBUTING.md), Änderungen im [
 
 © 2026 portamedia. Alle Rechte vorbehalten, siehe [LICENSE](LICENSE). Bestandteile Dritter stehen unter ihren
 eigenen Lizenzen (siehe unten).
+
+**Keine Gewähr für vollständige Schwärzung:** Der Datenwächter erkennt nicht zwingend alle personenbezogenen oder
+vertraulichen Daten und kann deren Schwärzung oder Entfernung nicht garantieren. Ergebnisse vor der Weitergabe selbst prüfen.
 
 ## Danksagung
 
