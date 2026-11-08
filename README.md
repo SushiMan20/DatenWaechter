@@ -26,10 +26,10 @@ eine anonymisierte Fassung hochladen, das Original verwenden oder abbrechen. Die
 
 - **Prüft beim Hochladen, Einfügen und Kopieren.** Im Browser fängt er Drag & Drop, „Datei hinzufügen“ und Strg+V auf claude.ai, chatgpt.com, Gemini, Copilot, Mistral und Perplexity ab. Unter Windows prüft er alles, was du kopierst, auch Dateien und Screenshots.
 - **Schützt auch die Desktop-Apps** von ChatGPT, Claude, Copilot und Perplexity: Ziehst du eine Datei hinein oder wählst sie über „Datei öffnen“, prüft der Datenwächter sie *vorher* – die App bekommt auf Wunsch nur die geschwärzte Fassung.
-- **Erkennt sensible Daten:** IBAN, Kreditkarte und Steuer-ID (jeweils mit Prüfsumme), Sozialversicherungs-, Ausweis-, Pass-, Steuer- und Versichertennummer, Fall- und Patientennummern, API-Schlüssel, Passwörter, E-Mail, Telefon, Adressen, Geburtsdaten, Namen und Gesichter auf Fotos.
+- **Erkennt sensible Daten:** IBAN, Kreditkarte und Steuer-ID (jeweils mit Prüfsumme), Sozialversicherungs-, Ausweis-, Pass-, Steuer- und Versichertennummer, Fall- und Patientennummern, API-Schlüssel, Passwörter, E-Mail, Telefon, Adressen, Geburtsdaten, Namen und Gesichter – auf Fotos, in PDFs (Passfoto, Ausweis-Scan) und in Word-Dateien.
 - **Du stellst ein, was geschwärzt wird.** Angaben zur Person immer. Firmen und Kundennummern, Preise und medizinische Inhalte (Diagnosen, Medikamente, Laborwerte) nach Wahl. So darf „Erkläre mir CRP 200 und 15.000 Leukos“ zur KI, ein Arztbrief mit Namen nicht.
 - **Liest Bilder und Scans** mit der Windows-Texterkennung, alternativ mit Tesseract.
-- **Schwärzt statt zu löschen.** PDFs und Bilder behalten ihr Layout, Funde bekommen einen Kasten mit Platzhalter wie `[IBAN_1]`, Gesichter werden verpixelt.
+- **Schwärzt statt zu löschen.** PDFs und Bilder behalten ihr Layout, Funde bekommen einen Kasten mit Platzhalter wie `[IBAN_1]`, Gesichter werden verpixelt – auch Fotos in Word-Dateien. Die Handy-App findet mit demselben Verfahren genau dieselben Gesichter.
 - **Sagt dir, *was* du hochlädst:** „Du lädst gerade Familienunterlagen hoch – willst du das?“
 - **Übersetzt KI-Antworten zurück:** Aus `[PERSON_1]` wird wieder der echte Name.
 - **Erkennt Namen auch ohne „Herr/Frau“** – ohne KI, mit einer Liste von rund 1.500 Vornamen und typischen Stellen wie „Liebe Mia,“, „Viele Grüße, Thomas“, „Name: …“ oder „Familie Schneider“. Ist ein Name einmal erkannt, wird er überall im Text markiert.
@@ -320,6 +320,7 @@ vertraulichen Daten und kann deren Schwärzung oder Entfernung nicht garantieren
 [OpenCV](https://opencv.org), [Tesseract](https://github.com/tesseract-ocr/tesseract), [pystray](https://github.com/moses-palmer/pystray),
 [PyInstaller](https://pyinstaller.org), [Inno Setup](https://jrsoftware.org/isinfo.php), [pdf.js](https://mozilla.github.io/pdf.js/),
 [tesseract.js](https://tesseract.projectnaptha.com), [jsPDF](https://github.com/parallax/jsPDF), [JSZip](https://stuk.github.io/jszip/).
+Die Gesichts-Kaskaden stammen von OpenCV (Rainer Lienhart; Intel License Agreement, Lizenztext in `mobile/app/js/gesichter-daten.js`).
 Das lokale KI-Modell stammt von David Adelani (AFL-3.0), die ONNX-Fassung von Xenova.
 Gemessen wird mit GraSCCo_PII (Lohr et al., [Zenodo](https://zenodo.org/records/15747389), CC BY 4.0).
 Das Testfoto stammt aus einem gemeinfreien NASA-Foto (über [scikit-image](https://scikit-image.org)). Alle Personen,

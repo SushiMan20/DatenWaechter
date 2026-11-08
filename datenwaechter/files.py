@@ -3,6 +3,7 @@
 PDFs und Bilder werden beim Anonymisieren *geschwärzt*: Layout bleibt erhalten, Funde werden mit einem
 Kasten samt Platzhalter ([PERSON_1]) überdeckt, Gesichter verpixelt. Das Ergebnis ist ein Bild-PDF bzw. Bild,
 das Claude/ChatGPT problemlos lesen können – der Originaltext ist darin nicht mehr enthalten.
+In Word-Dateien wird der Text ersetzt; Gesichter auf eingebetteten Fotos werden verpixelt.
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ TEXT_SUFFIXES = {
     ".ps1", ".bat", ".toml", ".properties", ".eml",
 }
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tif", ".tiff"}
+MIN_FOTO_PT = 28       # kleinere Bilder auf PDF-Seiten (Logos, Symbole) werden nicht nach Gesichtern durchsucht
 PDF_SCALE = 2.5        # 180 dpi – gut lesbar für OCR und für die KI, Dateien bleiben handlich
 MAX_PDF_PAGES = 50
 
@@ -34,6 +36,8 @@ class UnsupportedFile(Exception):
 class Page:
     render: Callable[[], object]          # liefert das Seitenbild (PIL), passend zu den Koordinaten in spans
     spans: list[Span] = field(default_factory=list)
+    foto: bool = False                    # Foto oder Scan auf der Seite -> nach Gesichtern suchen
+    faces: list[Box] = field(default_factory=list)   # gefundene Gesichter (füllt analysis.analyze)
 
 
 @dataclass
@@ -45,6 +49,8 @@ class Document:
     notes: list[str] = field(default_factory=list)
     preview: Callable[[], object] | None = None   # Bild für das Sprachmodell (Foto / erste Scan-Seite)
     _keep: object = None                  # hält z. B. das geöffnete PDF am Leben
+    bilder: list[str] = field(default_factory=list)   # Word: eingebettete Fotos (Pfade in der .docx-Datei)
+    bild_faces: dict[str, list[Box]] = field(default_factory=dict)   # Word: Gesichter je Foto
 
     @property
     def redactable(self) -> bool:
@@ -62,8 +68,9 @@ def load(path: str | Path) -> Document:
         return _load_image(p)
     if suffix == ".docx":
         doc = _open_docx(p)
-        return Document(p, "docx", "\n".join(par.text for par in _docx_paragraphs(doc)),
-                        notes=["Bilder innerhalb des Word-Dokuments werden nicht geprüft"] if doc.inline_shapes else [])
+        bilder = _docx_bilder(p)
+        notes = ["Text in Bildern des Word-Dokuments wird nicht geprüft (Gesichter schon)"] if bilder else []
+        return Document(p, "docx", "\n".join(par.text for par in _docx_paragraphs(doc)), notes=notes, bilder=bilder)
     if suffix in TEXT_SUFFIXES or not suffix:
         raw = p.read_bytes()
         for enc in ("utf-8-sig", "cp1252", "latin-1"):
@@ -80,7 +87,7 @@ def _load_image(p: Path) -> Document:
     img.load()
     res = ocr.recognize(img)
     notes = [] if res else ["Text im Bild nicht geprüft – Texterkennung (OCR) fehlt"]
-    return Document(p, "image", res.text if res else "", [Page(lambda: img, res.spans if res else [])],
+    return Document(p, "image", res.text if res else "", [Page(lambda: img, res.spans if res else [], foto=True)],
                     notes, preview=lambda: img)
 
 
@@ -111,6 +118,7 @@ def _load_pdf(p: Path) -> Document:
         n = tp.count_chars()
         text = tp.get_text_range() if n else ""
         spans: list[Span] = []
+        foto = _hat_foto(page)
         if len(text.strip()) >= 20:
             _, height = page.get_size()
             if len(text) == n:  # Zeichenindex = Textposition -> Kästen für die Schwärzung
@@ -129,10 +137,75 @@ def _load_pdf(p: Path) -> Document:
                 text = res.text
                 spans = [Span(s.start + pos, s.end + pos, s.box) for s in res.spans]
             render = (lambda im=img: im)
+            foto = True
         parts.append(text)
         pos += len(text)
-        pages.append(Page(render, spans))
+        pages.append(Page(render, spans, foto=foto))
     return Document(p, "pdf", "".join(parts), pages, notes, preview, _keep=pdf)
+
+
+def _hat_foto(page) -> bool:
+    """Zeigt die PDF-Seite ein Bild, auf dem ein Gesicht sein könnte (Foto, Scan – keine kleinen Logos)?"""
+    try:
+        import pypdfium2.raw as pdfium_c
+        for obj in page.get_objects(filter=[pdfium_c.FPDF_PAGEOBJ_IMAGE]):
+            left, bottom, right, top = obj.get_bounds()
+            if right - left >= MIN_FOTO_PT and top - bottom >= MIN_FOTO_PT:
+                return True
+        return False
+    except Exception:
+        return True       # im Zweifel lieber suchen
+
+
+def _docx_bilder(p: Path) -> list[str]:
+    import zipfile
+    try:
+        with zipfile.ZipFile(p) as z:
+            return [n for n in z.namelist() if n.startswith("word/media/") and Path(n).suffix.lower() in IMAGE_SUFFIXES]
+    except (OSError, zipfile.BadZipFile):
+        return []
+
+
+def docx_bild(p: Path, name: str):
+    """Ein eingebettetes Foto aus einer Word-Datei (PIL-Bild, Pixel wie gespeichert) – oder None."""
+    import zipfile
+    from io import BytesIO
+    from PIL import Image
+    try:
+        with zipfile.ZipFile(p) as z:
+            img = Image.open(BytesIO(z.read(name)))
+            img.load()
+            return img
+    except Exception:
+        return None
+
+
+def _docx_fotos_verpixeln(pfad: Path, gesichter: dict[str, list[Box]]) -> None:
+    """Ersetzt in der fertigen .docx-Datei die Fotos mit Gesichtern durch verpixelte Fassungen (gleiches Format)."""
+    import zipfile
+    from io import BytesIO
+    from PIL import Image
+    from .redact import pixelate_face
+    tmp = pfad.with_name(pfad.name + ".tmp")
+    with zipfile.ZipFile(pfad) as zin, zipfile.ZipFile(tmp, "w") as zout:
+        for info in zin.infolist():
+            daten = zin.read(info)
+            if gesichter.get(info.filename):
+                img = Image.open(BytesIO(daten))
+                fmt = img.format or "PNG"
+                img.load()
+                if img.mode not in ("RGB", "RGBA", "L"):
+                    img = img.convert("RGBA" if img.mode in ("LA", "PA") or "transparency" in img.info else "RGB")
+                for box in gesichter[info.filename]:
+                    pixelate_face(img, box)
+                out = BytesIO()
+                if fmt == "JPEG":
+                    img.convert("RGB").save(out, "JPEG", quality=90)
+                else:
+                    img.save(out, fmt)
+                daten = out.getvalue()
+            zout.writestr(info, daten)
+    tmp.replace(pfad)
 
 
 # --------------------------------------------------------------------------- Kompatible Kurzformen
@@ -179,12 +252,15 @@ def write_anonymized(path: str | Path, anonymizer: Anonymizer, out_dir: str | Pa
                     par.text = new
         out = target / f"{stem}.docx"
         d.save(str(out))
+        if any(doc.bild_faces.values()):
+            _docx_fotos_verpixeln(out, doc.bild_faces)
         return out
 
+    if faces and doc.kind == "image" and not doc.pages[0].faces:   # ältere Aufrufer übergeben die Gesichter einzeln
+        doc.pages[0].faces = list(faces)
     if doc.redactable:
         from .redact import redact
-        images = [redact(pg.render(), pg.spans, findings, anonymizer, faces if doc.kind == "image" else ())
-                  for pg in doc.pages]
+        images = [redact(pg.render(), pg.spans, findings, anonymizer, pg.faces) for pg in doc.pages]
         if doc.kind == "pdf":
             out = target / f"{stem}.pdf"
             images[0].save(out, "PDF", save_all=True, append_images=images[1:], resolution=72 * PDF_SCALE)

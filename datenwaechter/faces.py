@@ -1,4 +1,8 @@
-"""Gesichter auf Fotos finden (OpenCV, läuft lokal, ~30 MB). Installation: pip install "opencv-python-headless<5"."""
+"""Gesichter auf Fotos finden (OpenCV, läuft lokal, ~30 MB). Installation: pip install "opencv-python-headless<5".
+
+Gesucht wird von vorn und im Profil (in beide Blickrichtungen). Die Handy-App macht mit denselben Daten genau
+dasselbe in JavaScript (mobile/app/js/gesichter.js) – tests/test_gesichter_js.py prüft, dass beide gleich finden.
+"""
 
 from __future__ import annotations
 
@@ -12,12 +16,13 @@ def _detectors():
     try:
         import cv2
         base = cv2.data.haarcascades
-        cascades = [cv2.CascadeClassifier(base + n) for n in
-                    ("haarcascade_frontalface_default.xml", "haarcascade_profileface.xml")]
+        frontal, profil = (cv2.CascadeClassifier(base + n) for n in
+                           ("haarcascade_frontalface_default.xml", "haarcascade_profileface.xml"))
     except (ImportError, AttributeError):  # OpenCV fehlt oder Version 5 ohne mitgelieferte Modelle
         return None
-    cascades = [c for c in cascades if not c.empty()]
-    return (cv2, cascades) if cascades else None
+    # (Kaskade, gespiegelt?) – die Profil-Kaskade kennt nur eine Blickrichtung, gespiegelt findet sie die andere
+    laeufe = [(c, gespiegelt) for c, gespiegelt in ((frontal, False), (profil, False), (profil, True)) if not c.empty()]
+    return (cv2, laeufe) if laeufe else None
 
 
 def available() -> bool:
@@ -29,12 +34,20 @@ def detect(img) -> list[Box]:
     if det is None:
         return []
     import numpy as np
-    cv2, cascades = det
-    gray = cv2.equalizeHist(np.asarray(img.convert("L")))
+    cv2, laeufe = det
+    # Bewusst ohne Histogramm-Ausgleich: die Kaskade gleicht Helligkeit und Kontrast je Suchfenster selbst aus.
+    # Ein Ausgleich über das ganze Bild drückt ein Foto auf einer fast weißen Seite (Lebenslauf, Ausweis-Kopie)
+    # in wenige dunkle Grautöne – das Gesicht wird dann nicht mehr gefunden.
+    gray = np.asarray(img.convert("L"))
+    flipped = cv2.flip(gray, 1)
+    width = gray.shape[1]
     min_side = max(24, min(img.size) // 25)
     found: list[Box] = []
-    for c in cascades:
-        for (x, y, w, h) in c.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=6, minSize=(min_side, min_side)):
+    for c, gespiegelt in laeufe:
+        for (x, y, w, h) in c.detectMultiScale(flipped if gespiegelt else gray, scaleFactor=1.1, minNeighbors=6,
+                                               minSize=(min_side, min_side)):
+            if gespiegelt:
+                x = width - x - w
             box = (float(x), float(y), float(x + w), float(y + h))
             if not any(_overlap(box, b) > 0.3 for b in found):
                 found.append(box)

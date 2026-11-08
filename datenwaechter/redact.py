@@ -72,8 +72,13 @@ def redact(img, spans: list[Span], findings, anonymizer, faces: list[Box] = ()):
         for box in boxes_for(spans, f.start, f.end):
             draw_label(out, box, label)
     for box in faces:
-        x0, y0, x1, y1 = box
-        m = 0.15 * (x1 - x0)
-        # grob: etwa 5 Blöcke über die Gesichtsbreite – sonst bleibt das Gesicht erkennbar
-        pixelate(out, (x0 - m, y0 - m, x1 + m, y1 + m), blocks=max(8, int((x1 - x0) / 5)))
+        pixelate_face(out, box)
     return out
+
+
+def pixelate_face(img, box: Box) -> None:
+    """Verpixelt ein Gesicht samt Rand (15 % der Breite) – grob: etwa 5 Blöcke über die Gesichtsbreite,
+    sonst bleibt das Gesicht erkennbar. Die Handy-App macht es genauso (mobile/app/js/dokumente.js)."""
+    x0, y0, x1, y1 = box
+    m = 0.15 * (x1 - x0)
+    pixelate(img, (x0 - m, y0 - m, x1 + m, y1 + m), blocks=max(8, int((x1 - x0) / 5)))

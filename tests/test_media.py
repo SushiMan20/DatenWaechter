@@ -159,6 +159,60 @@ def test_gesicht_wird_erkannt_und_verpixelt(tmp_path):
     assert faces.detect(Image.open(out)) == []
 
 
+@pytest.mark.skipif(not faces.available(), reason="OpenCV 4 nicht installiert")
+def test_gesicht_im_pdf_lebenslauf_und_scan(tmp_path):
+    """Passfoto auf einer Textseite und eingescannter Ausweis: Gesicht gefunden und im Ergebnis verpixelt."""
+    pytest.importorskip("pypdfium2")
+    reportlab = pytest.importorskip("reportlab.pdfgen.canvas")
+    import pypdfium2 as pdfium
+    c = reportlab.Canvas(str(tmp_path / "lebenslauf.pdf"))
+    c.drawString(72, 780, "Lebenslauf – Berufserfahrung seit 2015, Projektleitung, Entwicklung")
+    c.drawImage(str(ROOT / "tests" / "fixtures" / "gesicht.jpg"), 380, 600, 180, 180)
+    c.drawImage(str(ROOT / "tests" / "fixtures" / "gesicht.jpg"), 72, 60, 16, 16)   # Logo-Größe: wird übergangen
+    c.showPage()
+    c.drawString(72, 780, "Seite 2 – nur Text, hier wird nichts gerendert oder gesucht")
+    c.save()
+    r = analyze(tmp_path / "lebenslauf.pdf", use_llm=False)
+    assert [pg.foto for pg in r.doc.pages] == [True, False]
+    assert len(r.faces) == 1 and r.can_anonymize
+    assert r.rows()[-1]["label"] == "Gesicht(er) auf Fotos im Dokument"
+    out = anonymize(r, Anonymizer(), tmp_path / "aus")
+    assert faces.detect(pdfium.PdfDocument(str(out))[0].render(scale=2.5).to_pil()) == []
+
+    from PIL import Image
+    scan = Image.new("RGB", (1240, 1754), "white")
+    scan.paste(Image.open(ROOT / "tests" / "fixtures" / "gesicht.jpg").resize((400, 400)), (700, 120))
+    scan.save(tmp_path / "ausweis.pdf", "PDF", resolution=150)
+    r = analyze(tmp_path / "ausweis.pdf", use_llm=False)
+    assert len(r.faces) == 1
+    out = anonymize(r, Anonymizer(), tmp_path / "aus")
+    assert faces.detect(pdfium.PdfDocument(str(out))[0].render(scale=2.5).to_pil()) == []
+
+
+@pytest.mark.skipif(not faces.available(), reason="OpenCV 4 nicht installiert")
+def test_gesicht_in_word_datei(tmp_path):
+    """Foto in einer Word-Datei: Gesicht gefunden, in der Kopie verpixelt – Text und übrige Teile bleiben."""
+    docx = pytest.importorskip("docx")
+    import zipfile
+    from io import BytesIO
+    from PIL import Image
+    d = docx.Document()
+    d.add_paragraph("Bewerbung von Herrn Klaus Becker, IBAN DE89 3704 0044 0532 0130 00")
+    d.add_picture(str(ROOT / "tests" / "fixtures" / "gesicht.jpg"))
+    d.save(str(tmp_path / "bewerbung.docx"))
+    r = analyze(tmp_path / "bewerbung.docx", use_llm=False)
+    assert len(r.faces) == 1 and r.doc.bilder == ["word/media/image1.jpg"]
+    assert any("Text in Bildern" in n for n in r.doc.notes)
+    out = anonymize(r, Anonymizer(), tmp_path / "aus")
+    with zipfile.ZipFile(out) as z, zipfile.ZipFile(tmp_path / "bewerbung.docx") as orig:
+        assert set(orig.namelist()) <= set(z.namelist())
+        foto = Image.open(BytesIO(z.read("word/media/image1.jpg")))
+        assert foto.format == "JPEG" and foto.size == Image.open(ROOT / "tests" / "fixtures" / "gesicht.jpg").size
+        assert faces.detect(foto) == []
+    text = "\n".join(p.text for p in docx.Document(str(out)).paragraphs)
+    assert "DE89" not in text and "[IBAN_1]" in text
+
+
 # --------------------------------------------------------------------------- Browser-Brücke
 
 @needs_ocr

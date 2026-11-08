@@ -1,6 +1,7 @@
 // Dateien lesen (Text, Word, PDF, Fotos), Texterkennung, Schwärzen und Export – alles im Browser.
 // Ein Dokument: { name, typ, mime, datei, text, seiten: [{ breite, hoehe, ptBreite, ptHoehe, original, woerter, manuell }] }
 // Jedes Wort: { start, end, x, y, w, h } – Position im Gesamttext und auf der Seite (Pixel der Vorschau).
+import { gesichterAuf } from "./gesichter.js";
 
 const MAX_SEITEN = 20;
 const PDF_BREITE = 1100;        // Pixelbreite einer PDF-Seite in der Vorschau
@@ -140,10 +141,10 @@ async function bildLaden(doc, melden) {
   const c = leinwand(bmp.width * f, bmp.height * f);
   c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
   bmp.close?.();
-  const { text, woerter } = await erkenne(c, 1, 0, melden);
+  const [{ text, woerter }, gefunden] = await Promise.all([erkenne(c, 1, 0, melden), gesichter(c)]);
   doc.text = text.trim() ? text : "";
   doc.seiten.push({ breite: c.width, hoehe: c.height, ptBreite: c.width * 0.75, ptHoehe: c.height * 0.75,
-                    original: await alsBlob(c), woerter, manuell: [], gesichter: await gesichter(c) });
+                    original: await alsBlob(c), woerter, manuell: [], gesichter: gefunden });
   doc.quelle = "Texterkennung";
 }
 
@@ -168,15 +169,16 @@ async function pdfLaden(doc, melden) {
     const offset = doc.text.length;
     const inhalt = await page.getTextContent();
     let { text, woerter } = pdfText(lib, inhalt, vp, offset);
-    let c;
+    let c, gefunden = [];
     if (text.replace(/\s/g, "").length < 20) {        // kein Text drin → gescannte Seite → Texterkennung
       ocrSeiten++;
       const ocrScale = OCR_BREITE / basisVp.width;
       const gross = leinwand(basisVp.width * ocrScale, basisVp.height * ocrScale);
       await page.render({ canvas: gross, canvasContext: gross.getContext("2d"), viewport: page.getViewport({ scale: ocrScale }) }).promise;
-      ({ text, woerter } = await erkenne(gross, scale / ocrScale, offset, (t, p) => melden(`Seite ${n}: ${t}`, p)));
       c = leinwand(vp.width, vp.height);
       c.getContext("2d").drawImage(gross, 0, 0, c.width, c.height);
+      [{ text, woerter }, gefunden] = await Promise.all([
+        erkenne(gross, scale / ocrScale, offset, (t, p) => melden(`Seite ${n}: ${t}`, p)), gesichter(c)]);
       gross.width = gross.height = 0;
     } else {
       c = leinwand(vp.width, vp.height);
@@ -184,10 +186,14 @@ async function pdfLaden(doc, melden) {
       ctx.fillStyle = "#fff";
       ctx.fillRect(0, 0, c.width, c.height);
       await page.render({ canvas: c, canvasContext: ctx, viewport: vp }).promise;
+      if (await mitBildern(lib, page)) {                // Fotos auf der Seite (z. B. Lebenslauf, Ausweis-Kopie)
+        melden(`Seite ${n}: Gesichter werden gesucht …`, null);
+        gefunden = await gesichter(c);
+      }
     }
     doc.text += text + "\n\n";
     doc.seiten.push({ breite: c.width, hoehe: c.height, ptBreite: basisVp.width, ptHoehe: basisVp.height,
-                      original: await alsBlob(c), woerter, manuell: [], gesichter: [] });
+                      original: await alsBlob(c), woerter, manuell: [], gesichter: gefunden });
     c.width = c.height = 0;
     page.cleanup();
   }
@@ -222,12 +228,23 @@ function pdfText(lib, inhalt, vp, offset) {
   return { text, woerter };
 }
 
-async function gesichter(canvas) {
-  if (!("FaceDetector" in globalThis)) return [];
+/** Zeigt die Seite ein Bild (Foto, Scan)? Nur dann lohnt die Gesichtssuche auf einer Textseite. */
+async function mitBildern(lib, page) {
   try {
-    const found = await new globalThis.FaceDetector({ fastMode: false, maxDetectedFaces: 20 }).detect(canvas);
-    return found.map((f) => { const b = f.boundingBox; return { x: b.x - b.width * 0.15, y: b.y - b.height * 0.2, w: b.width * 1.3, h: b.height * 1.4 }; });
-  } catch { return []; }
+    const { fnArray } = await page.getOperatorList();
+    const bild = [lib.OPS.paintImageXObject, lib.OPS.paintInlineImageXObject, lib.OPS.paintImageXObjectRepeat];
+    return fnArray.some((f) => bild.includes(f));
+  } catch { return true; }
+}
+
+/** Gesichter auf der Leinwand – mit Rand wie im Windows-Programm (15 % der Gesichtsbreite ringsum). */
+async function gesichter(canvas) {
+  try {
+    return (await gesichterAuf(canvas)).map((f) => ({ x: f.x - f.w * 0.15, y: f.y - f.w * 0.15, w: f.w * 1.3, h: f.h + f.w * 0.3 }));
+  } catch (e) {
+    console.warn("Gesichtserkennung fehlgeschlagen:", e);
+    return [];
+  }
 }
 
 // ------------------------------------------------------------------ Schwärzen
@@ -282,7 +299,7 @@ function verpixeln(ctx, k) {
   const x = Math.max(0, Math.round(k.x)), y = Math.max(0, Math.round(k.y));
   const w = Math.min(ctx.canvas.width - x, Math.round(k.w)), h = Math.min(ctx.canvas.height - y, Math.round(k.h));
   if (w < 2 || h < 2) return;
-  const block = Math.max(8, Math.round(Math.min(w, h) / 8));
+  const block = Math.max(8, Math.round(w / 6.5));     // etwa 5 Blöcke über die Gesichtsbreite, sonst bleibt es erkennbar
   const klein = leinwand(Math.ceil(w / block), Math.ceil(h / block));
   const kctx = klein.getContext("2d");
   kctx.drawImage(ctx.canvas, x, y, w, h, 0, 0, klein.width, klein.height);

@@ -728,6 +728,34 @@ def exe_tests(dist: Path) -> None:
         assert r.returncode == 0 and (TMP / "aus" / "vertrag_anonymisiert.pdf").exists(), r.stderr[-800:]
         return "Text, PDF, Screenshot (Windows-OCR) und Foto geprüft, PDF + Bild geschwärzt"
 
+    def t_gesichter_dokumente():
+        import zipfile
+        from io import BytesIO
+
+        import docx
+        from PIL import Image
+        from reportlab.pdfgen import canvas
+
+        from datenwaechter import faces
+        foto = ROOT / "tests" / "fixtures" / "gesicht.jpg"
+        pdf = TMP / "lebenslauf.pdf"
+        cv = canvas.Canvas(str(pdf))
+        cv.drawString(72, 780, "Lebenslauf, Berufserfahrung seit 2015")
+        cv.drawImage(str(foto), 380, 600, 180, 180)
+        cv.save()
+        d = docx.Document()
+        d.add_paragraph("Bewerbung mit Foto")
+        d.add_picture(str(foto))
+        d.save(str(TMP / "bewerbung.docx"))
+        r = c("anonymisieren", str(pdf), str(TMP / "bewerbung.docx"), "--ziel", str(TMP / "aus-gesicht"))
+        assert r.returncode == 0, r.stderr[-800:]
+        import pypdfium2 as pdfium
+        seite = pdfium.PdfDocument(str(TMP / "aus-gesicht" / "lebenslauf_anonymisiert.pdf"))[0].render(scale=2.5).to_pil()
+        with zipfile.ZipFile(TMP / "aus-gesicht" / "bewerbung_anonymisiert.docx") as z:
+            bild = Image.open(BytesIO(z.read("word/media/image1.jpg")))
+        assert faces.detect(Image.open(foto)) and not faces.detect(seite) and not faces.detect(bild)
+        return "Passfoto im PDF und Foto in Word-Datei verpixelt"
+
     def t_native_host():
         msg = json.dumps({"action": "ping"}).encode()
         r = subprocess.run([str(cli), "chrome-extension://cfehnnbcppbopfbeiledoobmkgdffomd/", "--parent-window=0"],
@@ -778,6 +806,7 @@ def exe_tests(dist: Path) -> None:
 
     run("Programm: Kommandozeile", t_help)
     run("Programm: Dateien prüfen und schwärzen", t_scan_files)
+    run("Programm: Gesichter in PDF und Word", t_gesichter_dokumente)
     run("Programm: Browser-Brücke (Native Messaging)", t_native_host)
     run("Programm: Datenwaechter.exe startet mit Tray + Tastenkürzel", t_gui_start)
     run("Programm: lokales KI-Modell", t_modell)

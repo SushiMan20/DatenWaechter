@@ -1,5 +1,12 @@
 # Änderungen
 
+## 1.7.0
+
+- **Gesichter auch in PDFs und Word-Dateien:** Passfoto im Lebenslauf, eingescannter Ausweis, Foto in einer Bewerbung – das Gesicht wird gefunden und in der geschützten Fassung verpixelt. Bei Word bleibt die Datei ein Word-Dokument, nur das Foto wird ersetzt. Kleine Bilder wie Logos werden übergangen.
+- **Gesichtserkennung in der Handy-App – auch auf dem iPhone:** Fotos und PDF-Seiten werden auf dem Gerät nach Gesichtern durchsucht und beim Teilen verpixelt. Die Handy-App nutzt dieselben Erkennungsdaten und dasselbe Verfahren wie das Windows-Programm und findet bei gleichem Bild genau dieselben Gesichter. Die Suche läuft im Hintergrund auf mehreren Prozessorkernen, gleichzeitig mit der Texterkennung. „Gesichter auf Fotos“ erscheint in der Fundliste und lässt sich wie jeder Fund antippen (= nicht verpixeln).
+- **Gesichter im Profil in beide Blickrichtungen** (vorher nur nach einer Seite).
+- **Behoben: Fotos auf hellen Seiten blieben unerkannt.** Ein Kontrastausgleich über das ganze Bild hat ein Passfoto auf einer fast weißen Seite in wenige dunkle Grautöne gedrückt. Ohne ihn werden Gesichter ab der Mindestgröße unabhängig von Helligkeit und Kontrast gefunden.
+
 ## 1.6.0
 
 - **✨-Knopf erscheint sofort** (vorher bis zu 0,2 s Verzögerung) – und jetzt auch nach **Strg+A** („alles markieren“) und nach Markieren mit **Umschalt + Pfeil/Pos1/Ende**. Er erscheint an der Maus oder, wenn sie woanders ist, am Text-Cursor. Im Explorer, auf dem Desktop, in Excel und in Konsolen bleibt er weg (dort markiert man Dateien oder Zellen). Weitertippen blendet ihn aus.

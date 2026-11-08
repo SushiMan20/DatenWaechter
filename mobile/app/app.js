@@ -13,6 +13,7 @@ const S = {
   dateien: [],              // geladene Dokumente
   docs: [],                 // aktuell geprüft: Text aus dem Eingabefeld + Dateien
   aus: new Set(),           // Funde, die nicht geschwärzt werden sollen (Typ + Wert)
+  gesichterAus: false,      // Gesichter nicht verpixeln
   kiFunde: new Map(),       // Dokument → zusätzliche Funde der KI
   kiThema: null,
   ansicht: "datei",
@@ -159,7 +160,7 @@ karte.addEventListener("drop", (e) => { e.preventDefault(); karte.classList.remo
 function neuAnfangen() {
   S.lauf++;
   $("eingabe").value = "";
-  S.dateien = []; S.docs = []; S.aus.clear(); S.kiFunde.clear(); S.kiThema = null; S.zeichnen = false;
+  S.dateien = []; S.docs = []; S.aus.clear(); S.gesichterAus = false; S.kiFunde.clear(); S.kiThema = null; S.zeichnen = false;
   fortschritt(null);
   dateilisteZeigen();
   ergebnisZeigen();
@@ -295,22 +296,26 @@ function ergebnisZeigen() {
   if (!hat) { $("seiten").innerHTML = ""; return; }
 
   const alle = docs.flatMap((d) => d.funde);
+  const gesichterGefunden = gesichterAnzahl(docs);
+  const gesichter = S.gesichterAus ? 0 : gesichterGefunden;     // werden beim Teilen verpixelt
   const text = gesamtText();          // vergibt die Platzhalter in Lesereihenfolge
   // ---- Urteil
   // Themen wie „Gesundheitsdaten“ nur melden, wenn eine Person erkennbar ist (Fotos zählen immer als möglicher Personenbezug)
-  const mitPerson = !D.optionen.themen_nur_mit_person || docs.some((d) => d.typ === "bild")
+  const mitPerson = !D.optionen.themen_nur_mit_person || docs.some((d) => d.typ === "bild") || gesichterGefunden > 0
     || alle.some((f) => D.IDENTITAET.has(f.kind)) || ["personen", "personenfoto"].some((k) => S.kiThema?.keys?.includes(k));
   const kw = D.contentCheck(docs.map((d) => d.text).join("\n"), mitPerson ? null : alle);
   const thema = mischeThema(kw, S.kiThema && !mitPerson ? ohnePersonenThemen(S.kiThema) : S.kiThema);
-  const stufe = Math.max(0, ...alle.map((f) => f.severity), thema.severity >= 3 ? 3 : thema.severity ? 2 : 0);
+  const stufe = Math.max(0, ...alle.map((f) => f.severity), thema.severity >= 3 ? 3 : thema.severity ? 2 : 0, gesichter ? 2 : 0);
   const typen = [...new Set(alle.filter((f) => f.severity >= 3).map((f) => f.label))];
   const urteil = $("urteil");
   urteil.className = `card urteil ${stufe >= 3 ? "hoch" : stufe >= 2 ? "mittel" : "ok"}`;
   const quelle = docs.map((d) => d.typ === "eingabe" ? "Text" : `${d.name}${d.quelle ? ` · ${d.quelle}` : ""}`).join(" · ");
-  if (alle.length) {
+  if (alle.length || gesichter) {
     const unter = typen.length ? `Darunter ${typen.slice(0, 3).join(", ")}. ` : "";
-    urteil.innerHTML = `<svg><use href="#i-warn"/></svg><div><b>${anzahl(alle.length, "sensible Angabe", "sensible Angaben")} gefunden</b>`
-      + `<span class="small">${esc(unter)}Geschützt teilen ersetzt sie durch Platzhalter.</span></div>`;
+    const was = [alle.length && anzahl(alle.length, "sensible Angabe", "sensible Angaben"), gesichter && anzahl(gesichter, "Gesicht", "Gesichter")];
+    const wie = alle.length ? "Geschützt teilen ersetzt sie durch Platzhalter" + (gesichter ? " und verpixelt Gesichter." : ".") : "Geschützt teilen verpixelt sie.";
+    urteil.innerHTML = `<svg><use href="#i-warn"/></svg><div><b>${was.filter(Boolean).join(" und ")} gefunden</b>`
+      + `<span class="small">${esc(unter)}${wie}</span></div>`;
   } else {
     urteil.innerHTML = `<svg><use href="#i-${thema.categories.length ? "warn" : "ok"}"/></svg><div><b>Keine persönlichen Daten gefunden</b>`
       + `<span class="small muted">Geprüft: ${esc(quelle)}</span></div>`;
@@ -333,10 +338,13 @@ function ergebnisZeigen() {
     g.n++;
     gruppen.set(k, g);
   }
-  $("funde-karte").hidden = !gruppen.size;
+  $("funde-karte").hidden = !gruppen.size && !gesichterGefunden;
   const sortiert = [...gruppen.entries()].sort((a, b) => b[1].f.severity - a[1].f.severity);
   S.fundSchluessel = sortiert.map(([k]) => k);
-  $("funde").innerHTML = sortiert.map(([k, { f, n }], i) => {
+  const gesichtZeile = gesichterGefunden ? `<li class="fund${S.gesichterAus ? " aus" : ""}" data-gesicht="1" role="switch" aria-checked="${!S.gesichterAus}">`
+    + `<span class="stufe"></span><span class="was"><b>${gesichterGefunden === 1 ? "Gesicht" : "Gesichter"} auf Fotos</b><span>${gesichterGefunden} erkannt</span></span>`
+    + `<span class="ph">${S.gesichterAus ? "bleibt" : "verpixelt"}</span></li>` : "";
+  $("funde").innerHTML = gesichtZeile + sortiert.map(([k, { f, n }], i) => {
     const aus = S.aus.has(k);
     const ph = aus ? "bleibt" : S.anon.placeholder(f);
     return `<li class="fund${aus ? " aus" : ""}" data-i="${i}" role="switch" aria-checked="${!aus}">`
@@ -355,7 +363,12 @@ function ergebnisZeigen() {
   $("seiten").hidden = S.ansicht !== "datei";
   $("schwaerz-hinweis").hidden = S.ansicht !== "datei";
   if (S.ansicht === "datei") seitenZeigen();
-  $("teilen-text").textContent = alle.length || docs.some((d) => d.seiten.some((s) => s.manuell.length)) ? "Geschützt teilen" : "Teilen";
+  $("teilen-text").textContent = alle.length || gesichter || docs.some((d) => d.seiten.some((s) => s.manuell.length)) ? "Geschützt teilen" : "Teilen";
+}
+
+/** Erkannte Gesichter auf allen Seiten (ohne die weggetippten). */
+function gesichterAnzahl(docs) {
+  return docs.reduce((n, d) => n + d.seiten.reduce((m, s) => m + (s.gesichter || []).length, 0), 0);
 }
 
 const verb = (a) => (a.length === 1 ? a[0] : a.slice(0, -1).join(", ") + " und " + a.at(-1));
@@ -380,6 +393,7 @@ function mischeThema(kw, kiThema) {
 $("funde").addEventListener("click", (e) => {
   const li = e.target.closest(".fund");
   if (!li) return;
+  if (li.dataset.gesicht) { S.gesichterAus = !S.gesichterAus; ergebnisZeigen(); return; }
   const k = S.fundSchluessel[Number(li.dataset.i)];
   S.aus.has(k) ? S.aus.delete(k) : S.aus.add(k);
   ergebnisZeigen();
@@ -395,7 +409,7 @@ $("ansicht").addEventListener("click", (e) => {
 function kaesten(d, seite) {
   const out = [];
   for (const f of aktiveFunde(d)) for (const r of dok.balken(seite, f)) out.push({ ...r, label: S.anon.placeholder(f), art: "balken", k: schluessel(f) });
-  for (const g of seite.gesichter || []) out.push({ ...g, art: "gesicht" });
+  if (!S.gesichterAus) for (const g of seite.gesichter || []) out.push({ ...g, art: "gesicht" });
   for (const [i, m] of seite.manuell.entries()) out.push({ ...m, art: "manuell", i });
   return out;
 }
@@ -490,7 +504,7 @@ async function geschuetzteDateien() {
   const canvases = new Map([...$("seiten").children].map((el) => [el._seite, el.querySelector("canvas")]));
   for (const d of S.docs) {
     if (d.typ === "eingabe") continue;
-    const ohneAenderung = !aktiveFunde(d).length && d.seiten.every((s) => !s.manuell.length && !(s.gesichter || []).length);
+    const ohneAenderung = !aktiveFunde(d).length && d.seiten.every((s) => !s.manuell.length && (S.gesichterAus || !(s.gesichter || []).length));
     if (ohneAenderung && d.datei) { out.push(d.datei); continue; }
     const cs = [];
     for (const s of d.seiten) {

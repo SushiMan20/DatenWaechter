@@ -6,9 +6,11 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { readFile, mkdir } from "node:fs/promises";
 import { dirname, extname, join, normalize } from "node:path";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const DIST = join(dirname(fileURLToPath(import.meta.url)), "..", "dist");
+const GESICHT = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "..", "tests", "fixtures", "gesicht.jpg"));
 const SHOTS = process.env.SCREENSHOTS;
 const MIME = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css",
   ".json": "application/json", ".webmanifest": "application/manifest+json", ".png": "image/png", ".wasm": "application/wasm",
@@ -254,6 +256,64 @@ try {
   const geteilt3 = await page.evaluate(() => window.__geteilt[2]);
   assert.equal(geteilt3.files[0].name, "Kontoauszug-geschwaerzt.png");
   ok("Foto erkannt, eigener Balken gezeichnet, geschwärztes PNG geteilt");
+
+  // Findet die App auf einer geteilten Datei (Bild oder PDF-Seite) noch ein Gesicht?
+  const gesichterIn = (datei) => page.evaluate(async ({ b64, typ }) => {
+    const { gesichterAuf } = await import("./js/gesichter.js");
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    let c;
+    if (typ === "application/pdf") {
+      const lib = await import("./vendor/pdfjs/pdf.min.mjs");
+      lib.GlobalWorkerOptions.workerSrc = "vendor/pdfjs/pdf.worker.min.mjs";
+      const seite = await (await lib.getDocument({ data: bytes }).promise).getPage(1);
+      const vp = seite.getViewport({ scale: 1100 / seite.getViewport({ scale: 1 }).width });
+      c = Object.assign(document.createElement("canvas"), { width: vp.width, height: vp.height });
+      await seite.render({ canvas: c, canvasContext: c.getContext("2d"), viewport: vp }).promise;
+    } else {
+      const bmp = await createImageBitmap(new Blob([bytes], { type: typ }));
+      c = Object.assign(document.createElement("canvas"), { width: bmp.width, height: bmp.height });
+      c.getContext("2d").drawImage(bmp, 0, 0);
+    }
+    return (await gesichterAuf(c)).length;
+  }, { b64: datei.b64, typ: datei.type });
+
+  schritt("Foto mit Gesicht → erkannt und beim Teilen verpixelt");
+  await page.click("#btn-leeren");
+  const tg = Date.now();
+  await page.setInputFiles("#foto", { name: "Portrait.jpg", mimeType: "image/jpeg", buffer: GESICHT });
+  await page.waitForSelector(".fund[data-gesicht]", { timeout: 60000 });
+  assert.match(await textVon(".fund[data-gesicht]"), /Gesicht auf Fotos\s+1 erkannt/);
+  assert.match(await textVon("#urteil"), /1 Gesicht gefunden/);
+  await page.locator(".fund[data-gesicht]").click();               // antippen = nicht verpixeln
+  assert.match(await textVon(".fund[data-gesicht]"), /bleibt/);
+  assert.match(await textVon("#teilen-text"), /^Teilen$/);
+  await page.locator(".fund[data-gesicht]").click();
+  await page.click("#teilen");
+  await page.waitForFunction(() => window.__geteilt.length === 4);
+  const geteilt4 = await page.evaluate(() => window.__geteilt[3]);
+  assert.equal(geteilt4.files[0].name, "Portrait-geschwaerzt.jpg");
+  assert.equal(await gesichterIn(geteilt4.files[0]), 0, "im geteilten Foto ist kein Gesicht mehr zu erkennen");
+  ok(`Gesicht in ${((Date.now() - tg) / 1000).toFixed(1)} s gefunden, abschaltbar, geteiltes Foto verpixelt`);
+  await foto("08-gesicht-verpixelt", "#vorschau-karte");
+
+  schritt("PDF mit Passfoto (Lebenslauf) → Gesicht auf der Textseite verpixelt");
+  await page.click("#btn-leeren");
+  const lebenslauf = await page.evaluate(async (b64) => {
+    const { jsPDF } = window.jspdf;
+    const p = new jsPDF({ unit: "pt", format: "a4" });
+    p.setFontSize(20); p.text("Lebenslauf", 60, 80);
+    p.setFontSize(12); ["Berufserfahrung", "2019 – heute: Projektleitung", "2015 – 2019: Entwicklung"].forEach((z, i) => p.text(z, 60, 130 + i * 18));
+    p.addImage("data:image/jpeg;base64," + b64, "JPEG", 360, 60, 180, 180);
+    return btoa(String.fromCharCode(...new Uint8Array(await p.output("blob").arrayBuffer())));
+  }, GESICHT.toString("base64"));
+  await page.setInputFiles("#datei", datei("Lebenslauf.pdf", "application/pdf", lebenslauf));
+  await page.waitForSelector(".fund[data-gesicht]", { timeout: 60000 });
+  await page.click("#teilen");
+  await page.waitForFunction(() => window.__geteilt.length === 5);
+  const geteilt5 = await page.evaluate(() => window.__geteilt[4]);
+  assert.equal(geteilt5.files[0].name, "Lebenslauf-geschwaerzt.pdf");
+  assert.equal(await gesichterIn(geteilt5.files[0]), 0, "im geteilten PDF ist kein Gesicht mehr zu erkennen");
+  ok("Passfoto im PDF gefunden und im geteilten PDF verpixelt");
 
   schritt("Android „Teilen → Datenwächter“: Datei aus anderer App");
   await page.evaluate(() => {

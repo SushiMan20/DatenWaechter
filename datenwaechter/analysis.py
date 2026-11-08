@@ -9,7 +9,7 @@ from . import content_check, faces as face_mod
 from .anonymize import Anonymizer
 from .content_check import Verdict
 from .detectors import MITTEL, Finding, scan_text
-from .files import Document, load, write_anonymized
+from .files import Document, docx_bild, load, write_anonymized
 from .ocr import Box
 
 
@@ -42,7 +42,8 @@ class Report:
         out = [{"kind": f.kind, "label": f.label + (" (KI)" if f.source == "ki" else ""), "display": f.masked(),
                 "severity": f.severity, "source": f.source} for f in self.findings]
         if self.faces:
-            out.append({"kind": "GESICHT", "label": "Gesicht(er) auf dem Bild", "display": f"{len(self.faces)} erkannt",
+            wo = "auf dem Bild" if self.doc.kind == "image" else "auf Fotos im Dokument"
+            out.append({"kind": "GESICHT", "label": f"Gesicht(er) {wo}", "display": f"{len(self.faces)} erkannt",
                         "severity": MITTEL, "source": "bild"})
         return out
 
@@ -55,12 +56,17 @@ def analyze(path: str | Path, use_ki: bool = False, use_llm: bool | str = "auto"
     doc = load(path)
     findings = scan_text(doc.text, use_ki=use_ki)
     found_faces: list[Box] = []
-    image = None
-    if doc.kind == "image":
-        image = doc.preview()
-        found_faces = face_mod.detect(image)
-    elif doc.preview:
-        image = doc.preview()
+    if face_mod.available():
+        for pg in doc.pages:                        # Fotos, Scans und PDF-Seiten mit Bildern
+            if pg.foto:
+                pg.faces = face_mod.detect(pg.render())
+                found_faces += pg.faces
+        for name in doc.bilder:                     # Fotos in Word-Dateien
+            img = docx_bild(doc.path, name)
+            if img is not None:
+                doc.bild_faces[name] = face_mod.detect(img)
+                found_faces += doc.bild_faces[name]
+    image = doc.preview() if doc.preview else None
     verdict = content_check.check(doc.text, image=image, name=doc.path.name, use_llm=use_llm)
     verdict = content_check.nur_mit_personenbezug(verdict, findings, faces=len(found_faces) + (doc.kind == "image" and
                                                                                  "Fotos von Personen" in verdict.categories))
@@ -71,5 +77,4 @@ def analyze(path: str | Path, use_ki: bool = False, use_llm: bool | str = "auto"
 
 
 def anonymize(report: Report, anonymizer: Anonymizer, out_dir: str | Path | None = None) -> Path:
-    return write_anonymized(report.doc.path, anonymizer, out_dir, doc=report.doc, findings=report.findings,
-                            faces=report.faces)
+    return write_anonymized(report.doc.path, anonymizer, out_dir, doc=report.doc, findings=report.findings)
