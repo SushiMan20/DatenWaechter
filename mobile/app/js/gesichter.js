@@ -246,11 +246,13 @@ function zusammenfuehren(aufgaben, ergebnisse, b) {
   const gefunden = [];
   LAEUFE.forEach(([, gespiegelt], lauf) => {
     const kand = aufgaben.flatMap((a, i) => (a.lauf === lauf ? ergebnisse[i] : []));
-    for (const [x, y, w, hh] of gruppieren(kand, NACHBARN)) {
+    const kaesten = gruppieren(kand, NACHBARN).map(([x, y, w, hh]) => {
       const x0 = gespiegelt ? b - x - w : x;
-      const kasten = [x0, y, x0 + w, y + hh];
-      if (!gefunden.some((a) => ueberlappung(kasten, a) > 0.3)) gefunden.push(kasten);
-    }
+      return [x0, y, x0 + w, y + hh];
+    });
+    // fest sortiert wie in faces.py: von oben nach unten, dann links nach rechts
+    kaesten.sort((p, q) => p[1] - q[1] || p[0] - q[0] || p[2] - q[2] || p[3] - q[3]);
+    for (const kasten of kaesten) if (!gefunden.some((a) => ueberlappung(kasten, a) > 0.3)) gefunden.push(kasten);
   });
   return gefunden;
 }

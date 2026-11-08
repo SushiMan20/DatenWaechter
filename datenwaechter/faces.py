@@ -44,11 +44,15 @@ def detect(img) -> list[Box]:
     min_side = max(24, min(img.size) // 25)
     found: list[Box] = []
     for c, gespiegelt in laeufe:
+        boxes = []
         for (x, y, w, h) in c.detectMultiScale(flipped if gespiegelt else gray, scaleFactor=1.1, minNeighbors=6,
                                                minSize=(min_side, min_side)):
             if gespiegelt:
                 x = width - x - w
-            box = (float(x), float(y), float(x + w), float(y + h))
+            boxes.append((float(x), float(y), float(x + w), float(y + h)))
+        # OpenCV rechnet auf mehreren Kernen – die Reihenfolge der Treffer schwankt. Fest sortiert (von oben nach
+        # unten, dann links nach rechts), damit das Ergebnis immer gleich ist (und gleich wie in der Handy-App).
+        for box in sorted(boxes, key=lambda b: (b[1], b[0], b[2], b[3])):
             if not any(_overlap(box, b) > 0.3 for b in found):
                 found.append(box)
     return found
