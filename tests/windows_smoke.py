@@ -252,7 +252,27 @@ def t_auswahl_hook():
         treffer = [e for e in events if e[0] == "auswahl"]
         assert treffer, f"kein Markieren erkannt (Ereignisse: {[e[0] for e in events]})"
         assert treffer[0][3] == hwnd, "gemeldetes Fenster ist nicht Notepad"
-        return "Doppelklick auf Text in Notepad erkannt"
+        import ctypes
+        u = ctypes.windll.user32
+
+        def taste(vk, los=False):
+            u.keybd_event(vk, 0, 2 if los else 0, 0)
+            time.sleep(0.03)
+
+        def warte_auf_auswahl(vorher):
+            ende = time.time() + 3
+            while sum(e[0] == "auswahl" for e in events) == vorher and time.time() < ende:
+                time.sleep(0.05)
+            return sum(e[0] == "auswahl" for e in events) > vorher
+
+        vorher = sum(e[0] == "auswahl" for e in events)
+        taste(0x11), taste(0x41), taste(0x41, True), taste(0x11, True)             # Strg+A
+        assert warte_auf_auswahl(vorher), "Strg+A (alles markieren) nicht erkannt"
+        taste(0x23), taste(0x23, True), time.sleep(0.2)                                               # Ende: Markierung weg
+        vorher = sum(e[0] == "auswahl" for e in events)
+        taste(0x10), taste(0x24), taste(0x24, True), taste(0x10, True)             # Umschalt+Pos1
+        assert warte_auf_auswahl(vorher), "Umschalt+Pos1 nicht erkannt"
+        return "Doppelklick, Strg+A und Umschalt+Pos1 in Notepad erkannt"
     finally:
         w.stop()
         proc.kill()

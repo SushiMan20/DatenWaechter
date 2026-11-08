@@ -72,6 +72,41 @@ class LlmError(Exception):
     pass
 
 
+# --------------------------------------------------------------------------- Nachdenken (Reasoning)
+
+DENKEN = {"auto": "wie der Server es macht", "aus": "aus – schneller", "an": "an – gründlicher"}
+
+# Jeder Anbieter schaltet das Nachdenken anders: (Name, Angaben für „aus“, Angaben für „an“)
+DENK_VARIANTEN = [
+    ("reasoning_effort", {"reasoning_effort": "none"}, {"reasoning_effort": "medium"}),        # OpenAI, LiteLLM
+    ("reasoning_effort_minimal", {"reasoning_effort": "minimal"}, None),                     # ältere OpenAI-Modelle
+    ("chat_template_kwargs", {"chat_template_kwargs": {"enable_thinking": False}},           # Qwen, DeepSeek … (vLLM)
+     {"chat_template_kwargs": {"enable_thinking": True}}),
+    ("enable_thinking", {"enable_thinking": False}, {"enable_thinking": True}),               # Alibaba DashScope
+    ("thinking", {"thinking": {"type": "disabled"}}, {"thinking": {"type": "enabled", "budget_tokens": 2048}}),
+]
+
+
+def denk_angaben(variante: str, modus: str) -> dict:
+    """Zusatzangaben für eine Anfrage – {} bei „auto“, unbekannter oder nicht nötiger Variante."""
+    for name, aus, an in DENK_VARIANTEN:
+        if name == variante:
+            return dict((aus if modus == "aus" else an) or {})
+    return {}
+
+
+def _denkt(data: dict) -> bool:
+    """Hat das Modell nachgedacht? (eigenes Feld, Token-Zählung oder <think> im Text)"""
+    try:
+        msg = data["choices"][0]["message"]
+    except (KeyError, IndexError, TypeError):
+        return False
+    if msg.get("reasoning_content") or msg.get("reasoning") or msg.get("thinking_blocks") or msg.get("thinking"):
+        return True
+    det = (data.get("usage") or {}).get("completion_tokens_details") or {}
+    return (det.get("reasoning_tokens") or 0) > 0 or "<think>" in (msg.get("content") or "")
+
+
 # Gateways wie LiteLLM listen auch Sprach-, Vorlese-, Embedding- und OCR-Modelle – die können keinen Chat
 _KEIN_CHAT = re.compile(r"(?i)(?:^|[/_.:-])(?:stt|tts|whisper|embed\w*|embedding\w*|ocr|rerank\w*|moderation|dall-e"
                         r"|image|transcri\w*|speech|audio|realtime|instruct|davinci|babbage)(?:$|[/_.:-])|\*")
@@ -156,9 +191,11 @@ class Ollama:
     anonymize_first = False
     host = "localhost"
 
-    def complete(self, messages: list[dict], temperature: float = 0.3) -> str:
+    def complete(self, messages: list[dict], temperature: float = 0.3, denken: str | None = None) -> str:
         """Freier Text (für KI-Aktionen wie „Umformulieren“)."""
         body = {"model": self.model, "messages": messages, "stream": False, "options": {"temperature": temperature}}
+        if denken in ("aus", "an"):
+            body["think"] = denken == "an"   # Ollama: eigener Schalter
         return _antwort((_request(f"{self.url}/api/chat", body).get("message") or {}).get("content", ""))
 
     def ask(self, text: str, image=None, name: str = "") -> Answer:
@@ -178,11 +215,17 @@ class OpenAICompatible:
         self.model = s.modell or s.vorlage.get("modell", "")
         self.label = f"openai:{self.model or '?'}@{s.host}"
 
-    def _body(self, body: dict) -> dict:
-        """Zusatzangaben der Vorlage (z. B. „nicht nachdenken“) – nur für deren Modell."""
+    def _body(self, body: dict, denken: str | None = None) -> dict:
+        """Zusatzangaben: Vorlage (nur für deren Modell) und Nachdenken (geprüfte Variante dieses Servers)."""
         v = self.s.vorlage
         if v.get("extra") and self.model == v.get("modell"):
             body.update(v["extra"])
+        modus = denken or self.s.denken
+        if modus in ("aus", "an") and self.s.denken_geprueft == f"{self.s.base_url}|{self.model}":
+            extra = denk_angaben(self.s.denken_an if modus == "an" else self.s.denken_aus, modus)
+            body.update(extra)
+            if "thinking" in extra and modus == "an":
+                body["temperature"] = 1   # Claude: Nachdenken nur mit Temperatur 1
         return body
 
     def models(self) -> list[str]:
@@ -216,9 +259,9 @@ class OpenAICompatible:
     def host(self) -> str:
         return self.s.host
 
-    def complete(self, messages: list[dict], temperature: float = 0.3) -> str:
-        """Freier Text (für KI-Aktionen wie „Umformulieren“)."""
-        body = self._body({"model": self.model, "temperature": temperature, "messages": messages})
+    def complete(self, messages: list[dict], temperature: float = 0.3, denken: str | None = None) -> str:
+        """Freier Text (für KI-Aktionen wie „Umformulieren“). denken: aus | an | None = Einstellung."""
+        body = self._body({"model": self.model, "temperature": temperature, "messages": messages}, denken)
         data = _request(f"{self.s.base_url}/chat/completions", body, self.s.token)
         try:
             return _antwort(data["choices"][0]["message"]["content"])
@@ -313,6 +356,62 @@ def find_personal_data(text: str, backend_=None) -> dict:
     reply = b.complete([{"role": "system", "content": "Du antwortest ausschließlich mit gültigem JSON."},
                         {"role": "user", "content": NAMEN_PROMPT.format(text=text[:MAX_CHARS])}], temperature=0)
     return _parse_json(reply)
+
+
+def denken_pruefen(s: LlmSettings) -> dict:
+    """Findet heraus, wie dieser Server das Nachdenken an- und ausschaltet – und ob es überhaupt wirkt.
+
+    Ein Schalter zählt nur, wenn er die Antwort wirklich ändert: Manche Server nehmen Angaben an und ignorieren sie.
+    Ergebnis: {"standard": denkt ohne Angaben?, "aus": Variante, "an": Variante, "geprueft": "adresse|modell"};
+    Variante "" = ohne Zusatz, "-" = nicht möglich. Kostet ein paar sehr kurze Anfragen.
+    """
+    b = OpenAICompatible(s)
+    if not b.model:
+        listed = b.models()
+        b.model = listed[0] if listed else ""
+    if not b.model:
+        raise LlmError("Bitte ein Modell angeben.")
+    frage = [{"role": "user", "content": "Wie viel ist 17 + 25? Antworte nur mit der Zahl."}]
+
+    def probe(extra: dict) -> dict | None:
+        body = {"model": b.model, "messages": frage, **extra}
+        if "thinking" in extra and extra["thinking"].get("type") == "enabled":
+            body["temperature"] = 1
+        try:
+            return _request(f"{s.base_url}/chat/completions", body, s.token, timeout=60)
+        except LlmError as e:
+            if str(e).startswith(("HTTP 400", "HTTP 422")):   # Angabe unbekannt: nächste Variante
+                return None
+            raise
+
+    basis = probe({})
+    if basis is None:
+        raise LlmError("Der Server beantwortet keine einfache Anfrage.")
+    ergebnis = {"standard": _denkt(basis), "geprueft": f"{s.base_url}|{b.model}"}
+    for modus in ("aus", "an"):
+        if ergebnis["standard"] == (modus == "an"):
+            ergebnis[modus] = ""            # tut es ohnehin
+            continue
+        ergebnis[modus] = "-"
+        for name, aus, an in DENK_VARIANTEN:
+            extra = aus if modus == "aus" else an
+            if extra is None:
+                continue
+            antwort = probe(extra)
+            if antwort is not None and _denkt(antwort) == (modus == "an"):
+                ergebnis[modus] = name
+                break
+    return ergebnis
+
+
+def denken_beschreiben(e: dict) -> str:
+    """Für die Anzeige: „Modell denkt von sich aus nach · Aus: über chat_template_kwargs · An: ohne Zusatz“."""
+    teile = ["Das Modell denkt von sich aus nach." if e.get("standard") else "Das Modell denkt von sich aus nicht nach."]
+    for modus in ("aus", "an"):
+        v = e.get(modus, "-")
+        teile.append(f"{'Ausschalten' if modus == 'aus' else 'Einschalten'}: "
+                     + ("nicht möglich" if v == "-" else "ohne Zusatz" if v == "" else f"über „{v}“"))
+    return " · ".join(teile)
 
 
 def test_connection(s: LlmSettings) -> tuple[bool, str]:

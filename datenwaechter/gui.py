@@ -18,6 +18,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import tkinter as tk
 import uuid
 from pathlib import Path
@@ -42,7 +43,8 @@ try:
 except ImportError:
     TkinterDnD = None
 
-POLL_MS = 200
+POLL_MS = 200          # Zwischenablage prüfen
+EREIGNIS_MS = 30       # Ereignisse aus Hooks/Hintergrund abholen (✨-Knopf erscheint praktisch sofort)
 
 
 def anzahl(n: int, eins: str, mehr: str) -> str:
@@ -133,7 +135,8 @@ class App:
         self._log: deque = deque(maxlen=4)
         self._suspend = False      # während einer KI-Aktion die Zwischenablage nicht prüfen
         self._ki_busy = False
-        self._ki_lauf = 0          # Nummer der laufenden KI-Aktion (Abbrechen/Zeitüberschreitung: spätes Ergebnis verwerfen)
+        self._ki_lauf = 0
+        self._clip_zeit = 0.0          # Nummer der laufenden KI-Aktion (Abbrechen/Zeitüberschreitung: spätes Ergebnis verwerfen)
         self._ki_popup = None
         self._ki_palette = None
         self._llm_info = None
@@ -158,7 +161,7 @@ class App:
         self._start_auswahl()
         self._start_schutz()
         self._refresh()
-        self.root.after(POLL_MS, self._poll)
+        self.root.after(EREIGNIS_MS, self._poll)
         threading.Thread(target=self._detect_llm, daemon=True).start()
         self.root.after(2000, lokales_modell.vorladen)   # erste Prüfung soll nicht aufs Modell warten
         if start_hidden and self.tray.available:
@@ -542,12 +545,20 @@ class App:
             if self.knopf is not None and self.knopf.winfo_exists() and not self.knopf.enthaelt(x, y):
                 self.knopf.verstecken()
             return
+        if art == "tippen":   # weitergetippt: die Markierung ist weg
+            if self.auswahl is not None:
+                self.auswahl.knopf_offen = False
+            if self.knopf is not None and self.knopf.winfo_exists():
+                self.knopf.verstecken()
+            return
         if self._suspend or self._ki_busy or (self._ki_palette is not None and self._ki_palette.winfo_exists()):
             return
         if self.knopf is None or not self.knopf.winfo_exists():
             self.knopf = Knopf(self.root, dark=self.t is THEMES["dunkel"], font=FONT,
                                        hotkey=actions.load_hotkey())
         self.knopf.zeigen(x, y, lambda: self._ki_start(hwnd))
+        if self.auswahl is not None:
+            self.auswahl.knopf_offen = True   # erst jetzt meldet der Hook „weitergetippt“
 
     # ------------------------------------------------------------------ KI-Apps: Drop-Schutz und „Datei öffnen“
     def _start_schutz(self) -> None:
@@ -990,6 +1001,13 @@ class App:
         ttk.Label(right, text="Ergebnis").grid(row=4, column=0, sticky="w", pady=(8, 0))
         ttk.Combobox(right, textvariable=modus, values=list(actions.MODI.values()), state="readonly").grid(
             row=5, column=0, sticky="w")
+        denk_namen = {"": "wie beim KI-Server eingestellt", "aus": "aus – schneller", "an": "an – gründlicher"}
+        denken = tk.StringVar(value=denk_namen[""])
+        ttk.Label(right, text="Nachdenken (Reasoning)").grid(row=6, column=0, sticky="w", pady=(8, 0))
+        ttk.Combobox(right, textvariable=denken, values=list(denk_namen.values()), state="readonly", width=30).grid(
+            row=7, column=0, sticky="w")
+        ttk.Label(right, text="Gründlicher dauert länger – lohnt sich z. B. beim Zusammenfassen langer Texte.",
+                  foreground="#777").grid(row=8, column=0, sticky="w")
         sel = {"i": None}
 
         def refresh_list():
@@ -1002,8 +1020,9 @@ class App:
             if i is None or i >= len(liste):
                 return
             m = next((k for k, v in actions.MODI.items() if v == modus.get()), "ersetzen")
+            d = next((k for k, v in denk_namen.items() if v == denken.get()), "")
             liste[i] = actions.Aktion(name.get().strip() or liste[i].name, anweisung.get("1.0", "end-1c").strip()
-                                      or liste[i].anweisung, m)
+                                      or liste[i].anweisung, m, d)
             lb.delete(i)
             lb.insert(i, liste[i].name)
 
@@ -1019,6 +1038,7 @@ class App:
             anweisung.delete("1.0", "end")
             anweisung.insert("1.0", a.anweisung)
             modus.set(actions.MODI[a.modus])
+            denken.set(denk_namen.get(a.denken, denk_namen[""]))
 
         lb.bind("<<ListboxSelect>>", lambda e: lb.curselection() and select(lb.curselection()[0]))
 
@@ -1138,10 +1158,13 @@ class App:
     def _poll(self) -> None:
         try:
             self._drain_results()
-            if self.watch.get() and not self._busy and not self._suspend:
-                self._check_clipboard()
+            jetzt = time.monotonic()
+            if jetzt - self._clip_zeit >= POLL_MS / 1000:
+                self._clip_zeit = jetzt
+                if self.watch.get() and not self._busy and not self._suspend:
+                    self._check_clipboard()
         finally:
-            self.root.after(POLL_MS, self._poll)
+            self.root.after(EREIGNIS_MS, self._poll)
 
     def _check_clipboard(self) -> None:
         if winclip.AVAILABLE:
@@ -1568,8 +1591,19 @@ class App:
         model_box = ttk.Combobox(frm, textvariable=modell)
         model_box.grid(row=4, column=1, sticky="ew")
 
+        denk_namen = {k: v for k, v in llm.DENKEN.items()}
+        denken = tk.StringVar(value=denk_namen.get(s.denken, denk_namen["auto"]))
+        denk_erg = {"aus": s.denken_aus, "an": s.denken_an, "geprueft": s.denken_geprueft}
+        ttk.Label(frm, text="Nachdenken").grid(row=5, column=0, sticky="w", pady=3)
+        denk_box = ttk.Combobox(frm, textvariable=denken, values=list(denk_namen.values()), state="readonly")
+        denk_box.grid(row=5, column=1, sticky="ew")
+        denk_info = ttk.Label(frm, text="Reasoning-Modelle denken vor der Antwort nach: gründlicher, aber langsamer. "
+                                        "Gilt für Prüfungen und KI-Aktionen (einzeln änderbar).",
+                              foreground="#777", wraplength=440, justify="left")
+        denk_info.grid(row=6, column=1, columnspan=2, sticky="w")
+
         pruef = ttk.LabelFrame(frm, text="Was die KI prüfen soll", padding=10)
-        pruef.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(14, 0))
+        pruef.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(14, 0))
         ttk.Label(pruef, text="✔ Inhalt bewerten („Du lädst gerade Familienunterlagen hoch“) – immer aktiv").pack(
             anchor="w")
         ttk.Checkbutton(pruef, text="Namen ohne „Herr/Frau“ finden (z. B. den Kindernamen „Mia Schneider“)",
@@ -1580,14 +1614,17 @@ class App:
                         variable=anon).pack(anchor="w")
 
         warn = ttk.Label(frm, text="", foreground="#b45309", wraplength=580, justify="left")
-        warn.grid(row=6, column=0, columnspan=3, sticky="w", pady=(10, 0))
+        warn.grid(row=8, column=0, columnspan=3, sticky="w", pady=(10, 0))
         status = ttk.Label(frm, text="", wraplength=580, justify="left")
-        status.grid(row=7, column=0, columnspan=3, sticky="w", pady=(6, 0))
+        status.grid(row=9, column=0, columnspan=3, sticky="w", pady=(6, 0))
 
         def current() -> settings.LlmSettings:
+            d = next((k for k, v in denk_namen.items() if v == denken.get()), "auto")
             return settings.LlmSettings(typ="openai" if aktiv.get() else "aus", url=url.get().strip(),
                                         token=token.get().strip(), modell=modell.get().strip(),
-                                        bilder_senden=bilder.get(), anonymisieren=anon.get(), ki_namen=namen.get())
+                                        bilder_senden=bilder.get(), anonymisieren=anon.get(), ki_namen=namen.get(),
+                                        denken=d, denken_aus=denk_erg["aus"], denken_an=denk_erg["an"],
+                                        denken_geprueft=denk_erg["geprueft"])
 
         def in_thread(fn, done):
             threading.Thread(target=lambda: (lambda r: win.after(0, lambda: win.winfo_exists() and done(r)))(fn()),
@@ -1612,6 +1649,36 @@ class App:
                     status.configure(text=f"{anzahl(len(r), 'Modell', 'Modelle')} gefunden.", foreground="#2e7d32")
             in_thread(fetch, done)
         ttk.Button(frm, text="Modelle laden", command=load_models).grid(row=4, column=2, padx=(6, 0))
+
+        def denken_pruefen(_e=None, immer: bool = False):
+            """Herausfinden, wie dieser Server das Nachdenken schaltet (einmal je Adresse/Modell)."""
+            s_jetzt = current()
+            if s_jetzt.denken == "auto" and not immer:
+                return
+            ziel = f"{s_jetzt.base_url}|{s_jetzt.modell}"
+            if denk_erg["geprueft"] == ziel and not immer:
+                return
+            denk_info.configure(text="Prüfe, wie dein Server das Nachdenken schaltet (ein paar kurze Anfragen) …",
+                                foreground="#555")
+
+            def los():
+                try:
+                    return llm.denken_pruefen(s_jetzt)
+                except llm.LlmError as e:
+                    return e
+
+            def fertig(r):
+                if isinstance(r, Exception):
+                    denk_info.configure(text=f"Nachdenken nicht prüfbar: {r}", foreground="#c62828")
+                    return
+                denk_erg.update(aus=r["aus"], an=r["an"], geprueft=r["geprueft"])
+                gewaehlt = next((k for k, v in denk_namen.items() if v == denken.get()), "auto")
+                geht = gewaehlt == "auto" or r[gewaehlt] != "-"
+                denk_info.configure(text=llm.denken_beschreiben(r) + ("" if geht else " – diese Einstellung wirkt hier nicht."),
+                                    foreground="#2e7d32" if geht else "#b45309")
+            in_thread(los, fertig)
+        denk_box.bind("<<ComboboxSelected>>", denken_pruefen)
+        ttk.Button(frm, text="Prüfen", command=lambda: denken_pruefen(immer=True)).grid(row=5, column=2, padx=(6, 0))
 
         last_extern = [settings.is_external(s.url)]
 
@@ -1663,13 +1730,13 @@ class App:
             win.after(700, win.destroy)
 
         btns = ttk.Frame(frm)
-        btns.grid(row=8, column=0, columnspan=3, sticky="w", pady=(14, 0))
+        btns.grid(row=10, column=0, columnspan=3, sticky="w", pady=(14, 0))
         ttk.Button(btns, text="Verbindung testen", command=test).pack(side="left")
         ttk.Button(btns, text="Speichern", command=save).pack(side="left", padx=6)
         ttk.Button(btns, text="Abbrechen", command=win.destroy).pack(side="left")
         win.widgets = {"aktiv": aktiv, "url": url, "token": token, "modell": modell, "bilder": bilder, "anon": anon,
                        "namen": namen, "status": status, "test": test, "save": save, "load_models": load_models,
-                       "warn": warn}
+                       "warn": warn, "denken": denken, "denk_info": denk_info, "denk_box": denk_box}
 
     def _show_mapping(self) -> None:
         win = tk.Toplevel(self.root)

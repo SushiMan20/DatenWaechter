@@ -76,3 +76,13 @@ def test_auffangflaeche():
         assert drops == [("{C:/Daten/Vertrag.pdf}", "dateien")] and not a.aktiv
     finally:
         root.destroy()
+
+
+def test_tastatur_markieren_nicht_in_explorer_excel_konsole():
+    from datenwaechter.auswahl import tastatur_ausgeschlossen
+    for fenster in ("CabinetWClass", "Progman", "WorkerW", "XLMAIN", "ConsoleWindowClass", "CASCADIA_HOSTING_WINDOW_CLASS"):
+        assert tastatur_ausgeschlossen(fenster), fenster
+    assert tastatur_ausgeschlossen("#32770", "SysListView32"), "Dateiliste im Öffnen-Dialog"
+    for fenster, fokus in (("Notepad", "RichEditD2DPT"), ("Chrome_WidgetWin_1", "Chrome_RenderWidgetHostHWND"),
+                           ("OpusApp", "_WwG"), ("#32770", "Edit")):
+        assert not tastatur_ausgeschlossen(fenster, fokus), (fenster, fokus)

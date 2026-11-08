@@ -1,5 +1,10 @@
 # Änderungen
 
+## 1.6.0
+
+- **✨-Knopf erscheint sofort** (vorher bis zu 0,2 s Verzögerung) – und jetzt auch nach **Strg+A** („alles markieren“) und nach Markieren mit **Umschalt + Pfeil/Pos1/Ende**. Er erscheint an der Maus oder, wenn sie woanders ist, am Text-Cursor. Im Explorer, auf dem Desktop, in Excel und in Konsolen bleibt er weg (dort markiert man Dateien oder Zellen). Weitertippen blendet ihn aus.
+- **Nachdenken (Reasoning) einstellbar:** *KI-Server einrichten → Nachdenken: wie der Server es macht / aus – schneller / an – gründlicher*, und je KI-Aktion abweichend (z. B. „Zusammenfassen“ gründlich, „Umformulieren“ schnell). Der Datenwächter prüft einmal, welchen Schalter der Server versteht (OpenAI `reasoning_effort`, Qwen/vLLM `chat_template_kwargs`, DashScope `enable_thinking`, Claude `thinking`) – und ob er wirklich wirkt.
+
 ## 1.5.3
 
 - **KI-Aktionsleiste direkt am Mauszeiger** – auch auf dem zweiten Bildschirm und am Bildschirmrand (dort links bzw. oberhalb der Maus). Gilt ebenso für den ✨-Knopf. Im Browser öffnet sie sich nach einem Rechtsklick auf KI-Seiten an der Maus, sonst am Ende der Markierung.

@@ -114,3 +114,20 @@ def test_wachhund_beendet_nach_zeitueberschreitung(app):
     app._ki_wachhund(app._ki_lauf, "alt")
     pumpen(app, 0.2)
     assert not app._ki_busy and p.arbeit_titel.cget("text") == "Hat nicht geklappt"
+
+
+def test_knopf_erscheint_praktisch_sofort(app):
+    """Ereignisse aus dem Maus-/Tastatur-Hook werden alle 30 ms abgeholt (vorher 200 ms)."""
+    pumpen(app, 0.1)
+    start = time.monotonic()
+    app.results.put(("auswahl", "auswahl", 300, 200, 42))
+    while time.monotonic() - start < 1:
+        app.root.update()
+        if app.knopf is not None and app.knopf.winfo_viewable():
+            break
+        time.sleep(0.005)
+    dauer = time.monotonic() - start
+    assert app.knopf is not None and app.knopf.winfo_viewable() and dauer < 0.12, f"{dauer:.3f} s"
+    app.results.put(("auswahl", "tippen", 0, 0, 0))   # weitergetippt: Knopf verschwindet
+    pumpen(app, 0.15)
+    assert not app.knopf.winfo_viewable()

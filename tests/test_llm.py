@@ -282,3 +282,75 @@ def test_https_echt():
     from datenwaechter import netz
     with netz.oeffnen("https://huggingface.co/api/models/Xenova/bert-base-multilingual-cased-ner-hrl", 30) as r:
         assert r.status == 200
+
+
+# --------------------------------------------------------------------------- Nachdenken (Reasoning)
+
+def _denk_server(monkeypatch):
+    """Drei nachgebaute Modelle: „denker“ (denkt immer, Schalter nur über chat_template_kwargs; reasoning_effort wird
+    angenommen, aber ignoriert), „still“ (denkt nur mit reasoning_effort), „gpt“ (denkt nie, kennt reasoning_effort nicht)."""
+    gesendet = []
+
+    def antwort(url, body=None, token="", timeout=0):
+        if url.endswith("/models"):
+            return {"data": [{"id": "denker"}, {"id": "still"}, {"id": "gpt"}]}
+        gesendet.append(body)
+        m = body["model"]
+        if m == "gpt" and "reasoning_effort" in body:
+            raise llm.LlmError("HTTP 400: Unsupported parameter: reasoning_effort")
+        if "thinking" in body and m != "still":
+            raise llm.LlmError("HTTP 400: unknown field thinking")
+        if m == "denker":
+            denkt = (body.get("chat_template_kwargs") or {}).get("enable_thinking", True)
+        elif m == "still":
+            denkt = body.get("reasoning_effort") in ("low", "medium", "high")
+        else:
+            denkt = False
+        msg = {"content": "42"}
+        if denkt:
+            msg["reasoning_content"] = "17 + 25 …"
+        return {"choices": [{"message": msg}], "usage": {"completion_tokens_details": {"reasoning_tokens": 9 if denkt else 0}}}
+    monkeypatch.setattr(llm, "_request", antwort)
+    return gesendet
+
+
+@pytest.mark.parametrize("modell, standard, aus, an", [
+    ("denker", True, "chat_template_kwargs", ""),    # angenommen-aber-ignoriert (reasoning_effort) zählt nicht
+    ("still", False, "", "reasoning_effort"),
+    ("gpt", False, "", "-"),                          # denkt nie: Einschalten nicht möglich
+])
+def test_nachdenken_pruefen_findet_wirksamen_schalter(monkeypatch, modell, standard, aus, an):
+    _denk_server(monkeypatch)
+    e = llm.denken_pruefen(LlmSettings(typ="openai", url="http://ki.firma.example/v1", token="t", modell=modell))
+    assert (e["standard"], e["aus"], e["an"]) == (standard, aus, an)
+    assert e["geprueft"] == f"http://ki.firma.example/v1|{modell}"
+    assert llm.denken_beschreiben(e)
+
+
+def test_nachdenken_wird_bei_anfragen_angewendet(monkeypatch):
+    from datenwaechter import actions
+    gesendet = _denk_server(monkeypatch)
+    s = LlmSettings(typ="openai", url="http://ki.firma.example/v1", token="t", modell="denker", denken="aus",
+                    denken_aus="chat_template_kwargs", denken_an="", denken_geprueft="http://ki.firma.example/v1|denker")
+    b = llm.OpenAICompatible(s)
+    b.complete([{"role": "user", "content": "x"}])
+    assert gesendet[-1]["chat_template_kwargs"] == {"enable_thinking": False}, "Einstellung „aus“"
+    b.complete([{"role": "user", "content": "x"}], denken="an")
+    assert "chat_template_kwargs" not in gesendet[-1], "„an“ braucht hier keinen Zusatz"
+    anderes = llm.OpenAICompatible(LlmSettings(**{**s.__dict__, "modell": "gpt"}))
+    anderes.complete([{"role": "user", "content": "x"}])
+    assert "chat_template_kwargs" not in gesendet[-1], "nur für das geprüfte Modell"
+
+    # Aktion mit eigener Einstellung („Zusammenfassen“ gründlich, Rest schnell)
+    monkeypatch.setattr(llm, "backend", lambda *a, **k: b)
+    actions.run(actions.Aktion("Zusammenfassen", "Fasse zusammen", "anzeigen", "an"), "Ein Text.")
+    assert "chat_template_kwargs" not in gesendet[-1]
+    actions.run(actions.Aktion("Umformulieren", "Formuliere um"), "Ein Text.")
+    assert gesendet[-1]["chat_template_kwargs"] == {"enable_thinking": False}
+
+
+def test_aktion_merkt_sich_nachdenken():
+    from datenwaechter import actions
+    actions.save([actions.Aktion("Zusammenfassen", "Fasse zusammen", "anzeigen", "an"), actions.Aktion("Kürzen", "Kürze")])
+    geladen = actions.load()
+    assert [a.denken for a in geladen] == ["an", ""]

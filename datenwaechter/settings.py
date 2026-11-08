@@ -50,6 +50,10 @@ class LlmSettings:
     anonymisieren: bool | None = None   # None = automatisch: vor dem Senden an externe Server
     ollama_modell: str = ""        # lokales Modell in Ollama; leer = Standard (gemma3:4b)
     ki_namen: bool = False         # KI sucht zusätzlich Namen/Adressen ohne „Herr/Frau“ (nur lokale Server)
+    denken: str = "auto"           # Nachdenken (Reasoning): auto = wie der Server es macht | aus | an
+    denken_aus: str = ""           # geprüfte Schalter-Variante für „aus“ ("" = nichts nötig, "-" = geht nicht)
+    denken_an: str = ""            # … für „an“
+    denken_geprueft: str = ""      # für welche Adresse/welches Modell geprüft wurde („adresse|modell“)
 
     @property
     def base_url(self) -> str:

@@ -31,6 +31,7 @@ class Aktion:
     name: str
     anweisung: str
     modus: str = "ersetzen"   # ersetzen | einfuegen | anzeigen
+    denken: str = ""          # "" = wie beim KI-Server eingestellt | aus | an
 
     @property
     def id(self) -> str:
@@ -70,7 +71,8 @@ def load() -> list[Aktion]:
     out = []
     for a in raw:
         if isinstance(a, dict) and a.get("name") and a.get("anweisung"):
-            out.append(Aktion(a["name"], a["anweisung"], a.get("modus") if a.get("modus") in MODI else "ersetzen"))
+            out.append(Aktion(a["name"], a["anweisung"], a.get("modus") if a.get("modus") in MODI else "ersetzen",
+                              a.get("denken") if a.get("denken") in ("aus", "an") else ""))
     return out
 
 
@@ -140,6 +142,7 @@ def run(aktion: Aktion | str, text: str) -> Ergebnis:
     anon = Anonymizer()
     send = anon.anonymize(text) if b.anonymize_first else text
     reply = b.complete([{"role": "system", "content": SYSTEM},
-                        {"role": "user", "content": f"Anweisung: {a.anweisung}\n\nText:\n<<<\n{send}\n>>>"}])
+                        {"role": "user", "content": f"Anweisung: {a.anweisung}\n\nText:\n<<<\n{send}\n>>>"}],
+                       denken=a.denken or None)
     result = anon.restore(_clean(reply))
     return Ergebnis(result, a, b.label, b.host if b.extern else None, send != text)

@@ -4,4 +4,4 @@ from .detectors import Finding, scan_text
 from .anonymize import Anonymizer
 
 __all__ = ["Finding", "scan_text", "Anonymizer"]
-__version__ = "1.5.3"
+__version__ = "1.6.0"

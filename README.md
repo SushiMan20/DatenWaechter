@@ -35,7 +35,7 @@ eine anonymisierte Fassung hochladen, das Original verwenden oder abbrechen. Die
 - **Erkennt Namen auch ohne „Herr/Frau“** – ohne KI, mit einer Liste von rund 1.500 Vornamen und typischen Stellen wie „Liebe Mia,“, „Viele Grüße, Thomas“, „Name: …“ oder „Familie Schneider“. Ist ein Name einmal erkannt, wird er überall im Text markiert.
 - **Optional mit lokalem KI-Modell:** Ein Klick in den Einstellungen lädt einmalig ein Modell (180 MB), das danach ohne Internet auf deinem PC seltene Namen („Wenzeslaus Brummer“) und Orte findet.
 - **Optional mit eigenem, privatem KI-Server** (OpenAI-kompatible API mit Adresse und Token, z. B. im Firmennetz). Die KI bewertet dann Inhalte und Fotos genauer und findet auch seltene Namen.
-- **KI-Aktionen** wie „Umformulieren“, „Kürzen“, „Übersetzen“ oder eigene Anweisungen. Text markieren → **✨-Knopf** neben der Markierung (in jedem Windows-Programm), Strg+Alt+Leertaste oder im Browser Rechtsklick.
+- **KI-Aktionen** wie „Umformulieren“, „Kürzen“, „Übersetzen“ oder eigene Anweisungen. Text markieren – mit der Maus, Strg+A oder Umschalt+Pfeil – → **✨-Knopf** daneben (in jedem Windows-Programm), Strg+Alt+Leertaste oder im Browser Rechtsklick.
 - **Auch auf dem Handy:** In der Galerie, Mail- oder PDF-App auf *Teilen → Datenwächter* tippen, prüfen und schwärzen lassen, dann *Geschützt teilen → ChatGPT*. Die App läuft komplett auf dem Gerät, auch offline.
 
 ## So sieht es aus
@@ -177,6 +177,8 @@ Du legst fest, was die KI prüfen soll:
 - **Namen ohne „Herr/Frau“ finden**, z. B. den Kindernamen „Mia Schneider“ in einem Gerichtsbrief.
 - **Fotos und Screenshots bewerten**, z. B. „Foto eines Ausweises“.
 - **Vor dem Senden anonymisieren:** IBAN, Telefon und bekannte Namen gehen nur als Platzhalter raus.
+- **Nachdenken (Reasoning):** aus (schneller) oder an (gründlicher) – für alles oder je KI-Aktion. Welchen Schalter dein
+  Server versteht, prüft der Datenwächter selbst.
 
 Ein- und ausschalten geht jederzeit im Tray-Menü mit **„KI-Server benutzen“**: Ausgeschaltet geht nichts mehr an den
 Server, Adresse und Token bleiben gespeichert.
