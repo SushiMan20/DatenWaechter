@@ -23,7 +23,7 @@ from .settings import LlmSettings, load_llm
 OLLAMA_URL = os.environ.get("DATENWAECHTER_OLLAMA_URL", "http://127.0.0.1:11434")
 OLLAMA_MODEL = os.environ.get("DATENWAECHTER_OLLAMA_MODELL", "gemma3:4b")
 MAX_CHARS = 6000
-TIMEOUT = 120
+TIMEOUT = 120          # Sekunden ohne jedes Lebenszeichen vom Server (beim Streaming: Pause zwischen zwei Stücken)
 
 KATEGORIEN = {
     "familie": "Familienunterlagen", "kinder": "Daten über Kinder", "gesundheit": "Gesundheitsdaten",
@@ -143,6 +143,76 @@ def _request(url: str, body: dict | None = None, token: str = "", timeout: float
         raise LlmError(str(e)) from e
 
 
+def _inhalt(data: dict) -> str:
+    try:
+        text = data["choices"][0]["message"]["content"]
+    except (KeyError, IndexError, TypeError) as e:
+        raise LlmError("Unerwartetes Antwortformat") from e
+    return text if isinstance(text, str) else ""
+
+
+def _stream(url: str, body: dict, token: str = "", timeout: float | None = None, fortschritt=None) -> str:
+    """Chat-Antwort als Datenstrom: Der Server schickt laufend Stücke, statt erst am Ende alles auf einmal.
+
+    So bleibt die Verbindung aktiv – Proxys wie Cloudflare brechen nach etwa 100 Sekunden ohne Antwort ab, und
+    Nachdenken oder lange Texte dauern oft länger. timeout gilt für die Pause zwischen zwei Stücken, nicht für
+    die ganze Antwort. Versteht der Server OpenAI-Streaming (Server-Sent Events) oder Ollama-Streaming (eine
+    JSON-Zeile je Stück); schickt er trotzdem eine normale Antwort, wird die genommen.
+    fortschritt(text_bisher, denkt): bei jedem Stück; denkt=True, solange nur „Nachdenken“ kommt.
+    Gibt den Antworttext zurück (noch mit <think>…</think>, falls das Modell so nachdenkt).
+    """
+    headers = {"Content-Type": "application/json", "Accept": "text/event-stream, application/x-ndjson, application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    req = urllib.request.Request(url, data=json.dumps({**body, "stream": True}).encode(), headers=headers, method="POST")
+    text = ""
+    try:
+        with oeffnen(req, timeout or TIMEOUT) as r:
+            art = (r.headers.get("Content-Type") or "").lower()
+            if "event-stream" not in art and "ndjson" not in art:
+                data = json.load(r)                    # Server streamt nicht: normale Antwort
+                if "message" in data:                  # Ollama
+                    return (data.get("message") or {}).get("content") or ""
+                return _inhalt(data)
+            for zeile in r:
+                zeile = zeile.decode("utf-8", "replace").strip()
+                if "event-stream" in art:
+                    if not zeile.startswith("data:"):
+                        continue                       # Kommentare („: ping“), event:, id:
+                    zeile = zeile[5:].strip()
+                    if zeile == "[DONE]":
+                        break
+                if not zeile:
+                    continue
+                try:
+                    stueck = json.loads(zeile)
+                except ValueError:
+                    continue
+                if stueck.get("error"):
+                    fehler = stueck["error"]
+                    raise LlmError(fehler.get("message", str(fehler)) if isinstance(fehler, dict) else str(fehler))
+                denkt = False
+                for c in stueck.get("choices") or []:  # OpenAI-kompatibel
+                    delta = c.get("delta") or c.get("message") or {}
+                    if isinstance(delta.get("content"), str):
+                        text += delta["content"]
+                    denkt = denkt or bool(delta.get("reasoning_content") or delta.get("reasoning"))
+                msg = stueck.get("message")            # Ollama
+                if isinstance(msg, dict):
+                    text += msg.get("content") or ""
+                    denkt = denkt or bool(msg.get("thinking"))
+                if fortschritt:
+                    fortschritt(text, denkt and not text.strip())
+                if stueck.get("done") is True:
+                    break
+        return text
+    except urllib.error.HTTPError as e:
+        detail = e.read()[:300].decode("utf-8", "replace")
+        raise LlmError(f"HTTP {e.code}: {detail}") from e
+    except (OSError, ValueError) as e:
+        raise LlmError(str(e)) from e
+
+
 def _antwort(text: str | None) -> str:
     """Antworttext ohne „Nachdenken“ (<think>…</think>) und Leerzeilen davor/danach."""
     return re.sub(r"(?s)<think>.*?</think>", "", text or "").strip()
@@ -191,12 +261,13 @@ class Ollama:
     anonymize_first = False
     host = "localhost"
 
-    def complete(self, messages: list[dict], temperature: float = 0.3, denken: str | None = None) -> str:
-        """Freier Text (für KI-Aktionen wie „Umformulieren“)."""
-        body = {"model": self.model, "messages": messages, "stream": False, "options": {"temperature": temperature}}
+    def complete(self, messages: list[dict], temperature: float = 0.3, denken: str | None = None,
+                 fortschritt=None) -> str:
+        """Freier Text (für KI-Aktionen wie „Umformulieren“), gestreamt."""
+        body = {"model": self.model, "messages": messages, "options": {"temperature": temperature}}
         if denken in ("aus", "an"):
             body["think"] = denken == "an"   # Ollama: eigener Schalter
-        return _antwort((_request(f"{self.url}/api/chat", body).get("message") or {}).get("content", ""))
+        return _antwort(_stream(f"{self.url}/api/chat", body, fortschritt=fortschritt))
 
     def ask(self, text: str, image=None, name: str = "") -> Answer:
         body = {"model": self.model, "prompt": _prompt(text, name), "format": "json", "stream": False,
@@ -259,14 +330,21 @@ class OpenAICompatible:
     def host(self) -> str:
         return self.s.host
 
-    def complete(self, messages: list[dict], temperature: float = 0.3, denken: str | None = None) -> str:
+    def _chat(self, body: dict, fortschritt=None) -> str:
+        """Eine Chat-Anfrage, gestreamt. Lehnt der Server Streaming ab, einmal ohne."""
+        url = f"{self.s.base_url}/chat/completions"
+        try:
+            return _stream(url, body, self.s.token, fortschritt=fortschritt)
+        except LlmError as e:
+            if not (str(e).startswith(("HTTP 400", "HTTP 422")) and "stream" in str(e).lower()):
+                raise
+            return _inhalt(_request(url, body, self.s.token))
+
+    def complete(self, messages: list[dict], temperature: float = 0.3, denken: str | None = None,
+                 fortschritt=None) -> str:
         """Freier Text (für KI-Aktionen wie „Umformulieren“). denken: aus | an | None = Einstellung."""
         body = self._body({"model": self.model, "temperature": temperature, "messages": messages}, denken)
-        data = _request(f"{self.s.base_url}/chat/completions", body, self.s.token)
-        try:
-            return _antwort(data["choices"][0]["message"]["content"])
-        except (KeyError, IndexError, TypeError) as e:
-            raise LlmError("Unerwartetes Antwortformat") from e
+        return _antwort(self._chat(body, fortschritt))
 
     def ask(self, text: str, image=None, name: str = "") -> Answer:
         anonymized = False
@@ -282,24 +360,20 @@ class OpenAICompatible:
                              {"role": "user", "content": content}],
                 "response_format": {"type": "json_object"}}
         self._body(body)
-        url = f"{self.s.base_url}/chat/completions"
         try:
-            data = _request(url, body, self.s.token)
+            reply = self._chat(body)
         except LlmError as e:
             if not str(e).startswith("HTTP 400"):
                 raise
             body.pop("response_format")       # nicht jeder Server kennt den JSON-Modus …
             try:
-                data = _request(url, body, self.s.token)
+                reply = self._chat(body)
             except LlmError as e2:
                 if not (str(e2).startswith("HTTP 400") and isinstance(content, list)):
                     raise
                 body["messages"][1]["content"] = content[0]["text"]   # … oder Bilder
-                data = _request(url, body, self.s.token)
-        try:
-            reply = _antwort(data["choices"][0]["message"]["content"])
-        except (KeyError, IndexError, TypeError) as e:
-            raise LlmError("Unerwartetes Antwortformat") from e
+                reply = self._chat(body)
+        reply = _antwort(reply)
         return Answer(_parse_json(reply), self.label, self.s.host if self.s.extern else None, anonymized)
 
 

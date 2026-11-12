@@ -180,6 +180,9 @@ Du legst fest, was die KI prüfen soll:
 - **Nachdenken (Reasoning):** aus (schneller) oder an (gründlicher) – für alles oder je KI-Aktion. Welchen Schalter dein
   Server versteht, prüft der Datenwächter selbst.
 
+Antworten kommen **gestreamt** (Stück für Stück). Deshalb laufen auch lange Antworten durch Proxys wie Cloudflare, die
+eine Verbindung nach etwa 100 Sekunden ohne Daten trennen. Server ohne Streaming funktionieren ebenso.
+
 Ein- und ausschalten geht jederzeit im Tray-Menü mit **„KI-Server benutzen“**: Ausgeschaltet geht nichts mehr an den
 Server, Adresse und Token bleiben gespeichert.
 

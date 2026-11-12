@@ -35,8 +35,14 @@ def app(monkeypatch):
 
     zustand = {"dauer": 0.6, "fehler": None}
 
-    def run(aktion, text):
-        time.sleep(zustand["dauer"])
+    def run(aktion, text, fortschritt=None):
+        schritte = max(1, int(zustand["dauer"] / 0.1))
+        for i in range(schritte):                       # Antwort kommt gestreamt herein
+            time.sleep(zustand["dauer"] / schritte)
+            if fortschritt and i >= schritte // 2:
+                fortschritt("Bitte nachreichen."[:i], False)
+            elif fortschritt:
+                fortschritt("", True)
         if zustand["fehler"]:
             raise zustand["fehler"]
         return actions.Ergebnis("Bitte nachreichen.", aktion, "openai:m@x", None, False)
@@ -112,6 +118,23 @@ def test_wachhund_beendet_nach_zeitueberschreitung(app):
     app.zustand["dauer"] = 3
     p = waehlen(app)
     app._ki_wachhund(app._ki_lauf, "alt")
+    pumpen(app, 0.2)
+    assert not app._ki_busy and p.arbeit_titel.cget("text") == "Hat nicht geklappt"
+
+
+def test_leiste_zeigt_fortschritt_und_wachhund_wartet_solange_etwas_kommt(app, monkeypatch):
+    from datenwaechter import llm
+    app.zustand["dauer"] = 2.0
+    p = waehlen(app)
+    pumpen(app, 0.6)
+    assert p.arbeit_info.cget("text").startswith("KI denkt nach")
+    monkeypatch.setattr(llm, "TIMEOUT", 0)              # Wachhund-Grenze: 30 s ohne Lebenszeichen
+    app._ki_wachhund(app._ki_lauf, "alt", pruefen=True)
+    assert app._ki_busy, "Server meldet sich laufend – weiterarbeiten"
+    pumpen(app, 0.8)
+    assert p.arbeit_info.cget("text").startswith("KI schreibt ·")
+    app._ki_lebenszeichen -= 60                         # eine Minute nichts mehr gekommen
+    app._ki_wachhund(app._ki_lauf, "alt", pruefen=True)
     pumpen(app, 0.2)
     assert not app._ki_busy and p.arbeit_titel.cget("text") == "Hat nicht geklappt"
 

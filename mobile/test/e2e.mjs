@@ -50,7 +50,20 @@ const ki = createServer((req, res) => {
     } else {
       antwort = "```json\n" + JSON.stringify({ beschreibung: "Ein Schreiben über das Sorgerecht für ein Kind", familie: true, kinder: true }) + "\n```";
     }
-    send({ choices: [{ message: { role: "assistant", content: antwort } }] });
+    if (!body.stream || !body.messages[0].content.includes("Schreibassistent")) {
+      return send({ choices: [{ message: { role: "assistant", content: antwort } }] });   // Server ohne Streaming
+    }
+    // KI-Aktionen gestreamt wie bei OpenAI/LiteLLM: erst Nachdenken, dann der Text in Stücken
+    res.writeHead(200, { ...cors, "Content-Type": "text/event-stream" });
+    const stueck = (delta) => res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta }] })}\n\n`);
+    stueck({ reasoning_content: "Ich kürze den Text …" });
+    setTimeout(() => {
+      const teile = antwort.match(/.{1,6}/gs);
+      teile.forEach((t, i) => setTimeout(() => {
+        stueck({ content: t });
+        if (i === teile.length - 1) { res.write("data: [DONE]\n\n"); res.end(); }
+      }, i * 60));
+    }, 700);
   });
 });
 
@@ -406,7 +419,11 @@ try {
   await page.click('.tabs [data-gehe="ki"]');
   await page.fill("#ki-eingabe", "Bitte überweise 50 Euro auf DE89 3704 0044 0532 0130 00. Danke dir sehr, das war ein toller Abend.");
   await page.locator(".aktion", { hasText: "Kürzen" }).click();
+  await page.waitForFunction(() => document.querySelector("#ki-text").textContent.includes("KI denkt nach"));
+  await page.waitForFunction(() => /Kurz/.test(document.querySelector("#ki-text").textContent)
+    && !document.querySelector("#ki-text").textContent.includes("50 Euro"));       // halbe Antwort sichtbar
   await page.waitForFunction(() => document.querySelector("#ki-text").textContent.startsWith("Kurz:"));
+  assert.ok(kiAnfragen.some((a) => a.stream === true), "KI-Aktion wird gestreamt");
   const kurz = await textVon("#ki-text");
   assert.ok(kurz.includes("DE89 3704 0044 0532 0130 00"), kurz);
   assert.ok(!JSON.stringify(kiAnfragen).includes("DE89"), "Server hat die IBAN nie gesehen");

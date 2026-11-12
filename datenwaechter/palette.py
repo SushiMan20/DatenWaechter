@@ -281,6 +281,7 @@ class ActionPalette(tk.Toplevel):
         self.arbeit_info.pack(fill="x")
         self.bind("<Escape>", lambda e: self._abbrechen())
         self._start = time.monotonic()
+        self._stand = "KI arbeitet"
         self._groesse_anpassen()
         self._drehen()
         self._sekunden()
@@ -295,9 +296,20 @@ class ActionPalette(tk.Toplevel):
     def _sekunden(self) -> None:
         if self._closed or self.modus != "arbeitet":
             return
-        s = int(time.monotonic() - self._start)
-        self.arbeit_info.configure(text="KI arbeitet" + (f" · {s} s" if s else ""))
+        self._info_zeigen()
         self.after(1000, self._sekunden)
+
+    def _info_zeigen(self) -> None:
+        s = int(time.monotonic() - self._start)
+        self.arbeit_info.configure(text=self._stand + (f" · {s} s" if s else ""))
+
+    def fortschritt(self, zeichen: int, denkt: bool) -> None:
+        """Die Antwort kommt herein (Streaming): „KI denkt nach“ bzw. „KI schreibt · 340 Zeichen“."""
+        if self._closed or self.modus != "arbeitet":
+            return
+        self._stand = "KI denkt nach" if denkt and not zeichen else f"KI schreibt · {zeichen} Zeichen" if zeichen \
+            else "KI arbeitet"
+        self._info_zeigen()
 
     def _abbrechen(self) -> None:
         if self.modus == "arbeitet" and self._on_abbrechen:

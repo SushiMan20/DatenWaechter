@@ -127,8 +127,10 @@ def _clean(text: str) -> str:
     return t
 
 
-def run(aktion: Aktion | str, text: str) -> Ergebnis:
-    """Führt die Aktion mit dem eingestellten KI-Server aus. Wirft llm.LlmError mit verständlicher Meldung."""
+def run(aktion: Aktion | str, text: str, fortschritt=None) -> Ergebnis:
+    """Führt die Aktion mit dem eingestellten KI-Server aus. Wirft llm.LlmError mit verständlicher Meldung.
+
+    fortschritt(text_bisher, denkt): während die Antwort hereinkommt (gestreamt)."""
     a = find(aktion) if isinstance(aktion, str) else aktion
     if a is None:
         raise llm.LlmError(f"Aktion „{aktion}“ nicht gefunden")
@@ -143,6 +145,6 @@ def run(aktion: Aktion | str, text: str) -> Ergebnis:
     send = anon.anonymize(text) if b.anonymize_first else text
     reply = b.complete([{"role": "system", "content": SYSTEM},
                         {"role": "user", "content": f"Anweisung: {a.anweisung}\n\nText:\n<<<\n{send}\n>>>"}],
-                       denken=a.denken or None)
+                       denken=a.denken or None, fortschritt=fortschritt)
     result = anon.restore(_clean(reply))
     return Ergebnis(result, a, b.label, b.host if b.extern else None, send != text)

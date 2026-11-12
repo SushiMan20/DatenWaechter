@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "datenwaechter"
-version = "1.7.0"
+version = "1.7.1"
 description = "Lokaler Scanner, der persönliche und geheime Daten vor dem Hochladen in KI-Chats erkennt und anonymisiert."
 readme = "README.md"
 requires-python = ">=3.10"

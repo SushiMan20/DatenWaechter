@@ -3,6 +3,7 @@
 import json
 import os
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
@@ -18,7 +19,8 @@ WARNUNG = "Du lädst gerade Familienunterlagen hoch."
 @pytest.fixture
 def server():
     """Simulierter OpenAI-kompatibler Server (wie LM Studio, vLLM, Firmen-Gateway …)."""
-    state = {"requests": [], "reject_json_mode": False, "models": ["lokal-7b", "lokal-vision"], "fence": False}
+    state = {"requests": [], "reject_json_mode": False, "models": ["lokal-7b", "lokal-vision"], "fence": False,
+             "stream": "ja", "denken": 0.0, "pause": 0.0}   # stream: ja | ignorieren | ablehnen
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *a):
@@ -51,16 +53,41 @@ def server():
             state["requests"].append(body)
             if state["reject_json_mode"] and "response_format" in body:
                 return self._send(400, {"error": {"message": "response_format not supported"}})
-            content = json.dumps(ANTWORT, ensure_ascii=False)
+            if body.get("stream") and state["stream"] == "ablehnen":
+                return self._send(400, {"error": {"message": "stream is not supported"}})
+            content = state.get("text") or json.dumps(ANTWORT, ensure_ascii=False)
             if state["fence"]:
                 content = "Hier ist das Ergebnis:\n```json\n" + content + "\n```"
-            self._send(200, {"choices": [{"message": {"role": "assistant", "content": content}}]})
+            if not (body.get("stream") and state["stream"] == "ja"):
+                time.sleep(state["pause"] + state["denken"])          # lange still, dann alles auf einmal
+                return self._send(200, {"choices": [{"message": {"role": "assistant", "content": content}}]})
+            self.send_response(200)                                   # wie OpenAI/LiteLLM: Server-Sent Events
+            self.send_header("Content-Type", "text/event-stream")
+            self.end_headers()
+
+            def senden(delta):
+                self.wfile.write(f"data: {json.dumps({'choices': [{'index': 0, 'delta': delta}]})}\n\n".encode())
+                self.wfile.flush()
+            self.wfile.write(b": ping\n\n")
+            ende = time.time() + state["denken"]
+            while time.time() < ende:                                 # Nachdenken: laufend kleine Stücke
+                senden({"reasoning_content": "hmm "})
+                time.sleep(0.3)
+            for i in range(0, len(content), 7):
+                senden({"content": content[i:i + 7]})
+            self.wfile.write(b"data: [DONE]\n\n")
 
     srv = HTTPServer(("127.0.0.1", 0), Handler)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     state["url"] = f"http://127.0.0.1:{srv.server_port}/v1"
     yield state
     srv.shutdown()
+
+
+def _auch_gestreamt(monkeypatch, antwort):
+    """Nachgebauter Server als Funktion: gestreamte Anfragen bekommen dieselbe Antwort."""
+    monkeypatch.setattr(llm, "_stream", lambda url, body, token="", timeout=None, fortschritt=None:
+                        antwort(url, body, token)["choices"][0]["message"]["content"])
 
 
 def _save(**kw):
@@ -204,6 +231,7 @@ def test_eigener_dienst_braucht_schluessel_und_denkt_nicht(monkeypatch):
         gesendet.append((body, token))
         return {"choices": [{"message": {"content": '<think>hmm</think>\n\n{"beschreibung": "Einkaufsliste"}'}}]}
     monkeypatch.setattr(llm, "_request", antwort)
+    _auch_gestreamt(monkeypatch, antwort)
 
     ohne = LlmSettings(typ="openai", url=DIENST + "/")
     assert not llm.OpenAICompatible(ohne).available()
@@ -311,6 +339,7 @@ def _denk_server(monkeypatch):
             msg["reasoning_content"] = "17 + 25 …"
         return {"choices": [{"message": msg}], "usage": {"completion_tokens_details": {"reasoning_tokens": 9 if denkt else 0}}}
     monkeypatch.setattr(llm, "_request", antwort)
+    _auch_gestreamt(monkeypatch, antwort)
     return gesendet
 
 
@@ -354,3 +383,79 @@ def test_aktion_merkt_sich_nachdenken():
     actions.save([actions.Aktion("Zusammenfassen", "Fasse zusammen", "anzeigen", "an"), actions.Aktion("Kürzen", "Kürze")])
     geladen = actions.load()
     assert [a.denken for a in geladen] == ["an", ""]
+
+
+# --------------------------------------------------------------------------- Streaming
+
+def test_antwort_kommt_gestreamt(server):
+    server["text"] = "Bitte reichen Sie die Unterlagen bis Freitag nach."
+    b = llm.OpenAICompatible(LlmSettings(typ="openai", url=server["url"], token=TOKEN, modell="lokal-7b"))
+    stand = []
+    assert b.complete([{"role": "user", "content": "x"}], fortschritt=lambda t, d: stand.append(t)) == server["text"]
+    assert server["requests"][-1]["stream"] is True
+    assert len(stand) > 3 and stand[-1] == server["text"] and all(a <= b for a, b in zip(stand, stand[1:]))
+
+
+@pytest.mark.parametrize("art", ["ignorieren", "ablehnen"])
+def test_server_ohne_streaming(server, art):
+    server["stream"], server["text"] = art, "Kurz und knapp."
+    b = llm.OpenAICompatible(LlmSettings(typ="openai", url=server["url"], token=TOKEN, modell="lokal-7b"))
+    assert b.complete([{"role": "user", "content": "x"}]) == "Kurz und knapp."
+    if art == "ablehnen":
+        assert [r.get("stream") for r in server["requests"]] == [True, None], "einmal ohne Streaming wiederholt"
+
+
+def test_langes_nachdenken_hinter_cloudflare(server, monkeypatch):
+    """Wie hinter Cloudflare: Ohne Lebenszeichen bricht die Verbindung nach einer festen Zeit ab (hier 1 s statt
+    100 s). Das Modell denkt 2 s nach – gestreamt kommt laufend etwas an, also klappt es."""
+    monkeypatch.setattr(llm, "TIMEOUT", 1)
+    server["text"], server["denken"] = "Fertig umformuliert.", 2.0
+    b = llm.OpenAICompatible(LlmSettings(typ="openai", url=server["url"], token=TOKEN, modell="lokal-7b"))
+    stand = []
+    assert b.complete([{"role": "user", "content": "x"}], fortschritt=lambda t, d: stand.append(d)) == \
+        "Fertig umformuliert."
+    assert stand[0] is True and stand[-1] is False, "erst „denkt nach“, dann „schreibt“"
+    server["stream"] = "ignorieren"                     # derselbe Server ohne Streaming: Zeitüberschreitung
+    with pytest.raises(llm.LlmError, match="timed out"):
+        b.complete([{"role": "user", "content": "x"}])
+
+
+def test_ollama_streamt(monkeypatch):
+    """Ollama streamt eine JSON-Zeile je Stück."""
+    zeilen = [{"message": {"content": "", "thinking": "hmm"}, "done": False},
+              {"message": {"content": "Hallo "}, "done": False}, {"message": {"content": "Welt"}, "done": True}]
+
+    class H(BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def do_POST(self):
+            body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            assert body["stream"] is True and body["think"] is False
+            self.send_response(200)
+            self.send_header("Content-Type", "application/x-ndjson")
+            self.end_headers()
+            for z in zeilen:
+                self.wfile.write((json.dumps(z) + "\n").encode())
+                self.wfile.flush()
+
+    srv = HTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        stand = []
+        o = llm.Ollama(f"http://127.0.0.1:{srv.server_port}", "gemma3:4b")
+        assert o.complete([{"role": "user", "content": "x"}], denken="aus",
+                          fortschritt=lambda t, d: stand.append((t, d))) == "Hallo Welt"
+        assert stand[0] == ("", True) and stand[-1] == ("Hallo Welt", False)
+    finally:
+        srv.shutdown()
+
+
+def test_aktion_meldet_fortschritt(server, monkeypatch):
+    from datenwaechter import actions
+    server["text"] = "Neuer Text."
+    _save(typ="openai", url=server["url"], token=TOKEN, modell="lokal-7b", anonymisieren=False)
+    stand = []
+    erg = actions.run(actions.Aktion("Umformulieren", "Formuliere um"), "Alter Text.",
+                      fortschritt=lambda t, d: stand.append(t))
+    assert erg.text == "Neuer Text." and stand and stand[-1] == "Neuer Text."

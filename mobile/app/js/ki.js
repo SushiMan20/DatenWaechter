@@ -5,7 +5,7 @@ const SPEICHER = "dw-einstellungen";
 const AKTIONEN = "dw-aktionen";
 const MAX_CHARS = 6000;
 const MAX_AKTION = 12000;
-const TIMEOUT = 120000;
+const TIMEOUT = 120000;        // ms ohne jedes Lebenszeichen vom Server (beim Streaming: Pause zwischen zwei Stücken)
 
 export const VORLAGEN = [
   ["OpenAI", "https://api.openai.com/v1"],
@@ -89,17 +89,87 @@ async function anfrage(s, pfad, body, timeout = TIMEOUT) {
   } finally {
     clearTimeout(timer);
   }
-  if (!res.ok) {
-    const detail = (await res.text().catch(() => "")).slice(0, 300);
-    const e = new KiFehler(res.status === 401 || res.status === 403 ? "Zugriff verweigert – Token prüfen."
-      : res.status === 404 ? "Adresse nicht gefunden (404) – endet sie auf /v1?"
-      : res.status === 429 ? "Zu viele Anfragen oder Guthaben aufgebraucht (429)."
-      : `Der Server meldet Fehler ${res.status}${detail ? ": " + detail : ""}`);
-    e.status = res.status;
-    throw e;
-  }
+  if (!res.ok) throw await serverFehler(res);
   try { return await res.json(); } catch { throw new KiFehler("Der Server hat kein gültiges JSON geschickt."); }
 }
+
+async function serverFehler(res) {
+  const detail = (await res.text().catch(() => "")).slice(0, 300);
+  const e = new KiFehler(res.status === 401 || res.status === 403 ? "Zugriff verweigert – Token prüfen."
+    : res.status === 404 ? "Adresse nicht gefunden (404) – endet sie auf /v1?"
+    : res.status === 429 ? "Zu viele Anfragen oder Guthaben aufgebraucht (429)."
+    : `Der Server meldet Fehler ${res.status}${detail ? ": " + detail : ""}`);
+  e.status = res.status;
+  e.detail = detail;
+  return e;
+}
+
+/**
+ * Chat-Anfrage als Datenstrom (wie datenwaechter/llm.py _stream): Der Server schickt laufend Stücke statt am Ende
+ * alles auf einmal. Das hält die Verbindung aktiv – Proxys wie Cloudflare brechen sonst nach etwa 100 Sekunden ab.
+ * Die Zeitgrenze gilt für die Pause zwischen zwei Stücken. fortschritt(text_bisher, denkt) bei jedem Stück.
+ */
+async function streamen(s, body, fortschritt) {
+  const ctrl = new AbortController();
+  let timer;
+  const wecker = () => { clearTimeout(timer); timer = setTimeout(() => ctrl.abort(), TIMEOUT); };
+  const headers = { Accept: "text/event-stream, application/json", "Content-Type": "application/json" };
+  if (s.token) headers.Authorization = `Bearer ${s.token.trim()}`;
+  wecker();
+  try {
+    let res;
+    try {
+      res = await fetch(baseUrl(s.url) + "/chat/completions", {
+        method: "POST", headers, body: JSON.stringify({ ...body, stream: true }),
+        signal: ctrl.signal, referrerPolicy: "no-referrer", credentials: "omit", cache: "no-store",
+      });
+    } catch (err) { throw freundlich(err, s); }
+    if (!res.ok) throw await serverFehler(res);
+    if (!(res.headers.get("content-type") || "").includes("event-stream") || !res.body) {
+      let data;                                   // Server streamt nicht: normale Antwort
+      try { data = await res.json(); } catch (err) { throw err?.name === "AbortError" ? freundlich(err, s) : new KiFehler("Der Server hat kein gültiges JSON geschickt."); }
+      return inhalt(data);
+    }
+    const leser = res.body.getReader(), dekoder = new TextDecoder();
+    let puffer = "", text = "";
+    for (;;) {
+      let teil;
+      try { teil = await leser.read(); } catch (err) { throw freundlich(err, s); }
+      if (teil.done) return text;
+      wecker();
+      puffer += dekoder.decode(teil.value, { stream: true });
+      let i;
+      while ((i = puffer.indexOf("\n")) >= 0) {
+        const zeile = puffer.slice(0, i).trim();
+        puffer = puffer.slice(i + 1);
+        if (!zeile.startsWith("data:")) continue;    // Kommentare („: ping“), event:, id:
+        const daten = zeile.slice(5).trim();
+        if (daten === "[DONE]") { leser.cancel().catch(() => {}); return text; }
+        let stueck;
+        try { stueck = JSON.parse(daten); } catch { continue; }
+        if (stueck.error) throw new KiFehler(`Der Server meldet: ${stueck.error.message || stueck.error}`);
+        let denkt = false;
+        for (const c of stueck.choices || []) {
+          const d = c.delta || c.message || {};
+          if (typeof d.content === "string") text += d.content;
+          denkt ||= Boolean(d.reasoning_content || d.reasoning);
+        }
+        fortschritt?.(text, denkt && !text.trim());
+      }
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function inhalt(data) {
+  const text = data?.choices?.[0]?.message?.content;
+  if (typeof text !== "string") throw new KiFehler("Unerwartetes Antwortformat vom Server.");
+  return text;
+}
+
+/** Nachdenken (<think>…</think>) entfernen – auch ein noch offenes am Ende einer halben Antwort. */
+export const ohneDenken = (t) => (t || "").replace(/<think>[\s\S]*?<\/think>/g, "").replace(/<think>[\s\S]*$/, "");
 
 // Gateways wie LiteLLM listen auch Sprach-, Vorlese-, Embedding- und OCR-Modelle – die können keinen Chat (wie llm.py)
 const KEIN_CHAT = /(?:^|[/_.:-])(?:stt|tts|whisper|embed\w*|embedding\w*|ocr|rerank\w*|moderation|dall-e|image|transcri\w*|speech|audio|realtime|instruct|davinci|babbage)(?:$|[/_.:-])|\*/i;
@@ -118,21 +188,29 @@ async function modellFuer(s) {
   return liste[0];
 }
 
-export async function complete(s, messages, temperature = 0.3, extra = {}) {
+/** Eine Chat-Anfrage, gestreamt. Lehnt der Server Streaming ab, einmal ohne. */
+async function chat(s, body, fortschritt) {
+  try {
+    return await streamen(s, body, fortschritt);
+  } catch (e) {
+    if (!((e.status === 400 || e.status === 422) && /stream/i.test(e.detail || ""))) throw e;
+    return inhalt(await anfrage(s, "/chat/completions", body));
+  }
+}
+
+export async function complete(s, messages, temperature = 0.3, extra = {}, fortschritt = null) {
   const body = { model: await modellFuer(s), temperature, messages, ...extra };
   const v = vorlage(s.url);
   if (v.extra && body.model === v.modell) Object.assign(body, v.extra);   // z. B. „nicht nachdenken“
-  let data;
+  let text;
   try {
-    data = await anfrage(s, "/chat/completions", body);
+    text = await chat(s, body, fortschritt);
   } catch (e) {
     if (e.status !== 400 || !extra.response_format) throw e;
     delete body.response_format;                // nicht jeder Server kennt den JSON-Modus
-    data = await anfrage(s, "/chat/completions", body);
+    text = await chat(s, body, fortschritt);
   }
-  const text = data?.choices?.[0]?.message?.content;
-  if (typeof text !== "string") throw new KiFehler("Unerwartetes Antwortformat vom Server.");
-  return text.replace(/<think>[\s\S]*?<\/think>/g, "").trim();   // ohne „Nachdenken“ und Leerzeilen
+  return ohneDenken(text).trim();               // ohne „Nachdenken“ und Leerzeilen
 }
 
 export function parseJson(text) {
@@ -300,14 +378,18 @@ function aufraeumen(text) {
   return t;
 }
 
-/** Anonymisieren → Server → echte Angaben wieder einsetzen. */
-export async function aktion(s, anweisung, text) {
+/**
+ * Anonymisieren → Server → echte Angaben wieder einsetzen.
+ * fortschritt(text_bisher, denkt): die Antwort, während sie hereinkommt – schon mit echten Angaben.
+ */
+export async function aktion(s, anweisung, text, fortschritt = null) {
   if (!text.trim()) throw new KiFehler("Erst einen Text eingeben oder einfügen.");
   if (text.length > MAX_AKTION) throw new KiFehler(`Text zu lang (${text.length} Zeichen, höchstens ${MAX_AKTION}).`);
   const anon = anonymisierer();
   const gesendet = anonymZuerst(s) ? anon.anonymize(text) : text;
+  const live = fortschritt && ((t, denkt) => fortschritt(anon.restore(ohneDenken(t).trim()), denkt));
   const antwort = await complete(s, [{ role: "system", content: SYSTEM },
-    { role: "user", content: `Anweisung: ${anweisung}\n\nText:\n<<<\n${gesendet}\n>>>` }]);
+    { role: "user", content: `Anweisung: ${anweisung}\n\nText:\n<<<\n${gesendet}\n>>>` }], 0.3, {}, live);
   return { text: anon.restore(aufraeumen(antwort)), anonym: gesendet !== text, host: host(s.url), extern: extern(s.url) };
 }
 

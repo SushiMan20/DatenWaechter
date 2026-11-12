@@ -1,5 +1,12 @@
 # Änderungen
 
+## 1.7.1
+
+- **KI-Antworten kommen gestreamt:** Der Server schickt den Text Stück für Stück, statt erst am Ende alles auf einmal. So bleibt die Verbindung aktiv, und Proxys wie Cloudflare brechen lange Antworten nicht mehr nach etwa 100 Sekunden ab (Fehler 524), auch wenn das Modell lange nachdenkt. Gilt für KI-Aktionen, Inhalts-Check und Namenssuche, im Windows-Programm, in der Browser-Erweiterung und in der Handy-App.
+- Die Zeitgrenze gilt jetzt für die Pause zwischen zwei Stücken, nicht mehr für die ganze Antwort. Lange Texte dürfen also länger als zwei Minuten dauern, solange der Server sich meldet.
+- Die Aktionsleiste zeigt, was passiert: „KI denkt nach“ bzw. „KI schreibt · 340 Zeichen“. In der Handy-App erscheint der Text schon, während er geschrieben wird.
+- Server ohne Streaming funktionieren weiter wie bisher.
+
 ## 1.7.0
 
 - **Gesichter auch in PDFs und Word-Dateien:** Passfoto im Lebenslauf, eingescannter Ausweis, Foto in einer Bewerbung – das Gesicht wird gefunden und in der geschützten Fassung verpixelt. Bei Word bleibt die Datei ein Word-Dokument, nur das Foto wird ersetzt. Kleine Bilder wie Logos werden übergangen.

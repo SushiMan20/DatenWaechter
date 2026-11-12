@@ -136,6 +136,7 @@ class App:
         self._suspend = False      # während einer KI-Aktion die Zwischenablage nicht prüfen
         self._ki_busy = False
         self._ki_lauf = 0
+        self._ki_lebenszeichen = 0.0   # letzte Nachricht vom KI-Server (für den Wachhund)
         self._clip_zeit = 0.0          # Nummer der laufenden KI-Aktion (Abbrechen/Zeitüberschreitung: spätes Ergebnis verwerfen)
         self._ki_popup = None
         self._ki_palette = None
@@ -817,9 +818,18 @@ class App:
         else:
             self._ki_popup = self._pointer_note(f"🛡 {aktion.name} … KI arbeitet", ms=0)
 
+        self._ki_lebenszeichen = time.monotonic()
+        gemeldet = [0.0]
+
+        def fortschritt(bisher: str, denkt: bool) -> None:   # aus dem Arbeits-Thread, höchstens 5× pro Sekunde
+            jetzt = time.monotonic()
+            if jetzt - gemeldet[0] >= 0.2:
+                gemeldet[0] = jetzt
+                self.results.put(("ki-fortschritt", lauf, len(bisher.strip()), denkt))
+
         def work():
             try:
-                erg, fehler = actions.run(aktion, text), None
+                erg, fehler = actions.run(aktion, text, fortschritt=fortschritt), None
             except llm.LlmError as e:
                 erg, fehler = None, str(e)
             except Exception as e:  # noqa: BLE001 – nie hängen bleiben: jeder Fehler kommt als Meldung zurück
@@ -827,7 +837,15 @@ class App:
                 erg, fehler = None, f"Unerwarteter Fehler ({type(e).__name__}: {e}). Details in {protokoll.datei()}"
             self.results.put(("ki-result", hwnd, erg, fehler, old, text, lauf))
         threading.Thread(target=work, daemon=True).start()
-        self.root.after(llm.TIMEOUT * 1000 + 30_000, lambda: self._ki_wachhund(lauf, old))
+        self.root.after(10_000, lambda: self._ki_wachhund(lauf, old, pruefen=True))
+
+    def _ki_fortschritt(self, lauf: int, zeichen: int, denkt: bool) -> None:
+        if lauf != self._ki_lauf or not self._ki_busy:
+            return
+        self._ki_lebenszeichen = time.monotonic()
+        leiste = self._ki_leiste()
+        if leiste is not None:
+            leiste.fortschritt(zeichen, denkt)
 
     def _ki_abbrechen(self, lauf: int, old) -> None:
         if lauf != self._ki_lauf or not self._ki_busy:
@@ -837,9 +855,14 @@ class App:
         self._ki_end()
         self._status("KI-Aktion abgebrochen", FARBEN["pause"])
 
-    def _ki_wachhund(self, lauf: int, old) -> None:
-        """Sicherheitsnetz: Kommt gar nichts zurück, nicht ewig „prüft …“ anzeigen."""
+    def _ki_wachhund(self, lauf: int, old, pruefen: bool = False) -> None:
+        """Sicherheitsnetz: Kommt gar nichts mehr zurück, nicht ewig „prüft …“ anzeigen.
+
+        Solange der Server streamt (Lebenszeichen), läuft die Aktion weiter – auch über mehrere Minuten."""
         if lauf != self._ki_lauf or not self._ki_busy:
+            return
+        if pruefen and time.monotonic() - self._ki_lebenszeichen < llm.TIMEOUT + 30:
+            self.root.after(10_000, lambda: self._ki_wachhund(lauf, old, pruefen=True))
             return
         self._ki_lauf += 1
         self.bridge.restore(old)
@@ -1264,7 +1287,7 @@ class App:
                 continue
             if item[0].startswith("ki-"):
                 {"ki-hotkey": self._ki_start, "ki-captured": self._ki_captured, "ki-result": self._ki_result,
-                 "ki-done": self._ki_done}[item[0]](*item[1:])
+                 "ki-done": self._ki_done, "ki-fortschritt": self._ki_fortschritt}[item[0]](*item[1:])
                 continue
             if item[0] == "llm":
                 self.llm_ok = bool(item[1])

@@ -584,7 +584,10 @@ async function kiAusfuehren(name, anweisung) {
   $("ki-text").innerHTML = `<span class="muted">KI arbeitet …</span>`;
   for (const b of document.querySelectorAll(".aktion, #ki-los")) b.disabled = true;
   try {
-    const r = await ki.aktion(S.einst, anweisung, text);
+    const r = await ki.aktion(S.einst, anweisung, text, (bisher, denkt) => {   // Antwort erscheint, während sie kommt
+      if (bisher) $("ki-text").textContent = bisher;
+      else if (denkt) $("ki-text").innerHTML = `<span class="muted">KI denkt nach …</span>`;
+    });
     $("ki-text").textContent = r.text;
     $("ki-info").textContent = r.extern ? `über ${r.host}${r.anonym ? " · anonymisiert gesendet" : ""}` : `eigener Server ${r.host}`;
   } catch (e) {
